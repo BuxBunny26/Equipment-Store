@@ -4,32 +4,43 @@ const pool = require('../database/db');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { createClient } = require('@supabase/supabase-js');
 
 // ============================================
-// FILE UPLOAD CONFIGURATION - OneDrive
+// SUPABASE STORAGE CONFIGURATION
 // ============================================
 
-// OneDrive Calibration Certificates folder
-const CERTIFICATES_BASE_PATH = 'C:\\Users\\nadhi\\OneDrive - Wearcheck Reliability Solutions\\WearCheck ARC Documents\\RS\\Calibration Certificates';
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://widwzjnfxhsxzhqrzthy.supabase.co';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndpZHd6am5meGhzeHpocXJ6dGh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2ODI5MzcsImV4cCI6MjA4NTI1ODkzN30.e3leUBqvZeo_gPMj75mlzgP7uQg-iWTZvcLwQx1_Hpo';
+const BUCKET_NAME = 'certificates';
 
-// Ensure the upload subfolder exists (for new uploads)
-const uploadsDir = path.join(CERTIFICATES_BASE_PATH, 'Uploads');
-if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-}
+// Initialize Supabase client
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Configure multer for certificate uploads to OneDrive
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, uploadsDir);
-    },
-    filename: (req, file, cb) => {
-        // Generate filename: SerialNumber - EquipmentName - Exp DD.MM.YYYY.ext
-        const timestamp = Date.now();
-        const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
-        cb(null, `cert_${timestamp}_${safeName}`);
-    }
-});
+// Check if running in cloud mode (DATABASE_URL set)
+const isCloudMode = !!process.env.DATABASE_URL;
+
+// ============================================
+// FILE UPLOAD CONFIGURATION
+// ============================================
+
+// Use memory storage for cloud (Supabase), disk storage for local
+const storage = isCloudMode 
+    ? multer.memoryStorage()
+    : multer.diskStorage({
+        destination: (req, file, cb) => {
+            const uploadsDir = path.join(__dirname, '../uploads/certificates');
+            if (!fs.existsSync(uploadsDir)) {
+                fs.mkdirSync(uploadsDir, { recursive: true });
+            }
+            cb(null, uploadsDir);
+        },
+        filename: (req, file, cb) => {
+            const timestamp = Date.now();
+            const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+            cb(null, `cert_${timestamp}_${safeName}`);
+        }
+    });
 
 const upload = multer({
     storage: storage,
@@ -53,6 +64,37 @@ const upload = multer({
         }
     }
 });
+
+// Helper function to upload file to Supabase
+async function uploadToSupabase(file, equipmentId) {
+    const timestamp = Date.now();
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const fileName = `${equipmentId}/${timestamp}_${safeName}`;
+    
+    const { data, error } = await supabase.storage
+        .from(BUCKET_NAME)
+        .upload(fileName, file.buffer, {
+            contentType: file.mimetype,
+            upsert: false
+        });
+    
+    if (error) {
+        console.error('Supabase upload error:', error);
+        throw new Error('Failed to upload certificate to storage');
+    }
+    
+    // Get public URL
+    const { data: urlData } = supabase.storage
+        .from(BUCKET_NAME)
+        .getPublicUrl(fileName);
+    
+    return {
+        path: fileName,
+        url: urlData.publicUrl,
+        fileName: file.originalname,
+        mimeType: file.mimetype
+    };
+}
 
 // ============================================
 // GET ALL EQUIPMENT CALIBRATION STATUS
@@ -253,9 +295,18 @@ router.post('/', upload.single('certificate'), async (req, res) => {
         let mimeType = null;
 
         if (req.file) {
-            filePath = req.file.path;
-            fileName = req.file.originalname;
-            mimeType = req.file.mimetype;
+            if (isCloudMode) {
+                // Upload to Supabase Storage
+                const uploadResult = await uploadToSupabase(req.file, equipmentInternalId);
+                filePath = uploadResult.url; // Store the public URL
+                fileName = uploadResult.fileName;
+                mimeType = uploadResult.mimeType;
+            } else {
+                // Local storage
+                filePath = req.file.path;
+                fileName = req.file.originalname;
+                mimeType = req.file.mimetype;
+            }
         }
 
         // Insert calibration record
@@ -345,17 +396,38 @@ router.put('/:id', upload.single('certificate'), async (req, res) => {
 
         // Handle file upload
         if (req.file) {
-            paramCount++;
-            updates.push(`certificate_file_path = $${paramCount}`);
-            params.push(req.file.path);
+            if (isCloudMode) {
+                // Upload to Supabase Storage
+                // Get equipment_id from the record first
+                const recordResult = await pool.query('SELECT equipment_id FROM calibration_records WHERE id = $1', [id]);
+                const equipmentId = recordResult.rows[0]?.equipment_id || 'unknown';
+                const uploadResult = await uploadToSupabase(req.file, equipmentId);
+                
+                paramCount++;
+                updates.push(`certificate_file_path = $${paramCount}`);
+                params.push(uploadResult.url);
 
-            paramCount++;
-            updates.push(`certificate_file_name = $${paramCount}`);
-            params.push(req.file.originalname);
+                paramCount++;
+                updates.push(`certificate_file_name = $${paramCount}`);
+                params.push(uploadResult.fileName);
 
-            paramCount++;
-            updates.push(`certificate_mime_type = $${paramCount}`);
-            params.push(req.file.mimetype);
+                paramCount++;
+                updates.push(`certificate_mime_type = $${paramCount}`);
+                params.push(uploadResult.mimeType);
+            } else {
+                // Local storage
+                paramCount++;
+                updates.push(`certificate_file_path = $${paramCount}`);
+                params.push(req.file.path);
+
+                paramCount++;
+                updates.push(`certificate_file_name = $${paramCount}`);
+                params.push(req.file.originalname);
+
+                paramCount++;
+                updates.push(`certificate_mime_type = $${paramCount}`);
+                params.push(req.file.mimetype);
+            }
         }
 
         updates.push('updated_at = CURRENT_TIMESTAMP');
@@ -437,7 +509,18 @@ router.get('/certificate/:id', async (req, res) => {
 
         const { certificate_file_path, certificate_file_name, certificate_mime_type } = result.rows[0];
 
-        if (!certificate_file_path || !fs.existsSync(certificate_file_path)) {
+        if (!certificate_file_path) {
+            return res.status(404).json({ error: 'Certificate file not found' });
+        }
+
+        // Check if it's a Supabase URL (cloud storage)
+        if (certificate_file_path.startsWith('http')) {
+            // Redirect to the Supabase public URL
+            return res.redirect(certificate_file_path);
+        }
+
+        // Local file handling
+        if (!fs.existsSync(certificate_file_path)) {
             return res.status(404).json({ error: 'Certificate file not found' });
         }
 
@@ -477,7 +560,18 @@ router.get('/certificate/:id/download', async (req, res) => {
 
         const { certificate_file_path, certificate_file_name } = result.rows[0];
 
-        if (!certificate_file_path || !fs.existsSync(certificate_file_path)) {
+        if (!certificate_file_path) {
+            return res.status(404).json({ error: 'Certificate file not found' });
+        }
+
+        // Check if it's a Supabase URL (cloud storage)
+        if (certificate_file_path.startsWith('http')) {
+            // Redirect to the Supabase public URL with download parameter
+            return res.redirect(certificate_file_path);
+        }
+
+        // Local file handling
+        if (!fs.existsSync(certificate_file_path)) {
             return res.status(404).json({ error: 'Certificate file not found' });
         }
 
