@@ -577,6 +577,8 @@ function PersonnelSettings() {
   const [error, setError] = useState(null);
   const [personnel, setPersonnel] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState('');
   const [formData, setFormData] = useState({
     employee_id: '',
     full_name: '',
@@ -613,6 +615,19 @@ function PersonnelSettings() {
     }
   };
 
+  // Get unique departments for filter dropdown
+  const departments = [...new Set(personnel.map(p => p.department).filter(Boolean))].sort();
+
+  // Filter personnel based on search and department
+  const filteredPersonnel = personnel.filter(p => {
+    const matchesSearch = !searchTerm || 
+      p.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.employee_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.email?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesDepartment = !departmentFilter || p.department === departmentFilter;
+    return matchesSearch && matchesDepartment;
+  });
+
   if (loading) {
     return <div className="loading"><div className="spinner"></div> Loading...</div>;
   }
@@ -620,10 +635,43 @@ function PersonnelSettings() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-        <h3>Personnel ({personnel.length})</h3>
+        <h3>Personnel ({filteredPersonnel.length}{filteredPersonnel.length !== personnel.length ? ` of ${personnel.length}` : ''})</h3>
         <button className="btn btn-primary" onClick={() => setShowModal(true)}>
           + Add Person
         </button>
+      </div>
+
+      {/* Search and Filter */}
+      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: '200px' }}>
+          <input
+            type="text"
+            className="form-input"
+            placeholder="Search by name, ID, or email..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div style={{ minWidth: '180px' }}>
+          <select
+            className="form-input"
+            value={departmentFilter}
+            onChange={(e) => setDepartmentFilter(e.target.value)}
+          >
+            <option value="">All Departments</option>
+            {departments.map(dept => (
+              <option key={dept} value={dept}>{dept}</option>
+            ))}
+          </select>
+        </div>
+        {(searchTerm || departmentFilter) && (
+          <button 
+            className="btn btn-secondary"
+            onClick={() => { setSearchTerm(''); setDepartmentFilter(''); }}
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
@@ -640,21 +688,29 @@ function PersonnelSettings() {
             </tr>
           </thead>
           <tbody>
-            {personnel.map((p) => (
-              <tr key={p.id}>
-                <td><strong>{p.employee_id}</strong></td>
-                <td>{p.full_name}</td>
-                <td>{p.email || '-'}</td>
-                <td>{p.department || '-'}</td>
-                <td>
-                  {p.is_active ? (
-                    <span className="badge badge-available">Active</span>
-                  ) : (
-                    <span className="badge badge-checked-out">Inactive</span>
-                  )}
+            {filteredPersonnel.length === 0 ? (
+              <tr>
+                <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+                  No personnel found matching your filters
                 </td>
               </tr>
-            ))}
+            ) : (
+              filteredPersonnel.map((p) => (
+                <tr key={p.id}>
+                  <td><strong>{p.employee_id}</strong></td>
+                  <td>{p.full_name}</td>
+                  <td>{p.email || '-'}</td>
+                  <td>{p.department || '-'}</td>
+                  <td>
+                    {p.is_active ? (
+                      <span className="badge badge-available">Active</span>
+                    ) : (
+                      <span className="badge badge-checked-out">Inactive</span>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
