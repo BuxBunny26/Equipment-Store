@@ -1,14 +1,15 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || '/api';
+// Use environment variable or default to Render backend
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://equipment-store-5gc9.onrender.com/api';
 
 // For direct file access (window.open), we need the full URL
 const getFullApiUrl = () => {
     if (process.env.REACT_APP_API_URL) {
         return process.env.REACT_APP_API_URL;
     }
-    // In development, the backend runs on port 5000
-    return 'http://localhost:5000/api';
+    // Default to Render backend
+    return 'https://equipment-store-5gc9.onrender.com/api';
 };
 
 const api = axios.create({
