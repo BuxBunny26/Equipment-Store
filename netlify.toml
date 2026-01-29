@@ -1,0 +1,17 @@
+# Netlify configuration
+
+[build]
+  # Base directory - where the frontend code lives
+  base = "frontend"
+  
+  # Build command
+  command = "npm run build"
+  
+  # Publish directory (relative to base)
+  publish = "build"
+
+# Handle React Router - redirect all paths to index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
