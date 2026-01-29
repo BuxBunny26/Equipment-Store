@@ -175,6 +175,18 @@ router.get('/history/:equipmentId', async (req, res) => {
     try {
         const { equipmentId } = req.params;
         
+        // First, find the equipment by either numeric ID or equipment_id string
+        const equipmentResult = await pool.query(`
+            SELECT id FROM equipment 
+            WHERE id = $1::integer OR equipment_id = $1::text
+        `, [equipmentId]);
+        
+        if (equipmentResult.rows.length === 0) {
+            return res.json([]);
+        }
+        
+        const dbEquipmentId = equipmentResult.rows[0].id;
+        
         const result = await pool.query(`
             SELECT 
                 cr.id,
@@ -190,10 +202,9 @@ router.get('/history/:equipmentId', async (req, res) => {
                 cr.created_by,
                 (cr.expiry_date - cr.calibration_date) as validity_days
             FROM calibration_records cr
-            JOIN equipment e ON cr.equipment_id = e.id
-            WHERE e.id = $1 OR e.equipment_id = $1
+            WHERE cr.equipment_id = $1
             ORDER BY cr.calibration_date DESC
-        `, [equipmentId]);
+        `, [dbEquipmentId]);
 
         res.json(result.rows);
     } catch (err) {
