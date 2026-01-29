@@ -97,28 +97,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get audit history for specific record
-router.get('/:tableName/:recordId', async (req, res) => {
-  try {
-    const { tableName, recordId } = req.params;
-    
-    const result = await pool.query(`
-      SELECT 
-        al.*,
-        COALESCE(al.changed_by_name, 'System') AS user_full_name
-      FROM audit_log al
-      WHERE al.table_name = $1 AND al.record_id = $2
-      ORDER BY al.created_at DESC
-    `, [tableName, recordId]);
-    
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching record history:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get audit summary statistics
+// Get audit summary statistics (must be before /:tableName/:recordId)
 router.get('/summary/stats', async (req, res) => {
   try {
     const { days = 30 } = req.query;
@@ -174,6 +153,27 @@ router.get('/summary/stats', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching audit summary:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get audit history for specific record
+router.get('/:tableName/:recordId', async (req, res) => {
+  try {
+    const { tableName, recordId } = req.params;
+    
+    const result = await pool.query(`
+      SELECT 
+        al.*,
+        COALESCE(al.changed_by_name, 'System') AS user_full_name
+      FROM audit_log al
+      WHERE al.table_name = $1 AND al.record_id = $2
+      ORDER BY al.created_at DESC
+    `, [tableName, recordId]);
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching record history:', error);
     res.status(500).json({ error: error.message });
   }
 });
