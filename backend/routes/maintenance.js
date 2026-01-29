@@ -156,6 +156,32 @@ router.get('/due', async (req, res) => {
   }
 });
 
+// Get overdue maintenance
+router.get('/overdue', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        e.id,
+        e.equipment_id,
+        e.equipment_name,
+        e.serial_number,
+        e.next_maintenance_date,
+        cat.name AS category,
+        e.next_maintenance_date - CURRENT_DATE AS days_overdue
+      FROM equipment e
+      JOIN categories cat ON e.category_id = cat.id
+      WHERE e.next_maintenance_date IS NOT NULL
+        AND e.next_maintenance_date < CURRENT_DATE
+      ORDER BY e.next_maintenance_date
+    `);
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching overdue maintenance:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get maintenance summary
 router.get('/summary', async (req, res) => {
   try {

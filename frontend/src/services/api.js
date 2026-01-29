@@ -194,6 +194,7 @@ export const maintenanceApi = {
     getAll: (params = {}) => api.get('/maintenance', { params }),
     getForEquipment: (equipmentId) => api.get(`/maintenance/equipment/${equipmentId}`),
     getDue: (days = 30) => api.get('/maintenance/due', { params: { days } }),
+    getOverdue: () => api.get('/maintenance/overdue'),
     getSummary: () => api.get('/maintenance/summary'),
     create: (data) => api.post('/maintenance', data),
     update: (id, data) => api.put(`/maintenance/${id}`, data),
@@ -211,6 +212,7 @@ export const auditApi = {
 // Notifications
 export const notificationsApi = {
     getAll: (params = {}) => api.get('/notifications', { params }),
+    getAlerts: () => api.get('/notifications', { params: { limit: 10 } }),
     getUnreadCount: (userId) => api.get('/notifications/unread-count', { params: { user_id: userId } }),
     markAsRead: (id) => api.patch(`/notifications/${id}/read`),
     markAllAsRead: (userId) => api.patch('/notifications/mark-all-read', { user_id: userId }),
