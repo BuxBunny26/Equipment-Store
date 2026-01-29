@@ -1,0 +1,64 @@
+{
+  "short_name": "EquipStore",
+  "name": "Equipment Store - Inventory Management",
+  "description": "Professional equipment inventory tracking and management system for Wearcheck Reliability Solutions",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "logo192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "logo512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#2563eb",
+  "background_color": "#f8fafc",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "categories": ["business", "productivity", "utilities"],
+  "lang": "en-AU",
+  "dir": "ltr",
+  "prefer_related_applications": false,
+  "shortcuts": [
+    {
+      "name": "Check Out Equipment",
+      "short_name": "Check Out",
+      "description": "Check out equipment to personnel",
+      "url": "/check-out",
+      "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Check In Equipment",
+      "short_name": "Check In",
+      "description": "Return equipment to storage",
+      "url": "/check-in",
+      "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Equipment List",
+      "short_name": "Equipment",
+      "description": "View all equipment",
+      "url": "/equipment",
+      "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Reservations",
+      "short_name": "Reservations",
+      "description": "Manage equipment reservations",
+      "url": "/reservations",
+      "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
+    }
+  ]
+}
