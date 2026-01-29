@@ -10,10 +10,8 @@ router.get('/', async (req, res) => {
     let query = `
       SELECT 
         al.*,
-        u.full_name AS user_full_name,
-        u.username
+        COALESCE(al.changed_by_name, 'System') AS user_full_name
       FROM audit_log al
-      LEFT JOIN users u ON al.user_id = u.id
       WHERE 1=1
     `;
     
@@ -36,7 +34,7 @@ router.get('/', async (req, res) => {
     }
     
     if (user_id) {
-      query += ` AND al.user_id = $${paramIndex++}`;
+      query += ` AND al.changed_by = $${paramIndex++}`;
       params.push(user_id);
     }
     
@@ -73,7 +71,7 @@ router.get('/', async (req, res) => {
       countParams.push(action);
     }
     if (user_id) {
-      countQuery += ` AND al.user_id = $${countIndex++}`;
+      countQuery += ` AND al.changed_by = $${countIndex++}`;
       countParams.push(user_id);
     }
     if (from_date) {
@@ -107,10 +105,8 @@ router.get('/:tableName/:recordId', async (req, res) => {
     const result = await pool.query(`
       SELECT 
         al.*,
-        u.full_name AS user_full_name,
-        u.username
+        COALESCE(al.changed_by_name, 'System') AS user_full_name
       FROM audit_log al
-      LEFT JOIN users u ON al.user_id = u.id
       WHERE al.table_name = $1 AND al.record_id = $2
       ORDER BY al.created_at DESC
     `, [tableName, recordId]);
@@ -149,13 +145,12 @@ router.get('/summary/stats', async (req, res) => {
     // Top users by activity
     const byUser = await pool.query(`
       SELECT 
-        al.user_id,
-        COALESCE(u.full_name, al.user_name, 'System') as user_name,
+        al.changed_by as user_id,
+        COALESCE(al.changed_by_name, 'System') as user_name,
         COUNT(*) as count
       FROM audit_log al
-      LEFT JOIN users u ON al.user_id = u.id
       WHERE al.created_at >= CURRENT_DATE - ($1 || ' days')::INTERVAL
-      GROUP BY al.user_id, u.full_name, al.user_name
+      GROUP BY al.changed_by, al.changed_by_name
       ORDER BY count DESC
       LIMIT 10
     `, [days]);
