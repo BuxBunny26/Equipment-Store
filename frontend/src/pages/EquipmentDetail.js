@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { equipmentApi } from '../services/api';
+import { equipmentApi, calibrationApi } from '../services/api';
 
 function EquipmentDetail() {
   const { id } = useParams();
@@ -9,11 +9,13 @@ function EquipmentDetail() {
   const [error, setError] = useState(null);
   const [equipment, setEquipment] = useState(null);
   const [history, setHistory] = useState([]);
+  const [calibrationHistory, setCalibrationHistory] = useState([]);
   const [activeTab, setActiveTab] = useState('details');
 
   useEffect(() => {
     fetchEquipment();
     fetchHistory();
+    fetchCalibrationHistory();
   }, [id]);
 
   const fetchEquipment = async () => {
@@ -38,6 +40,15 @@ function EquipmentDetail() {
     }
   };
 
+  const fetchCalibrationHistory = async () => {
+    try {
+      const response = await calibrationApi.getHistory(id);
+      setCalibrationHistory(response.data);
+    } catch (err) {
+      console.error('Error fetching calibration history:', err);
+    }
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleString('en-AU', {
@@ -47,6 +58,34 @@ function EquipmentDetail() {
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  const formatDateOnly = (dateString) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleDateString('en-AU', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  };
+
+  const getCalibrationStatusBadge = (expiryDate) => {
+    if (!expiryDate) return <span className="badge" style={{ background: '#6b7280' }}>Not Calibrated</span>;
+    const expiry = new Date(expiryDate);
+    const today = new Date();
+    const daysUntilExpiry = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
+    
+    if (daysUntilExpiry < 0) {
+      return <span className="badge badge-expired" style={{ background: '#ef4444' }}>Expired</span>;
+    } else if (daysUntilExpiry <= 30) {
+      return <span className="badge badge-due-soon" style={{ background: '#f59e0b' }}>Due Soon ({daysUntilExpiry} days)</span>;
+    }
+    return <span className="badge badge-valid" style={{ background: '#10b981' }}>Valid</span>;
+  };
+
+  const openCertificate = (recordId) => {
+    const url = calibrationApi.getCertificateUrl(recordId);
+    window.open(url, '_blank');
   };
 
   const getStatusBadge = (item) => {
@@ -166,6 +205,12 @@ function EquipmentDetail() {
           Details
         </button>
         <button
+          className={`tab ${activeTab === 'calibration' ? 'active' : ''}`}
+          onClick={() => setActiveTab('calibration')}
+        >
+          Calibration ({calibrationHistory.length})
+        </button>
+        <button
           className={`tab ${activeTab === 'history' ? 'active' : ''}`}
           onClick={() => setActiveTab('history')}
         >
@@ -268,6 +313,58 @@ function EquipmentDetail() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {activeTab === 'calibration' && (
+        <div className="card">
+          {calibrationHistory.length === 0 ? (
+            <div className="empty-state">
+              <h3>No calibration records</h3>
+              <p>This equipment has no calibration history</p>
+            </div>
+          ) : (
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Calibration Date</th>
+                    <th>Expiry Date</th>
+                    <th>Status</th>
+                    <th>Certificate #</th>
+                    <th>Provider</th>
+                    <th>Notes</th>
+                    <th>Certificate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {calibrationHistory.map((record) => (
+                    <tr key={record.id}>
+                      <td>{formatDateOnly(record.calibration_date)}</td>
+                      <td>{formatDateOnly(record.expiry_date)}</td>
+                      <td>{getCalibrationStatusBadge(record.expiry_date)}</td>
+                      <td style={{ fontWeight: 500 }}>{record.certificate_number || '-'}</td>
+                      <td>{record.calibration_provider || '-'}</td>
+                      <td style={{ fontSize: '0.8rem' }}>{record.notes || '-'}</td>
+                      <td>
+                        {record.certificate_file_path ? (
+                          <button
+                            className="btn btn-sm btn-primary"
+                            onClick={() => openCertificate(record.id)}
+                            title="View Certificate"
+                          >
+                            📄 View
+                          </button>
+                        ) : (
+                          <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>No file</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
