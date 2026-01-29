@@ -1,17 +1,15 @@
 /* eslint-disable no-restricted-globals */
 
-const CACHE_NAME = 'equipment-store-v1';
-const STATIC_CACHE = 'static-v1';
-const DYNAMIC_CACHE = 'dynamic-v1';
-const API_CACHE = 'api-v1';
+const CACHE_NAME = 'equipment-store-v2';
+const STATIC_CACHE = 'static-v2';
+const DYNAMIC_CACHE = 'dynamic-v2';
+const API_CACHE = 'api-v2';
 
-// Resources to cache immediately on install
+// Only cache the shell - JS/CSS files are hashed and fetched fresh
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/static/js/bundle.js',
-  '/static/css/main.css',
 ];
 
 // API routes that should be cached
@@ -118,6 +116,26 @@ async function handleApiRequest(request) {
 
 // Handle static requests with cache-first strategy
 async function handleStaticRequest(request) {
+  const url = new URL(request.url);
+  
+  // For hashed JS/CSS files, use network-first to avoid stale caches
+  if (url.pathname.startsWith('/static/')) {
+    try {
+      const networkResponse = await fetch(request);
+      if (networkResponse.ok) {
+        const cache = await caches.open(DYNAMIC_CACHE);
+        cache.put(request, networkResponse.clone());
+      }
+      return networkResponse;
+    } catch (error) {
+      const cachedResponse = await caches.match(request);
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      throw error;
+    }
+  }
+  
   const cachedResponse = await caches.match(request);
   
   if (cachedResponse) {
