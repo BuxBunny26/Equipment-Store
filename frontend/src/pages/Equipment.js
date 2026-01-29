@@ -12,6 +12,7 @@ function Equipment() {
     status: '',
     category_id: '',
     is_consumable: 'false',
+    calibration_status: '',
   });
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -21,7 +22,7 @@ function Equipment() {
 
   useEffect(() => {
     fetchEquipment();
-  }, [filters.status, filters.category_id, filters.is_consumable]);
+  }, [filters.status, filters.category_id, filters.is_consumable, filters.calibration_status]);
 
   const fetchCategories = async () => {
     try {
@@ -40,6 +41,7 @@ function Equipment() {
       if (filters.category_id) params.category_id = filters.category_id;
       if (filters.is_consumable !== '') params.is_consumable = filters.is_consumable;
       if (filters.search) params.search = filters.search;
+      if (filters.calibration_status) params.calibration_status = filters.calibration_status;
 
       const response = await equipmentApi.getAll(params);
       setEquipment(response.data);
@@ -124,10 +126,23 @@ function Equipment() {
               ))}
             </select>
 
+            <select
+              className="form-select"
+              style={{ width: 'auto' }}
+              value={filters.calibration_status}
+              onChange={(e) => setFilters({ ...filters, calibration_status: e.target.value })}
+            >
+              <option value="">All Calibration</option>
+              <option value="Calibrated">Calibrated (Valid)</option>
+              <option value="Due Soon">Due Soon</option>
+              <option value="Expired">Expired</option>
+              <option value="Not Calibrated">Not Calibrated</option>
+            </select>
+
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => setFilters({ search: '', status: '', category_id: '', is_consumable: 'false' })}
+              onClick={() => setFilters({ search: '', status: '', category_id: '', is_consumable: 'false', calibration_status: '' })}
             >
               Clear Filters
             </button>

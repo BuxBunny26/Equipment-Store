@@ -11,7 +11,8 @@ router.get('/', async (req, res, next) => {
             subcategory_id, 
             search,
             is_consumable,
-            include_non_checkout
+            include_non_checkout,
+            calibration_status
         } = req.query;
         
         let query = `
@@ -43,12 +44,29 @@ router.get('/', async (req, res, next) => {
                 e.last_action_timestamp,
                 e.notes,
                 e.created_at,
-                e.updated_at
+                e.updated_at,
+                e.requires_calibration,
+                CASE 
+                    WHEN e.requires_calibration = TRUE THEN
+                        CASE 
+                            WHEN cr.expiry_date IS NULL THEN 'Not Calibrated'
+                            WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
+                            WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                            ELSE 'Valid'
+                        END
+                    ELSE NULL
+                END as calibration_status,
+                cr.expiry_date as calibration_expiry
             FROM equipment e
             JOIN categories c ON e.category_id = c.id
             JOIN subcategories s ON e.subcategory_id = s.id
             LEFT JOIN locations l ON e.current_location_id = l.id
             LEFT JOIN personnel p ON e.current_holder_id = p.id
+            LEFT JOIN LATERAL (
+                SELECT expiry_date FROM calibration_records 
+                WHERE equipment_id = e.id 
+                ORDER BY calibration_date DESC LIMIT 1
+            ) cr ON true
         `;
         
         const conditions = [];
@@ -88,6 +106,21 @@ router.get('/', async (req, res, next) => {
                 e.serial_number ILIKE $${params.length} OR
                 e.description ILIKE $${params.length}
             )`);
+        }
+        
+        // Calibration status filter
+        if (calibration_status) {
+            if (calibration_status === 'Calibrated') {
+                conditions.push(`e.requires_calibration = TRUE AND cr.expiry_date IS NOT NULL AND cr.expiry_date >= CURRENT_DATE`);
+            } else if (calibration_status === 'Not Calibrated') {
+                conditions.push(`e.requires_calibration = TRUE AND cr.expiry_date IS NULL`);
+            } else if (calibration_status === 'Expired') {
+                conditions.push(`e.requires_calibration = TRUE AND cr.expiry_date < CURRENT_DATE`);
+            } else if (calibration_status === 'Due Soon') {
+                conditions.push(`e.requires_calibration = TRUE AND cr.expiry_date >= CURRENT_DATE AND cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days'`);
+            } else if (calibration_status === 'Valid') {
+                conditions.push(`e.requires_calibration = TRUE AND cr.expiry_date > CURRENT_DATE + INTERVAL '30 days'`);
+            }
         }
         
         if (conditions.length > 0) {
