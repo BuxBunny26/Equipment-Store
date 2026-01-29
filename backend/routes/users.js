@@ -232,6 +232,70 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// Bulk create users from personnel
+router.post('/bulk-import', async (req, res) => {
+  try {
+    const { personnel_ids, role_id } = req.body;
+    
+    if (!personnel_ids || !Array.isArray(personnel_ids) || personnel_ids.length === 0) {
+      return res.status(400).json({ error: 'No personnel selected' });
+    }
+    
+    // Get personnel details
+    const personnelResult = await pool.query(`
+      SELECT id, full_name, email, employee_id
+      FROM personnel
+      WHERE id = ANY($1)
+    `, [personnel_ids]);
+    
+    // Get existing users linked to these personnel
+    const existingResult = await pool.query(`
+      SELECT personnel_id FROM users WHERE personnel_id = ANY($1)
+    `, [personnel_ids]);
+    
+    const existingPersonnelIds = new Set(existingResult.rows.map(r => r.personnel_id));
+    
+    const created = [];
+    const skipped = [];
+    
+    for (const person of personnelResult.rows) {
+      if (existingPersonnelIds.has(person.id)) {
+        skipped.push({ id: person.id, name: person.full_name, reason: 'Already linked to a user' });
+        continue;
+      }
+      
+      // Generate username from employee_id or name
+      const username = person.employee_id || 
+        person.full_name.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z.]/g, '');
+      
+      // Check if username already exists
+      const usernameCheck = await pool.query('SELECT id FROM users WHERE username = $1', [username]);
+      if (usernameCheck.rows.length > 0) {
+        skipped.push({ id: person.id, name: person.full_name, reason: 'Username already exists' });
+        continue;
+      }
+      
+      // Create user
+      const result = await pool.query(`
+        INSERT INTO users (username, email, full_name, role_id, personnel_id, is_active)
+        VALUES ($1, $2, $3, $4, $5, true)
+        RETURNING *
+      `, [username, person.email, person.full_name, role_id || 3, person.id]);
+      
+      created.push(result.rows[0]);
+    }
+    
+    res.status(201).json({ 
+      message: `Created ${created.length} users, skipped ${skipped.length}`,
+      created,
+      skipped
+    });
+  } catch (error) {
+    console.error('Error bulk importing users:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Check permissions
 router.get('/:id/permissions', async (req, res) => {
   try {

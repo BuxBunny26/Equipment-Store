@@ -262,6 +262,7 @@ export const usersApi = {
     updateStatus: (id, isActive) => api.patch(`/users/${id}/status`, { is_active: isActive }),
     delete: (id) => api.delete(`/users/${id}`),
     getPermissions: (id) => api.get(`/users/${id}/permissions`),
+    bulkImport: (personnelIds, roleId) => api.post('/users/bulk-import', { personnel_ids: personnelIds, role_id: roleId }),
     createRole: (data) => api.post('/users/roles', data),
     updateRole: (id, data) => api.put(`/users/roles/${id}`, data),
     deleteRole: (id) => api.delete(`/users/roles/${id}`),

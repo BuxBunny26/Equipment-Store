@@ -16,6 +16,9 @@ function UserManagement() {
   });
   
   const [showModal, setShowModal] = useState(false);
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [selectedPersonnel, setSelectedPersonnel] = useState([]);
+  const [bulkRoleId, setBulkRoleId] = useState(3);
   const [editingUser, setEditingUser] = useState(null);
   const [formData, setFormData] = useState({
     username: '',
@@ -136,6 +139,41 @@ function UserManagement() {
     }
   };
 
+  const handleBulkImport = async () => {
+    if (selectedPersonnel.length === 0) {
+      setError('Please select at least one person to import');
+      return;
+    }
+    
+    setSubmitting(true);
+    try {
+      const response = await usersApi.bulkImport(selectedPersonnel, bulkRoleId);
+      setShowBulkModal(false);
+      setSelectedPersonnel([]);
+      fetchUsers();
+      alert(response.data.message);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const togglePersonnelSelection = (id) => {
+    setSelectedPersonnel(prev => 
+      prev.includes(id) 
+        ? prev.filter(p => p !== id)
+        : [...prev, id]
+    );
+  };
+
+  const selectAllPersonnel = () => {
+    const unlinkedPersonnel = personnel.filter(p => 
+      !users.some(u => u.personnel_id === p.id)
+    );
+    setSelectedPersonnel(unlinkedPersonnel.map(p => p.id));
+  };
+
   const getRoleBadge = (roleName) => {
     const badges = {
       admin: 'badge-danger',
@@ -173,9 +211,14 @@ function UserManagement() {
           <h1>User Management</h1>
           <p className="subtitle">Manage system users and their roles</p>
         </div>
-        <button className="btn btn-primary" onClick={() => handleOpenModal()}>
-          + Add User
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button className="btn btn-secondary" onClick={() => setShowBulkModal(true)}>
+            <Icons.Users size={16} /> Import from Personnel
+          </button>
+          <button className="btn btn-primary" onClick={() => handleOpenModal()}>
+            + Add User
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -445,6 +488,110 @@ function UserManagement() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Import Modal */}
+      {showBulkModal && (
+        <div className="modal-overlay" onClick={() => setShowBulkModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '700px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-header">
+              <h3>Import Users from Personnel</h3>
+              <button className="modal-close" onClick={() => setShowBulkModal(false)}>×</button>
+            </div>
+            <div className="modal-body" style={{ flex: 1, overflow: 'auto' }}>
+              <div className="form-group">
+                <label className="form-label">Assign Role to All Selected</label>
+                <select
+                  className="form-input"
+                  value={bulkRoleId}
+                  onChange={(e) => setBulkRoleId(parseInt(e.target.value))}
+                >
+                  {roles.map(role => (
+                    <option key={role.id} value={role.id}>
+                      {role.name} - {role.description}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <span style={{ fontWeight: 500 }}>
+                  {selectedPersonnel.length} of {personnel.filter(p => !users.some(u => u.personnel_id === p.id)).length} personnel selected
+                </span>
+                <button className="btn btn-sm btn-secondary" onClick={selectAllPersonnel}>
+                  Select All Unlinked
+                </button>
+              </div>
+              
+              <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', maxHeight: '300px', overflow: 'auto' }}>
+                <table className="table" style={{ margin: 0 }}>
+                  <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-secondary)', zIndex: 1 }}>
+                    <tr>
+                      <th style={{ width: '40px' }}></th>
+                      <th>Name</th>
+                      <th>Employee ID</th>
+                      <th>Email</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {personnel.map(person => {
+                      const isLinked = users.some(u => u.personnel_id === person.id);
+                      const isSelected = selectedPersonnel.includes(person.id);
+                      return (
+                        <tr 
+                          key={person.id} 
+                          style={{ 
+                            opacity: isLinked ? 0.5 : 1,
+                            cursor: isLinked ? 'not-allowed' : 'pointer',
+                            background: isSelected ? 'var(--primary-light)' : undefined
+                          }}
+                          onClick={() => !isLinked && togglePersonnelSelection(person.id)}
+                        >
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              disabled={isLinked}
+                              onChange={() => togglePersonnelSelection(person.id)}
+                              onClick={e => e.stopPropagation()}
+                            />
+                          </td>
+                          <td style={{ fontWeight: 500 }}>{person.full_name}</td>
+                          <td>{person.employee_id}</td>
+                          <td style={{ fontSize: '0.85rem' }}>{person.email}</td>
+                          <td>
+                            {isLinked ? (
+                              <span className="badge">Already Linked</span>
+                            ) : (
+                              <span className="badge badge-available">Available</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => { setShowBulkModal(false); setSelectedPersonnel([]); }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={handleBulkImport}
+                disabled={submitting || selectedPersonnel.length === 0}
+              >
+                {submitting ? 'Importing...' : `Import ${selectedPersonnel.length} Users`}
+              </button>
+            </div>
           </div>
         </div>
       )}
