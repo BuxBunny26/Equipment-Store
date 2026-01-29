@@ -333,7 +333,8 @@ function LocationsSettings() {
   const [error, setError] = useState(null);
   const [locations, setLocations] = useState([]);
   const [showModal, setShowModal] = useState(false);
-  const [formData, setFormData] = useState({ name: '', description: '' });
+  const [formData, setFormData] = useState({ name: '', description: '', region: '', country: 'South Africa' });
+  const [expandedRegions, setExpandedRegions] = useState({});
 
   useEffect(() => {
     fetchLocations();
@@ -344,6 +345,13 @@ function LocationsSettings() {
       setLoading(true);
       const response = await locationsApi.getAll(false);
       setLocations(response.data);
+      // Expand all regions by default
+      const regions = {};
+      response.data.forEach(loc => {
+        const key = `${loc.country || 'Other'}-${loc.region || 'Unassigned'}`;
+        regions[key] = true;
+      });
+      setExpandedRegions(regions);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -357,12 +365,33 @@ function LocationsSettings() {
     try {
       await locationsApi.create(formData);
       setShowModal(false);
-      setFormData({ name: '', description: '' });
+      setFormData({ name: '', description: '', region: '', country: 'South Africa' });
       fetchLocations();
     } catch (err) {
       setError(err.message);
     }
   };
+
+  const toggleRegion = (key) => {
+    setExpandedRegions(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // Group locations by country then region
+  const groupedLocations = locations.reduce((acc, loc) => {
+    const country = loc.country || 'Other';
+    const region = loc.region || 'Unassigned';
+    if (!acc[country]) acc[country] = {};
+    if (!acc[country][region]) acc[country][region] = [];
+    acc[country][region].push(loc);
+    return acc;
+  }, {});
+
+  // Sort countries with South Africa first, then alphabetical
+  const sortedCountries = Object.keys(groupedLocations).sort((a, b) => {
+    if (a === 'South Africa') return -1;
+    if (b === 'South Africa') return 1;
+    return a.localeCompare(b);
+  });
 
   if (loading) {
     return <div className="loading"><div className="spinner"></div> Loading...</div>;
@@ -379,32 +408,80 @@ function LocationsSettings() {
 
       {error && <div className="alert alert-error">{error}</div>}
 
-      <div className="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Description</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {locations.map((loc) => (
-              <tr key={loc.id}>
-                <td><strong>{loc.name}</strong></td>
-                <td>{loc.description || '-'}</td>
-                <td>
-                  {loc.is_active ? (
-                    <span className="badge badge-available">Active</span>
-                  ) : (
-                    <span className="badge badge-checked-out">Inactive</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {sortedCountries.map(country => (
+        <div key={country} style={{ marginBottom: '1.5rem' }}>
+          <h4 style={{ 
+            borderBottom: '2px solid var(--primary-color)', 
+            paddingBottom: '0.5rem', 
+            marginBottom: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem'
+          }}>
+            {country === 'South Africa' ? '🇿🇦' : '🌍'} {country}
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 'normal' }}>
+              ({Object.values(groupedLocations[country]).flat().length} locations)
+            </span>
+          </h4>
+          
+          {Object.keys(groupedLocations[country]).sort().map(region => {
+            const regionKey = `${country}-${region}`;
+            const isExpanded = expandedRegions[regionKey] !== false;
+            const regionLocations = groupedLocations[country][region];
+            
+            return (
+              <div key={regionKey} style={{ marginBottom: '0.75rem', marginLeft: '1rem' }}>
+                <div 
+                  onClick={() => toggleRegion(regionKey)}
+                  style={{ 
+                    cursor: 'pointer', 
+                    padding: '0.5rem',
+                    background: 'var(--bg-secondary)',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}
+                >
+                  <span style={{ fontWeight: 500 }}>
+                    {isExpanded ? '▼' : '▶'} {region}
+                  </span>
+                  <span className="badge">{regionLocations.length}</span>
+                </div>
+                
+                {isExpanded && (
+                  <div style={{ marginTop: '0.5rem', marginLeft: '1.5rem' }}>
+                    {regionLocations.map(loc => (
+                      <div 
+                        key={loc.id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '0.5rem 0.75rem',
+                          borderBottom: '1px solid var(--border-color)'
+                        }}
+                      >
+                        <div>
+                          <span style={{ fontWeight: 500 }}>{loc.name}</span>
+                          {loc.description && (
+                            <span style={{ marginLeft: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                              - {loc.description}
+                            </span>
+                          )}
+                        </div>
+                        <span className={`badge ${loc.is_active ? 'badge-available' : ''}`}>
+                          {loc.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
 
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
@@ -424,6 +501,51 @@ function LocationsSettings() {
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     required
                   />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Country</label>
+                  <select
+                    className="form-input"
+                    value={formData.country}
+                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                  >
+                    <option value="South Africa">South Africa</option>
+                    <option value="Mozambique">Mozambique</option>
+                    <option value="Namibia">Namibia</option>
+                    <option value="Botswana">Botswana</option>
+                    <option value="Zimbabwe">Zimbabwe</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Region/Province</label>
+                  {formData.country === 'South Africa' ? (
+                    <select
+                      className="form-input"
+                      value={formData.region}
+                      onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                    >
+                      <option value="">Select Province</option>
+                      <option value="Gauteng">Gauteng</option>
+                      <option value="KwaZulu Natal">KwaZulu Natal</option>
+                      <option value="Limpopo">Limpopo</option>
+                      <option value="Mpumalanga">Mpumalanga</option>
+                      <option value="North West">North West</option>
+                      <option value="Northern Cape">Northern Cape</option>
+                      <option value="Western Cape">Western Cape</option>
+                      <option value="Eastern Cape">Eastern Cape</option>
+                      <option value="Free State">Free State</option>
+                      <option value="Remote">Remote</option>
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={formData.region}
+                      onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                      placeholder="Region name"
+                    />
+                  )}
                 </div>
                 <div className="form-group">
                   <label className="form-label">Description</label>
