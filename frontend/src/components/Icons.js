@@ -254,6 +254,14 @@ export const Icons = {
       <line x1="12" y1="3" x2="12" y2="15" />
     </svg>
   ),
+
+  // Search icon
+  Search: ({ size = 16, ...props }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width={size} height={size} {...props}>
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  ),
 };
 
 export default Icons;
