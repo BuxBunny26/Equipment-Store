@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
+// Force redeploy - calibration data restored 2026-02-03
 const app = express();
 const PORT = process.env.PORT || 3001;
 
