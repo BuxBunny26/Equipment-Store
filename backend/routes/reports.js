@@ -196,7 +196,7 @@ router.get('/available', async (req, res, next) => {
                 END AS calibration_status
             FROM equipment e
             JOIN categories c ON e.category_id = c.id
-            JOIN subcategories s ON e.subcategory_id = s.id
+            LEFT JOIN subcategories s ON e.subcategory_id = s.id
             LEFT JOIN locations l ON e.current_location_id = l.id
             LEFT JOIN LATERAL (
                 SELECT expiry_date 
@@ -242,7 +242,7 @@ router.get('/low-stock', async (req, res, next) => {
                 l.name AS current_location
             FROM equipment e
             JOIN categories c ON e.category_id = c.id
-            JOIN subcategories s ON e.subcategory_id = s.id
+            LEFT JOIN subcategories s ON e.subcategory_id = s.id
             LEFT JOIN locations l ON e.current_location_id = l.id
             WHERE c.is_consumable = TRUE
                 AND e.available_quantity <= e.reorder_level
