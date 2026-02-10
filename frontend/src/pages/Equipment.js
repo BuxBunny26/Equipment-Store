@@ -46,10 +46,11 @@ function Equipment() {
       if (filters.calibration_status) params.calibration_status = filters.calibration_status;
 
       const response = await equipmentApi.getAll(params);
-      setEquipment(response.data);
+      setEquipment(Array.isArray(response.data) ? response.data : []);
       setError(null);
     } catch (err) {
       setError(err.message);
+      setEquipment([]);
     } finally {
       setLoading(false);
     }
@@ -174,7 +175,7 @@ function Equipment() {
               onChange={(e) => setFilters({ ...filters, category_id: e.target.value })}
             >
               <option value="">All Categories</option>
-              {categories.filter(c => !c.is_consumable).map((cat) => (
+              {Array.isArray(categories) && categories.filter(c => !c.is_consumable).map((cat) => (
                 <option key={cat.id} value={cat.id}>
                   {cat.name}
                 </option>
@@ -346,9 +347,10 @@ function AddEquipmentModal({ categories, onClose, onSuccess }) {
     try {
       const response = await fetch('/api/locations?active_only=true');
       const data = await response.json();
-      setLocations(data);
+      setLocations(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Error fetching locations:', err);
+      setLocations([]);
     }
   };
 
@@ -356,9 +358,10 @@ function AddEquipmentModal({ categories, onClose, onSuccess }) {
     try {
       const response = await fetch(`/api/subcategories?category_id=${categoryId}`);
       const data = await response.json();
-      setSubcategories(data);
+      setSubcategories(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Error fetching subcategories:', err);
+      setSubcategories([]);
     }
   };
 
@@ -449,7 +452,7 @@ function AddEquipmentModal({ categories, onClose, onSuccess }) {
                   required
                 >
                   <option value="">Select category...</option>
-                  {categories.map((cat) => (
+                  {Array.isArray(categories) && categories.map((cat) => (
                     <option key={cat.id} value={cat.id}>
                       {cat.name} {cat.is_consumable ? '(Consumable)' : ''} {!cat.is_checkout_allowed ? '(Non-checkout)' : ''}
                     </option>
@@ -468,7 +471,7 @@ function AddEquipmentModal({ categories, onClose, onSuccess }) {
                   disabled={!formData.category_id}
                 >
                   <option value="">Select subcategory...</option>
-                  {subcategories.map((sub) => (
+                  {Array.isArray(subcategories) && subcategories.map((sub) => (
                     <option key={sub.id} value={sub.id}>
                       {sub.name}
                     </option>
@@ -555,7 +558,7 @@ function AddEquipmentModal({ categories, onClose, onSuccess }) {
                 onChange={handleChange}
               >
                 <option value="">Select location...</option>
-                {locations.map((loc) => (
+                {Array.isArray(locations) && locations.map((loc) => (
                   <option key={loc.id} value={loc.id}>
                     {loc.name}
                   </option>
