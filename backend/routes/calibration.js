@@ -106,36 +106,40 @@ router.get('/', async (req, res) => {
             FROM calibration_records cr
             LEFT JOIN equipment e ON cr.equipment_id = e.id
             LEFT JOIN categories c ON e.category_id = c.id
-            WHERE 1=1
         `;
         const params = [];
         let paramCount = 0;
+        const conditions = [];
 
         if (status) {
             // Filter by computed status using CASE expression
-            query += ` AND CASE 
+            conditions.push(`CASE 
                 WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
                 WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
                 ELSE 'Valid'
-            END = $${++paramCount}`;
+            END = $${++paramCount}`);
             params.push(status);
         }
 
         if (category) {
             paramCount++;
-            query += ` AND c.name = $${paramCount}`;
+            conditions.push(`c.name = $${paramCount}`);
             params.push(category);
         }
 
         if (search) {
             paramCount++;
-            query += ` AND (
+            conditions.push(`(
                 e.equipment_name ILIKE $${paramCount} 
                 OR cr.serial_number ILIKE $${paramCount}
                 OR e.manufacturer ILIKE $${paramCount}
                 OR e.equipment_id ILIKE $${paramCount}
-            )`;
+            )`);
             params.push(`%${search}%`);
+        }
+
+        if (conditions.length > 0) {
+            query += ' WHERE ' + conditions.join(' AND ');
         }
 
         query += ` ORDER BY 
@@ -147,10 +151,10 @@ router.get('/', async (req, res) => {
             cr.expiry_date ASC NULLS LAST`;
 
         const result = await pool.query(query, params);
-        res.json(Array.isArray(result.rows) ? result.rows : []);
+        res.json(result.rows || []);
     } catch (err) {
-        console.error('Error fetching calibration records:', err);
-        res.status(500).json({ error: 'Failed to fetch calibration records' });
+        console.error('Error fetching calibration records:', err.message);
+        res.status(500).json({ error: 'Failed to fetch calibration records', details: err.message });
     }
 });
 
