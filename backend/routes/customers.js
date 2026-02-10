@@ -221,8 +221,8 @@ router.post('/import-data', async (req, res) => {
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, TRUE)
                 `, [
                     customer_number, display_name, currency_code,
-                    billing_city, shipping_city, billing_country,
-                    billing_city, billing_state, null,
+                    billing_city, shipping_city, billing_country || 'Unknown',
+                    billing_city, billing_state, billing_state || billing_country || 'Unknown',
                     tax_registration_number, vat_treatment, email
                 ]);
                 
