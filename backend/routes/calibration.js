@@ -10,30 +10,12 @@ const fs = require('fs');
 // ============================================
 
 // Shared folder link for all certificates
-const SHAREPOINT_FOLDER_URL = 'https://wearcheckrs-my.sharepoint.com/:f:/p/nadhira/IgB6x1TbBtpITZdiTDhf6_JfAWh3dPLS_2N4rxvWB8b4wWk?e=V3z8D6';
+const SHAREPOINT_FOLDER_URL = 'https://wearcheckrs-my.sharepoint.com/:f:/p/nadhira/IgB6x1TbBtpITZdiTDhf6_JfAWh3dPLS_2N4rxvWB8b4wWk?e=8YWAWg';
 
-// Path for direct file access (download format)
-const SHAREPOINT_DOWNLOAD_BASE = 'https://wearcheckrs-my.sharepoint.com/personal/nadhira_wearcheckrs_com/_layouts/15/download.aspx?SourceUrl=/personal/nadhira_wearcheckrs_com/Documents/WearCheck%20ARC%20Documents/RS/Calibration%20Certificates';
-
-// Generate certificate filename based on serial number and expiry date
-// Format: {serial} Exp.{MM}.{YYYY}.pdf
-function generateCertificateFileName(serialNumber, expiryDate) {
-    if (!serialNumber || !expiryDate) return null;
-    
-    const expiry = new Date(expiryDate);
-    const month = String(expiry.getMonth() + 1).padStart(2, '0');
-    const year = expiry.getFullYear();
-    
-    return `${serialNumber} Exp.${month}.${year}.pdf`;
-}
-
-// Generate full SharePoint URL for certificate using download.aspx format
+// Generate certificate URL - returns folder link for all records
 function generateCertificateUrl(serialNumber, expiryDate) {
-    const fileName = generateCertificateFileName(serialNumber, expiryDate);
-    if (!fileName) return null;
-    
-    const encodedFileName = encodeURIComponent(fileName);
-    return `${SHAREPOINT_DOWNLOAD_BASE}/${encodedFileName}`;
+    // Return the shared folder URL so users can find the certificate manually
+    return SHAREPOINT_FOLDER_URL;
 }
 
 // Add certificate URL to calibration record (uses stored URL only)
