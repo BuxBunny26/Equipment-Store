@@ -192,7 +192,10 @@ router.post('/import-data', async (req, res) => {
                     billing_city, billing_state, billing_country,
                     shipping_city, shipping_state, shipping_country,
                     tax_registration_number, vat_treatment, email
-                ] = fields.map(f => f?.trim() || null);
+                ] = fields.map(f => {
+                    const val = f?.trim();
+                    return val && val !== '' ? val : null;
+                });
                 
                 if (!display_name || !customer_number) {
                     skipped++;
@@ -210,6 +213,10 @@ router.post('/import-data', async (req, res) => {
                     continue;
                 }
                 
+                // Compute region - use billing_state, then billing_country, then 'Other'
+                const region = billing_state || billing_country || 'Other';
+                const country = billing_country || 'Unknown';
+                
                 // Insert
                 await pool.query(`
                     INSERT INTO customers (
@@ -221,8 +228,8 @@ router.post('/import-data', async (req, res) => {
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, TRUE)
                 `, [
                     customer_number, display_name, currency_code,
-                    billing_city, shipping_city, billing_country || 'Unknown',
-                    billing_city, billing_state, billing_state || billing_country || 'Unknown',
+                    billing_city, shipping_city, country,
+                    billing_city, billing_state, region,
                     tax_registration_number, vat_treatment, email
                 ]);
                 
