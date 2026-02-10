@@ -175,7 +175,6 @@ router.get('/status', async (req, res) => {
                 cr.calibration_date AS last_calibration,
                 cr.expiry_date,
                 cr.certificate_number,
-                cr.certificate_file_url,
                 CASE 
                     WHEN cr.expiry_date IS NULL THEN 'Not Calibrated'
                     WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
@@ -190,7 +189,7 @@ router.get('/status', async (req, res) => {
             LEFT JOIN categories c ON e.category_id = c.id
             INNER JOIN (
                 SELECT DISTINCT ON (equipment_id) 
-                    equipment_id, calibration_date, expiry_date, certificate_number, certificate_file_url
+                    equipment_id, calibration_date, expiry_date, certificate_number
                 FROM calibration_records
                 ORDER BY equipment_id, expiry_date DESC NULLS LAST
             ) cr ON cr.equipment_id = e.id
