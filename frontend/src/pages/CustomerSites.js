@@ -27,8 +27,12 @@ function CustomerSites() {
         customersApi.getAll({ has_equipment: true }),
         customersApi.getStats()
       ]);
-      setCustomers(customersRes.data);
-      setStats(statsRes.data);
+      setCustomers(Array.isArray(customersRes?.data) ? customersRes.data : []);
+      setStats(statsRes?.data || {
+        total_customers: 0,
+        customers_with_equipment: 0,
+        total_equipment_out: 0
+      });
       setError(null);
     } catch (err) {
       setError(err.message);

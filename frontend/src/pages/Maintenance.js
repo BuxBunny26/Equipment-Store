@@ -51,7 +51,7 @@ function Maintenance() {
     try {
       setLoading(true);
       const response = await maintenanceApi.getAll(filters);
-      setRecords(response.data);
+      setRecords(Array.isArray(response?.data) ? response.data : []);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -68,10 +68,10 @@ function Maintenance() {
         maintenanceApi.getSummary(),
         maintenanceApi.getDue(30),
       ]);
-      setMaintenanceTypes(typesRes.data);
-      setEquipment(equipmentRes.data);
-      setSummary(summaryRes.data);
-      setDueRecords(dueRes.data);
+      setMaintenanceTypes(Array.isArray(typesRes?.data) ? typesRes.data : []);
+      setEquipment(Array.isArray(equipmentRes?.data) ? equipmentRes.data : []);
+      setSummary(summaryRes?.data || null);
+      setDueRecords(Array.isArray(dueRes?.data) ? dueRes.data : []);
     } catch (err) {
       console.error('Error fetching data:', err);
     }

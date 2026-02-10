@@ -69,10 +69,10 @@ function CheckOut() {
         customersApi.getAll(),
       ]);
 
-      setAvailableEquipment(equipmentRes.data);
-      setLocations(locationsRes.data);
-      setPersonnel(personnelRes.data);
-      setCustomers(customersRes.data);
+      setAvailableEquipment(Array.isArray(equipmentRes?.data) ? equipmentRes.data : []);
+      setLocations(Array.isArray(locationsRes?.data) ? locationsRes.data : []);
+      setPersonnel(Array.isArray(personnelRes?.data) ? personnelRes.data : []);
+      setCustomers(Array.isArray(customersRes?.data) ? customersRes.data : []);
       setError(null);
     } catch (err) {
       setError(err.message);

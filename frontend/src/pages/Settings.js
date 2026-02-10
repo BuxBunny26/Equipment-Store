@@ -80,7 +80,7 @@ function CategoriesSettings() {
     try {
       setLoading(true);
       const response = await categoriesApi.getAll();
-      setCategories(response.data);
+      setCategories(Array.isArray(response?.data) ? response.data : []);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -223,8 +223,8 @@ function SubcategoriesSettings() {
         subcategoriesApi.getAll(),
         categoriesApi.getAll(),
       ]);
-      setSubcategories(subRes.data);
-      setCategories(catRes.data);
+      setSubcategories(Array.isArray(subRes?.data) ? subRes.data : []);
+      setCategories(Array.isArray(catRes?.data) ? catRes.data : []);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -344,10 +344,11 @@ function LocationsSettings() {
     try {
       setLoading(true);
       const response = await locationsApi.getAll(false);
-      setLocations(response.data);
+      const locData = Array.isArray(response?.data) ? response.data : [];
+      setLocations(locData);
       // Expand all regions by default
       const regions = {};
-      response.data.forEach(loc => {
+      locData.forEach(loc => {
         const key = `${loc.country || 'Other'}-${loc.region || 'Unassigned'}`;
         regions[key] = true;
       });
@@ -594,7 +595,7 @@ function PersonnelSettings() {
     try {
       setLoading(true);
       const response = await personnelApi.getAll(false);
-      setPersonnel(response.data);
+      setPersonnel(Array.isArray(response?.data) ? response.data : []);
       setError(null);
     } catch (err) {
       setError(err.message);

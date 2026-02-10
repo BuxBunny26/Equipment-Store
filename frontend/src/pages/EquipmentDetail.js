@@ -22,7 +22,7 @@ function EquipmentDetail() {
     try {
       setLoading(true);
       const response = await equipmentApi.getById(id);
-      setEquipment(response.data);
+      setEquipment(response?.data || null);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -34,7 +34,7 @@ function EquipmentDetail() {
   const fetchHistory = async () => {
     try {
       const response = await equipmentApi.getHistory(id, 100);
-      setHistory(response.data);
+      setHistory(Array.isArray(response?.data) ? response.data : []);
     } catch (err) {
       console.error('Error fetching history:', err);
     }
@@ -43,7 +43,7 @@ function EquipmentDetail() {
   const fetchCalibrationHistory = async () => {
     try {
       const response = await calibrationApi.getHistory(id);
-      setCalibrationHistory(response.data);
+      setCalibrationHistory(Array.isArray(response?.data) ? response.data : []);
     } catch (err) {
       console.error('Error fetching calibration history:', err);
     }

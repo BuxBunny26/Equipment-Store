@@ -49,8 +49,8 @@ function CheckIn() {
         locationsApi.getAll(true),
       ]);
 
-      setCheckedOutEquipment(equipmentRes.data);
-      setLocations(locationsRes.data);
+      setCheckedOutEquipment(Array.isArray(equipmentRes?.data) ? equipmentRes.data : []);
+      setLocations(Array.isArray(locationsRes?.data) ? locationsRes.data : []);
       setError(null);
     } catch (err) {
       setError(err.message);

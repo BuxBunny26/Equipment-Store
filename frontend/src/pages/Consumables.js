@@ -25,9 +25,9 @@ function Consumables() {
         personnelApi.getAll(true),
       ]);
 
-      setConsumables(consumablesRes.data);
-      setLocations(locationsRes.data);
-      setPersonnel(personnelRes.data);
+      setConsumables(Array.isArray(consumablesRes?.data) ? consumablesRes.data : []);
+      setLocations(Array.isArray(locationsRes?.data) ? locationsRes.data : []);
+      setPersonnel(Array.isArray(personnelRes?.data) ? personnelRes.data : []);
       setError(null);
     } catch (err) {
       setError(err.message);

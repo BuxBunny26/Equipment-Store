@@ -29,8 +29,8 @@ function AuditLog() {
     try {
       setLoading(true);
       const response = await auditApi.getAll(filters);
-      setLogs(response.data.items || []);
-      setTotal(response.data.total || 0);
+      setLogs(response?.data?.items || []);
+      setTotal(response?.data?.total || 0);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -42,7 +42,7 @@ function AuditLog() {
   const fetchSummary = async () => {
     try {
       const response = await auditApi.getSummary(30);
-      setSummary(response.data);
+      setSummary(response?.data || null);
     } catch (err) {
       console.error('Error fetching summary:', err);
     }

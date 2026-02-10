@@ -41,7 +41,7 @@ function UserManagement() {
       if (filters.search) params.search = filters.search;
       
       const response = await usersApi.getAll(params);
-      setUsers(response.data);
+      setUsers(Array.isArray(response?.data) ? response.data : []);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -56,8 +56,8 @@ function UserManagement() {
         usersApi.getRoles(),
         personnelApi.getAll(true),
       ]);
-      setRoles(rolesRes.data);
-      setPersonnel(personnelRes.data);
+      setRoles(Array.isArray(rolesRes?.data) ? rolesRes.data : []);
+      setPersonnel(Array.isArray(personnelRes?.data) ? personnelRes.data : []);
     } catch (err) {
       console.error('Error fetching data:', err);
     }

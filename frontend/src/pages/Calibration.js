@@ -41,10 +41,11 @@ function Calibration() {
       if (filters.search) params.search = filters.search;
 
       const response = await calibrationApi.getStatus(params);
-      setEquipment(response.data);
+      setEquipment(Array.isArray(response?.data) ? response.data : []);
       setError(null);
     } catch (err) {
       setError(err.message);
+      setEquipment([]);
     } finally {
       setLoading(false);
     }
@@ -53,7 +54,7 @@ function Calibration() {
   const fetchSummary = async () => {
     try {
       const response = await calibrationApi.getSummary();
-      setSummary(response.data);
+      setSummary(response?.data || { summary: [], total: 0 });
     } catch (err) {
       console.error('Error fetching summary:', err);
     }
@@ -62,9 +63,10 @@ function Calibration() {
   const fetchCategories = async () => {
     try {
       const response = await categoriesApi.getAll();
-      setCategories(response.data);
+      setCategories(Array.isArray(response?.data) ? response.data : []);
     } catch (err) {
       console.error('Error fetching categories:', err);
+      setCategories([]);
     }
   };
 
@@ -233,7 +235,7 @@ function Calibration() {
                 onChange={(e) => setFilters({ ...filters, category: e.target.value })}
               >
                 <option value="">All Categories</option>
-                {categories.filter(c => c.requires_calibration).map((category) => (
+                {Array.isArray(categories) && categories.filter(c => c.requires_calibration).map((category) => (
                   <option key={category.id} value={category.name}>
                     {category.name}
                   </option>

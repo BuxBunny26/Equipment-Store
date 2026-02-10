@@ -43,7 +43,7 @@ function Reservations() {
       if (filters.end_date) params.end_date = filters.end_date;
       
       const response = await reservationsApi.getAll(params);
-      setReservations(response.data);
+      setReservations(Array.isArray(response?.data) ? response.data : []);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -60,10 +60,10 @@ function Reservations() {
         customersApi.getAll(),
         reservationsApi.getSummary(),
       ]);
-      setEquipment(equipmentRes.data);
-      setPersonnel(personnelRes.data);
-      setCustomers(customersRes.data);
-      setSummary(summaryRes.data);
+      setEquipment(Array.isArray(equipmentRes?.data) ? equipmentRes.data : []);
+      setPersonnel(Array.isArray(personnelRes?.data) ? personnelRes.data : []);
+      setCustomers(Array.isArray(customersRes?.data) ? customersRes.data : []);
+      setSummary(summaryRes?.data || { pending: 0, approved: 0, total: 0 });
     } catch (err) {
       console.error('Error fetching data:', err);
     }

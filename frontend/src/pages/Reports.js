@@ -22,31 +22,31 @@ function Reports() {
       switch (activeTab) {
         case 'overdue':
           response = await reportsApi.getOverdue();
-          setData(response.data.items || []);
+          setData(response?.data?.items || []);
           break;
         case 'checked-out':
           response = await reportsApi.getCheckedOut();
-          setData(response.data);
+          setData(Array.isArray(response?.data) ? response.data : []);
           break;
         case 'available':
           response = await reportsApi.getAvailable();
-          setData(response.data);
+          setData(Array.isArray(response?.data) ? response.data : []);
           break;
         case 'low-stock':
           response = await reportsApi.getLowStock();
-          setData(response.data);
+          setData(Array.isArray(response?.data) ? response.data : []);
           break;
         case 'by-category':
           response = await reportsApi.getByCategory();
-          setData(response.data);
+          setData(Array.isArray(response?.data) ? response.data : []);
           break;
         case 'by-location':
           response = await reportsApi.getByLocation();
-          setData(response.data);
+          setData(Array.isArray(response?.data) ? response.data : []);
           break;
         case 'usage':
           response = await reportsApi.getUsageStats({});
-          setStats(response.data);
+          setStats(response?.data || null);
           setData([]);
           break;
         default:
