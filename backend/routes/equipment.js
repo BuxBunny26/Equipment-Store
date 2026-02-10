@@ -46,7 +46,6 @@ router.get('/', async (req, res, next) => {
                 e.created_at,
                 e.updated_at,
                 e.manufacturer,
-                e.model,
                 CASE 
                     WHEN cr.expiry_date IS NULL THEN NULL
                     WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
