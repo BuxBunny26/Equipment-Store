@@ -429,47 +429,20 @@ function CheckOut() {
             ) : (
               <div className="form-group">
                 <label className="form-label">Customer Site *</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="Search customers..."
-                  value={customerSearch}
-                  onChange={(e) => setCustomerSearch(e.target.value)}
-                  style={{ marginBottom: '8px' }}
-                />
                 <select
                   name="customer_id"
                   className="form-select"
                   value={formData.customer_id}
                   onChange={handleChange}
                   required
-                  size={5}
-                  style={{ height: 'auto' }}
                 >
-                  {customers
-                    .filter(c => {
-                      if (!customerSearch) return true;
-                      const term = customerSearch.toLowerCase();
-                      return c.display_name.toLowerCase().includes(term) ||
-                             c.customer_number?.toLowerCase().includes(term) ||
-                             c.city?.toLowerCase().includes(term);
-                    })
-                    .slice(0, 50)
-                    .map((cust) => (
-                      <option key={cust.id} value={cust.id}>
-                        {cust.display_name} {cust.city ? `(${cust.city})` : ''} - {cust.region}
-                      </option>
-                    ))}
+                  <option value="">Select customer site...</option>
+                  {customers.map((cust) => (
+                    <option key={cust.id} value={cust.id}>
+                      {cust.customer_number} - {cust.display_name} {cust.city ? `(${cust.city})` : ''}
+                    </option>
+                  ))}
                 </select>
-                <small style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-                  {customers.filter(c => {
-                    if (!customerSearch) return true;
-                    const term = customerSearch.toLowerCase();
-                    return c.display_name.toLowerCase().includes(term) ||
-                           c.customer_number?.toLowerCase().includes(term) ||
-                           c.city?.toLowerCase().includes(term);
-                  }).length} customers found
-                </small>
               </div>
             )}
 
