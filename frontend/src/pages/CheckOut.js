@@ -307,9 +307,9 @@ function CheckOut() {
                           {eq.available_quantity} {eq.unit} avail.
                         </span>
                       ) : (
-                        <span className="badge badge-available">Available</span>
+                        <span className="badge badge-available">AVAILABLE</span>
                       )}
-                      {eq.requires_calibration && eq.calibration_status && (
+                      {eq.calibration_status && (
                         <span 
                           className={`badge ${
                             eq.calibration_status === 'Valid' ? 'badge-available' :
@@ -317,12 +317,12 @@ function CheckOut() {
                             eq.calibration_status === 'Expired' ? 'badge-overdue' :
                             'badge-checked-out'
                           }`}
-                          style={{ marginLeft: '4px', display: 'block', marginTop: '4px' }}
+                          style={{ display: 'block', marginTop: '4px' }}
                         >
-                          {eq.calibration_status === 'Valid' ? <><Icons.Check size={12} /> Calibrated</> :
-                           eq.calibration_status === 'Due Soon' ? <><Icons.Clock size={12} /> Cal Due Soon</> :
-                           eq.calibration_status === 'Expired' ? <><Icons.Warning size={12} /> Cal Expired</> :
-                           <><Icons.Minus size={12} /> Not Calibrated</>}
+                          {eq.calibration_status === 'Valid' ? <><Icons.Check size={12} /> CALIBRATED</> :
+                           eq.calibration_status === 'Due Soon' ? <><Icons.Clock size={12} /> CAL DUE SOON</> :
+                           eq.calibration_status === 'Expired' ? <><Icons.Warning size={12} /> CAL EXPIRED</> :
+                           <><Icons.Minus size={12} /> NOT CALIBRATED</>}
                         </span>
                       )}
                       {!eq.is_checkout_allowed && (
