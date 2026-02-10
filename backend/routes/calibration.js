@@ -156,6 +156,96 @@ router.get('/', async (req, res) => {
 });
 
 // ============================================
+// GET EQUIPMENT CALIBRATION STATUS (for Calibration Management page)
+// ============================================
+
+router.get('/status', async (req, res) => {
+    try {
+        const { status, category, search } = req.query;
+        
+        let query = `
+            SELECT 
+                e.id,
+                e.equipment_id,
+                e.equipment_name,
+                e.serial_number,
+                e.manufacturer,
+                c.name AS category,
+                cr.calibration_date AS last_calibration,
+                cr.expiry_date,
+                cr.certificate_number,
+                cr.certificate_file_url,
+                CASE 
+                    WHEN cr.expiry_date IS NULL THEN 'Not Calibrated'
+                    WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
+                    WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                    ELSE 'Valid'
+                END AS calibration_status,
+                CASE 
+                    WHEN cr.expiry_date IS NULL THEN NULL
+                    ELSE cr.expiry_date - CURRENT_DATE
+                END AS days_left
+            FROM equipment e
+            LEFT JOIN categories c ON e.category_id = c.id
+            LEFT JOIN LATERAL (
+                SELECT calibration_date, expiry_date, certificate_number, certificate_file_url
+                FROM calibration_records
+                WHERE equipment_id = e.id
+                ORDER BY expiry_date DESC NULLS LAST
+                LIMIT 1
+            ) cr ON true
+            WHERE e.requires_calibration = TRUE
+        `;
+        
+        const params = [];
+        let paramCount = 0;
+
+        if (status && status !== 'All Statuses') {
+            paramCount++;
+            query += ` AND CASE 
+                WHEN cr.expiry_date IS NULL THEN 'Not Calibrated'
+                WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
+                WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                ELSE 'Valid'
+            END = $${paramCount}`;
+            params.push(status);
+        }
+
+        if (category && category !== 'All Categories') {
+            paramCount++;
+            query += ` AND c.name = $${paramCount}`;
+            params.push(category);
+        }
+
+        if (search) {
+            paramCount++;
+            query += ` AND (
+                e.equipment_name ILIKE $${paramCount} 
+                OR e.serial_number ILIKE $${paramCount}
+                OR e.manufacturer ILIKE $${paramCount}
+                OR e.equipment_id ILIKE $${paramCount}
+            )`;
+            params.push(`%${search}%`);
+        }
+
+        query += ` ORDER BY 
+            CASE 
+                WHEN cr.expiry_date IS NULL THEN 4
+                WHEN cr.expiry_date < CURRENT_DATE THEN 1
+                WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 2
+                ELSE 3
+            END,
+            cr.expiry_date ASC NULLS LAST`;
+
+        const result = await pool.query(query, params);
+        res.json(result.rows || []);
+    } catch (err) {
+        console.error('Error fetching calibration status:', err.message);
+        res.status(500).json({ error: 'Failed to fetch calibration status', details: err.message });
+    }
+});
+
+// ============================================
 // GET CALIBRATION STATUS SUMMARY
 // ============================================
 
@@ -164,17 +254,25 @@ router.get('/summary', async (req, res) => {
         const result = await pool.query(`
             SELECT 
                 CASE 
-                    WHEN expiry_date IS NULL THEN 'N/A'
-                    WHEN expiry_date < CURRENT_DATE THEN 'Expired'
-                    WHEN expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                    WHEN cr.expiry_date IS NULL THEN 'Not Calibrated'
+                    WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
+                    WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
                     ELSE 'Valid'
                 END as calibration_status,
                 COUNT(*) as count
-            FROM calibration_records
+            FROM equipment e
+            LEFT JOIN LATERAL (
+                SELECT expiry_date
+                FROM calibration_records
+                WHERE equipment_id = e.id
+                ORDER BY expiry_date DESC NULLS LAST
+                LIMIT 1
+            ) cr ON true
+            WHERE e.requires_calibration = TRUE
             GROUP BY 1
         `);
         
-        const totalResult = await pool.query(`SELECT COUNT(*) as total FROM calibration_records`);
+        const totalResult = await pool.query(`SELECT COUNT(*) as total FROM equipment WHERE requires_calibration = TRUE`);
 
         res.json({
             summary: Array.isArray(result.rows) ? result.rows : [],
