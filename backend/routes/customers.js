@@ -164,4 +164,86 @@ router.get('/stats/summary', async (req, res) => {
     }
 });
 
+// Import customers from TSV data (one-time migration)
+router.post('/import-data', async (req, res) => {
+    try {
+        const fs = require('fs');
+        const path = require('path');
+        
+        // Read TSV file
+        const tsvPath = path.join(__dirname, '../database/customers.tsv');
+        const tsvContent = fs.readFileSync(tsvPath, 'utf8');
+        const lines = tsvContent.split('\n').filter(line => line.trim());
+        
+        // Skip header
+        const dataLines = lines.slice(1);
+        
+        let imported = 0;
+        let skipped = 0;
+        const errors = [];
+        
+        for (const line of dataLines) {
+            try {
+                const fields = line.split('\t');
+                if (fields.length < 11) continue;
+                
+                const [
+                    display_name, customer_number, currency_code,
+                    billing_city, billing_state, billing_country,
+                    shipping_city, shipping_state, shipping_country,
+                    tax_registration_number, vat_treatment, email
+                ] = fields.map(f => f?.trim() || null);
+                
+                if (!display_name || !customer_number) {
+                    skipped++;
+                    continue;
+                }
+                
+                // Check if exists
+                const existing = await pool.query(
+                    'SELECT id FROM customers WHERE customer_number = $1',
+                    [customer_number]
+                );
+                
+                if (existing.rows.length > 0) {
+                    skipped++;
+                    continue;
+                }
+                
+                // Insert
+                await pool.query(`
+                    INSERT INTO customers (
+                        customer_number, display_name, currency_code,
+                        billing_city, shipping_city, country,
+                        city, province_state, region,
+                        vat_number, vat_treatment, email,
+                        is_active
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, TRUE)
+                `, [
+                    customer_number, display_name, currency_code,
+                    billing_city, shipping_city, billing_country,
+                    billing_city, billing_state, null,
+                    tax_registration_number, vat_treatment, email
+                ]);
+                
+                imported++;
+            } catch (err) {
+                errors.push(err.message);
+                skipped++;
+            }
+        }
+        
+        res.json({
+            success: true,
+            imported,
+            skipped,
+            total: dataLines.length,
+            errors: errors.slice(0, 10)
+        });
+    } catch (error) {
+        console.error('Error importing customers:', error);
+        res.status(500).json({ error: 'Failed to import customers', details: error.message });
+    }
+});
+
 module.exports = router;
