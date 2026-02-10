@@ -167,10 +167,10 @@ export const calibrationApi = {
     delete: (id) => api.delete(`/calibration/${id}`),
     
     // Get certificate file URL (for viewing in browser) - uses full URL for window.open
-    getCertificateUrl: (recordId) => `${getFullApiUrl()}/calibration/certificate/${recordId}`,
+    getCertificateUrl: (recordId) => `${getFullApiUrl()}/calibration/${recordId}/certificate`,
     
     // Get certificate download URL - uses full URL for window.open
-    getDownloadUrl: (recordId) => `${getFullApiUrl()}/calibration/certificate/${recordId}/download`,
+    getDownloadUrl: (recordId) => `${getFullApiUrl()}/calibration/${recordId}/certificate`,
 };
 
 // Reservations

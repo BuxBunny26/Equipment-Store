@@ -583,16 +583,28 @@ router.post('/update-statuses', async (req, res) => {
 });
 
 // ============================================
-// SERVE CERTIFICATE FILE
+// SERVE CERTIFICATE FILE - Redirects to SharePoint folder
 // ============================================
 
 router.get('/:id/certificate', async (req, res) => {
     try {
         const { id } = req.params;
         
-        // Certificate file URLs are no longer stored in the database
-        // This endpoint is kept for future use
-        return res.status(404).json({ error: 'Certificate feature not available in this version' });
+        // Get the calibration record to find the serial number
+        const result = await pool.query(`
+            SELECT cr.*, e.serial_number 
+            FROM calibration_records cr 
+            JOIN equipment e ON cr.equipment_id = e.id 
+            WHERE cr.id = $1
+        `, [id]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Calibration record not found' });
+        }
+        
+        // Redirect to SharePoint folder where certificates are stored
+        // User can search for their certificate by serial number
+        res.redirect(SHAREPOINT_FOLDER_URL);
     } catch (err) {
         console.error('Error serving certificate:', err);
         res.status(500).json({ error: 'Failed to serve certificate' });
