@@ -174,20 +174,13 @@ router.get('/summary', async (req, res) => {
                 COUNT(*) as count
             FROM calibration_records
             GROUP BY 1
-            ORDER BY 
-                CASE 
-                    WHEN expiry_date IS NULL THEN 4
-                    WHEN expiry_date < CURRENT_DATE THEN 1
-                    WHEN expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 2
-                    ELSE 3
-                END
         `);
         
         const totalResult = await pool.query(`SELECT COUNT(*) as total FROM calibration_records`);
 
         res.json({
-            summary: result.rows,
-            total: parseInt(totalResult.rows[0].total)
+            summary: Array.isArray(result.rows) ? result.rows : [],
+            total: parseInt(totalResult.rows[0]?.total || 0)
         });
     } catch (err) {
         console.error('Error fetching calibration summary:', err);
