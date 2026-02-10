@@ -244,11 +244,12 @@ function Calibration() {
               </select>
             </div>
             
-            <div className="filter-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
+            <div className="filter-group">
+              <label className="form-label">&nbsp;</label>
               <a 
                 href={`${process.env.REACT_APP_API_URL || 'https://equipment-store-5gc9.onrender.com/api'}/calibration/export`}
                 className="btn btn-secondary"
-                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '38px' }}
                 download
               >
                 <Icons.Download size={16} /> Export to Excel
