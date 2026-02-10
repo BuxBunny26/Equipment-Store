@@ -147,10 +147,7 @@ router.get('/', async (req, res) => {
             cr.expiry_date ASC NULLS LAST`;
 
         const result = await pool.query(query, params);
-        
-        // Add certificate URLs to each record
-        const recordsWithUrls = result.rows.map(addCertificateUrl);
-        res.json(recordsWithUrls);
+        res.json(Array.isArray(result.rows) ? result.rows : []);
     } catch (err) {
         console.error('Error fetching calibration records:', err);
         res.status(500).json({ error: 'Failed to fetch calibration records' });
