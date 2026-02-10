@@ -2,6 +2,22 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../database/db');
 
+// DEBUG: Check table schema
+router.get('/debug-schema/:table', async (req, res) => {
+    try {
+        const { table } = req.params;
+        const result = await pool.query(`
+            SELECT column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_name = $1
+            ORDER BY ordinal_position
+        `, [table]);
+        res.json({ table, columns: result.rows });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET dashboard summary
 router.get('/dashboard', async (req, res, next) => {
     try {
