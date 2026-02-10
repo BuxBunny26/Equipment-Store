@@ -167,13 +167,14 @@ router.get('/status', async (req, res) => {
         let query = `
             SELECT 
                 e.id,
-                e.equipment_id,
+                e.equipment_id AS equipment_code,
                 e.equipment_name,
                 e.serial_number,
                 e.manufacturer,
                 c.name AS category,
-                cr.calibration_date AS last_calibration,
-                cr.expiry_date,
+                cr.id AS calibration_record_id,
+                cr.calibration_date AS last_calibration_date,
+                cr.expiry_date AS calibration_expiry_date,
                 cr.certificate_number,
                 CASE 
                     WHEN cr.expiry_date IS NULL THEN 'Not Calibrated'
@@ -184,7 +185,7 @@ router.get('/status', async (req, res) => {
                 CASE 
                     WHEN cr.expiry_date IS NULL THEN NULL
                     ELSE cr.expiry_date - CURRENT_DATE
-                END AS days_left
+                END AS days_until_expiry
             FROM calibration_records cr
             JOIN equipment e ON cr.equipment_id = e.id
             LEFT JOIN categories c ON e.category_id = c.id
