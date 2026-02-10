@@ -73,13 +73,13 @@ function CustomerSites() {
     });
   };
 
-  const filteredCustomers = customers.filter(c => {
+  const filteredCustomers = Array.isArray(customers) ? customers.filter(c => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return c.display_name?.toLowerCase().includes(term) ||
            c.city?.toLowerCase().includes(term) ||
            c.customer_number?.toLowerCase().includes(term);
-  });
+  }) : [];
 
   if (loading) {
     return (

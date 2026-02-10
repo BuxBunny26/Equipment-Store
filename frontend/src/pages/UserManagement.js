@@ -168,6 +168,7 @@ function UserManagement() {
   };
 
   const selectAllPersonnel = () => {
+    if (!Array.isArray(personnel) || !Array.isArray(users)) return;
     const unlinkedPersonnel = personnel.filter(p => 
       !users.some(u => u.personnel_id === p.id)
     );
@@ -230,8 +231,8 @@ function UserManagement() {
 
       {/* Role Summary */}
       <div className="dashboard-grid" style={{ marginBottom: '1.5rem' }}>
-        {roles.map(role => {
-          const count = users.filter(u => u.role_id === role.id).length;
+        {Array.isArray(roles) && roles.map(role => {
+          const count = Array.isArray(users) ? users.filter(u => u.role_id === role.id).length : 0;
           return (
             <div className="stat-card" key={role.id}>
               <div className="stat-value">{count}</div>
@@ -518,7 +519,7 @@ function UserManagement() {
               
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                 <span style={{ fontWeight: 500 }}>
-                  {selectedPersonnel.length} of {personnel.filter(p => !users.some(u => u.personnel_id === p.id)).length} personnel selected
+                  {selectedPersonnel.length} of {Array.isArray(personnel) && Array.isArray(users) ? personnel.filter(p => !users.some(u => u.personnel_id === p.id)).length : 0} personnel selected
                 </span>
                 <button className="btn btn-sm btn-secondary" onClick={selectAllPersonnel}>
                   Select All Unlinked

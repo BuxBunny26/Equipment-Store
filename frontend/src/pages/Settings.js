@@ -617,17 +617,17 @@ function PersonnelSettings() {
   };
 
   // Get unique departments for filter dropdown
-  const departments = [...new Set(personnel.map(p => p.department).filter(Boolean))].sort();
+  const departments = Array.isArray(personnel) ? [...new Set(personnel.map(p => p.department).filter(Boolean))].sort() : [];
 
   // Filter personnel based on search and department
-  const filteredPersonnel = personnel.filter(p => {
+  const filteredPersonnel = Array.isArray(personnel) ? personnel.filter(p => {
     const matchesSearch = !searchTerm || 
       p.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.employee_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.email?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDepartment = !departmentFilter || p.department === departmentFilter;
     return matchesSearch && matchesDepartment;
-  });
+  }) : [];
 
   if (loading) {
     return <div className="loading"><div className="spinner"></div> Loading...</div>;

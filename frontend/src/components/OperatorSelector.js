@@ -27,10 +27,10 @@ function OperatorSelector() {
     }
   }, [isOpen]);
 
-  const filteredPersonnel = personnel.filter(person =>
+  const filteredPersonnel = Array.isArray(personnel) ? personnel.filter(person =>
     person.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     person.employee_id.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  ) : [];
 
   const handleSelect = (person) => {
     selectOperator(person);

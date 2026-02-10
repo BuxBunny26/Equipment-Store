@@ -154,7 +154,8 @@ function Calibration() {
   };
 
   const getSummaryCount = (status) => {
-    const item = summary.summary.find(s => s.calibration_status === status);
+    const summaryArray = Array.isArray(summary?.summary) ? summary.summary : [];
+    const item = summaryArray.find(s => s.calibration_status === status);
     return item ? parseInt(item.count) : 0;
   };
 

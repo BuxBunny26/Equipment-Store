@@ -126,7 +126,7 @@ function CheckIn() {
     setPhotoPreview(null);
   };
 
-  const filteredEquipment = checkedOutEquipment.filter((eq) => {
+  const filteredEquipment = Array.isArray(checkedOutEquipment) ? checkedOutEquipment.filter((eq) => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
@@ -136,11 +136,11 @@ function CheckIn() {
       eq.checked_out_to?.toLowerCase().includes(term) ||
       eq.current_location?.toLowerCase().includes(term)
     );
-  });
+  }) : [];
 
-  const selectedEquipment = checkedOutEquipment.find(
+  const selectedEquipment = Array.isArray(checkedOutEquipment) ? checkedOutEquipment.find(
     (eq) => eq.id === parseInt(formData.equipment_id)
-  );
+  ) : null;
 
   const formatDate = (dateString) => {
     if (!dateString) return '-';

@@ -31,9 +31,10 @@ export function OperatorProvider({ children }) {
   const loadPersonnel = async () => {
     try {
       const response = await personnelApi.getAll(true);
-      setPersonnel(response.data);
+      setPersonnel(Array.isArray(response?.data) ? response.data : []);
     } catch (error) {
       console.error('Failed to load personnel:', error);
+      setPersonnel([]);
     } finally {
       setLoading(false);
     }

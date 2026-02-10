@@ -89,13 +89,13 @@ function CheckOut() {
 
     try {
       // Find customer name for notes if customer site selected
-      const selectedCustomer = formData.destination_type === 'customer' && formData.customer_id
+      const selectedCustomer = formData.destination_type === 'customer' && formData.customer_id && Array.isArray(customers)
         ? customers.find(c => c.id === parseInt(formData.customer_id))
         : null;
 
-      const selectedItems = availableEquipment.filter(eq => 
+      const selectedItems = Array.isArray(availableEquipment) ? availableEquipment.filter(eq => 
         selectedEquipmentIds.includes(eq.id.toString())
-      );
+      ) : [];
 
       const successNames = [];
       const errors = [];
@@ -177,7 +177,7 @@ function CheckOut() {
     setPhotoPreview(null);
   };
 
-  const filteredEquipment = availableEquipment.filter((eq) => {
+  const filteredEquipment = Array.isArray(availableEquipment) ? availableEquipment.filter((eq) => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
@@ -186,11 +186,11 @@ function CheckOut() {
       eq.serial_number?.toLowerCase().includes(term) ||
       eq.category?.toLowerCase().includes(term)
     );
-  });
+  }) : [];
 
-  const selectedEquipmentList = availableEquipment.filter(
+  const selectedEquipmentList = Array.isArray(availableEquipment) ? availableEquipment.filter(
     (eq) => selectedEquipmentIds.includes(eq.id.toString())
-  );
+  ) : [];
 
   if (loading) {
     return (

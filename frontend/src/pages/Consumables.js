@@ -84,7 +84,7 @@ function Consumables() {
       )}
 
       {/* Low Stock Alert */}
-      {consumables.filter((c) => c.is_low_stock).length > 0 && (
+      {Array.isArray(consumables) && consumables.filter((c) => c.is_low_stock).length > 0 && (
         <div className="alert alert-warning" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Icons.Warning size={18} />
           <span><strong>Low Stock Alert:</strong> {consumables.filter((c) => c.is_low_stock).length} items need restocking</span>
