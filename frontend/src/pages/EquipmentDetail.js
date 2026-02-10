@@ -84,8 +84,8 @@ function EquipmentDetail() {
   };
 
   const openCertificate = (recordId) => {
-    const url = calibrationApi.getCertificateUrl(recordId);
-    window.open(url, '_blank');
+    // Open certificate via backend endpoint (direct to backend port)
+    window.open(`http://localhost:3001/api/calibration/${recordId}/certificate`, '_blank');
   };
 
   const getStatusBadge = (item) => {
@@ -332,8 +332,6 @@ function EquipmentDetail() {
                     <th>Expiry Date</th>
                     <th>Status</th>
                     <th>Certificate #</th>
-                    <th>Provider</th>
-                    <th>Notes</th>
                     <th>Certificate</th>
                   </tr>
                 </thead>
@@ -344,10 +342,8 @@ function EquipmentDetail() {
                       <td>{formatDateOnly(record.expiry_date)}</td>
                       <td>{getCalibrationStatusBadge(record.expiry_date)}</td>
                       <td style={{ fontWeight: 500 }}>{record.certificate_number || '-'}</td>
-                      <td>{record.calibration_provider || '-'}</td>
-                      <td style={{ fontSize: '0.8rem' }}>{record.notes || '-'}</td>
                       <td>
-                        {record.certificate_file_path ? (
+                        {record.certificate_file_url ? (
                           <button
                             className="btn btn-sm btn-primary"
                             onClick={() => openCertificate(record.id)}

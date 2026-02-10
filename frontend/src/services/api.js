@@ -1,15 +1,16 @@
 import axios from 'axios';
 
-// Use environment variable or default to Render backend
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://equipment-store-5gc9.onrender.com/api';
+// Use direct backend URL in development, proxy in production
+const API_BASE_URL = process.env.NODE_ENV === 'development' 
+    ? 'http://localhost:3001/api' 
+    : '/api';
 
 // For direct file access (window.open), we need the full URL
 const getFullApiUrl = () => {
-    if (process.env.REACT_APP_API_URL) {
-        return process.env.REACT_APP_API_URL;
+    if (process.env.NODE_ENV === 'development') {
+        return 'http://localhost:3001/api';
     }
-    // Default to Render backend
-    return 'https://equipment-store-5gc9.onrender.com/api';
+    return window.location.origin + '/api';
 };
 
 const api = axios.create({

@@ -5,11 +5,14 @@ const pool = require('../database/db');
 // Get all customers
 router.get('/', async (req, res) => {
     try {
-        const { region, search, active_only } = req.query;
+        const { country, search, active_only } = req.query;
         
         let query = `
-            SELECT id, customer_number, display_name, region, country, 
-                   province_state, city, email, is_active, created_at
+            SELECT id, customer_number, display_name, currency_code,
+                   billing_city, billing_state, billing_country,
+                   shipping_city, shipping_state, shipping_country,
+                   tax_registration_number, vat_treatment, email, 
+                   is_active, created_at
             FROM customers
             WHERE 1=1
         `;
@@ -20,10 +23,10 @@ router.get('/', async (req, res) => {
             query += ` AND is_active = TRUE`;
         }
         
-        // Filter by region
-        if (region) {
-            params.push(region);
-            query += ` AND region = $${params.length}`;
+        // Filter by country
+        if (country) {
+            params.push(country);
+            query += ` AND billing_country = $${params.length}`;
         }
         
         // Search by name or customer number
@@ -66,16 +69,24 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
     try {
         const { 
-            customer_number, display_name, region, country, 
-            province_state, city, email, vat_number, vat_treatment, currency_code 
+            customer_number, display_name, currency_code,
+            billing_city, billing_state, billing_country,
+            shipping_city, shipping_state, shipping_country,
+            tax_registration_number, vat_treatment, email
         } = req.body;
         
         const result = await pool.query(
             `INSERT INTO customers 
-                (customer_number, display_name, region, country, province_state, city, email, vat_number, vat_treatment, currency_code)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                (customer_number, display_name, currency_code, 
+                 billing_city, billing_state, billing_country,
+                 shipping_city, shipping_state, shipping_country,
+                 tax_registration_number, vat_treatment, email)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
              RETURNING *`,
-            [customer_number, display_name, region || 'Local', country, province_state, city, email, vat_number, vat_treatment, currency_code || 'ZAR']
+            [customer_number, display_name, currency_code || 'ZAR',
+             billing_city, billing_state, billing_country,
+             shipping_city, shipping_state, shipping_country,
+             tax_registration_number, vat_treatment, email]
         );
         
         res.status(201).json(result.rows[0]);
@@ -93,27 +104,34 @@ router.put('/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { 
-            customer_number, display_name, region, country, 
-            province_state, city, email, vat_number, vat_treatment, currency_code, is_active 
+            customer_number, display_name, currency_code,
+            billing_city, billing_state, billing_country,
+            shipping_city, shipping_state, shipping_country,
+            tax_registration_number, vat_treatment, email, is_active
         } = req.body;
         
         const result = await pool.query(
             `UPDATE customers SET
                 customer_number = COALESCE($1, customer_number),
                 display_name = COALESCE($2, display_name),
-                region = COALESCE($3, region),
-                country = COALESCE($4, country),
-                province_state = COALESCE($5, province_state),
-                city = COALESCE($6, city),
-                email = COALESCE($7, email),
-                vat_number = COALESCE($8, vat_number),
-                vat_treatment = COALESCE($9, vat_treatment),
-                currency_code = COALESCE($10, currency_code),
-                is_active = COALESCE($11, is_active),
+                currency_code = COALESCE($3, currency_code),
+                billing_city = COALESCE($4, billing_city),
+                billing_state = COALESCE($5, billing_state),
+                billing_country = COALESCE($6, billing_country),
+                shipping_city = COALESCE($7, shipping_city),
+                shipping_state = COALESCE($8, shipping_state),
+                shipping_country = COALESCE($9, shipping_country),
+                tax_registration_number = COALESCE($10, tax_registration_number),
+                vat_treatment = COALESCE($11, vat_treatment),
+                email = COALESCE($12, email),
+                is_active = COALESCE($13, is_active),
                 updated_at = CURRENT_TIMESTAMP
-             WHERE id = $12
+             WHERE id = $14
              RETURNING *`,
-            [customer_number, display_name, region, country, province_state, city, email, vat_number, vat_treatment, currency_code, is_active, id]
+            [customer_number, display_name, currency_code,
+             billing_city, billing_state, billing_country,
+             shipping_city, shipping_state, shipping_country,
+             tax_registration_number, vat_treatment, email, is_active, id]
         );
         
         if (result.rows.length === 0) {
@@ -133,9 +151,9 @@ router.get('/stats/summary', async (req, res) => {
         const result = await pool.query(`
             SELECT 
                 COUNT(*) FILTER (WHERE is_active = TRUE) as active_customers,
-                COUNT(*) FILTER (WHERE region = 'Local' AND is_active = TRUE) as local_customers,
-                COUNT(*) FILTER (WHERE region = 'Overseas' AND is_active = TRUE) as overseas_customers,
-                COUNT(DISTINCT country) as countries
+                COUNT(*) FILTER (WHERE billing_country = 'South Africa' AND is_active = TRUE) as local_customers,
+                COUNT(*) FILTER (WHERE billing_country != 'South Africa' AND is_active = TRUE) as overseas_customers,
+                COUNT(DISTINCT billing_country) as countries
             FROM customers
         `);
         

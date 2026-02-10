@@ -7,8 +7,6 @@ router.get('/', async (req, res, next) => {
     try {
         const result = await pool.query(`
             SELECT id, name, is_checkout_allowed, is_consumable, 
-                   COALESCE(requires_calibration, FALSE) as requires_calibration,
-                   default_calibration_interval_months,
                    created_at, updated_at
             FROM categories
             ORDER BY name

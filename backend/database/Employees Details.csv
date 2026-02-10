@@ -1,0 +1,122 @@
+Department;Division;Employee Code;First Names;Surname;Company E-Mail;Job Title;Direct Supervisor;Site
+ARC-NDT;GP Consult;WC492;Adri  ;Ludick;a.ludick@wearcheckRS.com;Manager Mechanical;Philip Schutte;
+ARC-RCM;WearCheck;WC383;Adriaan Pertus Johannes;Bouwer;adriaanb@wearcheckrs.com;Thermal Manager;Louis Peacock;KwaZulu Natal
+ARC-RCM;GP Consult;WEC094;Ailwel Marshall;Rasimphi;marshallr@wearcheckrs.com;Reliability Technician;Riaan de Beer;Valterra - Waterval
+ARC-RCM;GP Consult;WEC105;Alexander;Outram;alex@wearcheckrs.com;Reliability Technologist;Micheal Pretorius;RBMR and PMR
+ARC-RCM;GP Consult;WEC123;Allan;Stuurman;allan@wearcheckrs.com;Reliability Technologist - Site Suprevisor;Peet Peacock;Samancor - ECM Tweefontein
+ARC-TCA;AFS;WC511;Andre;Erasmus;andree@wearcheck.co.za;Machinery Inspector / Auditor;Johan Stols;
+ARC-RCM;GP Consult;WEC103;Andrew John  Walker;Robb;andrew@wearcheckRS.com;ARC Centre Manager;Louis Peacock;Remote Centre
+ARC-RCM;WearCheck;WC484;Annah Seipone;Modutwane;annahm@wearcheckrs.com;Trainee Inspector B5;Londolani Managa;Valterra - Mototolo
+ARC-RCM;WearCheck;WC319;Annemie;Willer;annemie@wearcheckrs.com;Divisional Manager;Philip Schutte;Longmeadow H/O
+ ARC-RCA;AFS;WC503;Antonio;Ehrke;antonio.ehrke@wearcheckrs.com;RCA Inspector;Roger Henwood;
+ARC-RCM;WearCheck;Unknown;Armindo;Muchacho;armindo@wearcheckrs.com;Site Supervisor;Riaan du Plooy;Mozambique
+ARC-TCA;AFS;WC526;Arnoldus Johannes;van Zyl;Arnold@WearCheckRS.com;Electrical Inspector;Johan Stols;
+ARC-RCM;GP Consult;WEC114;Aubrey;Tshabalala;aubrey@wearcheckRS.com;Reliability Technologist;Annah Modutwane;Valterra - Mototolo
+ARC-RCM;WearCheck;Unknown;Benedito;Timana;N/A;Oil Sampler / Data collector;Riaan du Plooy;Mozambique
+ARC-RCM;WearCheck;WC380;Chicco Fransisco;Tivane;chicco@wearcheckrs.com;Reliability Technologist;Londolani Managa;Steelpoort
+ARC-RCM;GP Consult;WEC100;Chris;Mostert;chrism@wearcheckrs.com;Reliability Analyst;Eddie Pieterse Snr;Springs
+ARC-RCM;WearCheck;WC285;Christene;Smal ;chrstene@wearcheckrs.com;RS Administrator;Megan Salzwedel;Longmeadow H/O
+ARC-RCM;GP Consult;WEC120;CJ;Woller;cj@wearcheckrs.com;Reliability Technician;Michael Preotrius;RBMR and PMR
+AFS;AFS;WC486;Colleen;Pyper;colleen.pyper@WearCheckRS.com;Admin and Finance Assistant;Adri Ludick;
+ARC-NDT;AFS;WC528;Daniel Greef;Meintjies;greeffm@wearcheck.co.za;Inspector (Lifting and NDT);Adri Ludick;
+ARC-RCM;GP Consult;WC402;Tshegofatsho Daniel;Molapo;daniel@wearcheckrs.com;Reliability Technologist;Annah Modutwane;Valterra - Mototolo
+ARC-RCM;GP Consult;WEC081;David;Viljoen;David@wearcheckrs.com;Precision Maintenance Technologist;Peet Peacock;Roamer
+ARC-RCM;WearCheck;Unknown;David;Lipague;davidl@wearcheckrs.com;Reliability Technician;Riaan du Plooy;Mozambique
+ARC-RCM;WearCheck;WC358;Deon ;Gaarkeuken;deon@wearcheckrs.com;ARC Reliability Specialist;Andrew Robb;Roamer
+ARC-RCM;GP Consult ;WEC086;Desmond ;Ngomane;desmond@wearcheckrs.com;Reliability Technologist;Annah Modutwane;Valterra - Mototolo
+ARC-RCM;WearCheck;WCN008;Dian;Leff;dian@wearcheckrs.com;Reliability Technician;Rohan Willer;Namibia
+ARC-RCM;GP Consult;WEC119;Douglas;Prout-Jones;Douglas@WearcheckRS.com;Reliability Technician;Riaan de Beer;Valterra - Waterval
+ARC-RCM;GP Consult;WEC122;Eben;Prinsloo;eben@wearcheckrs.com;Reliability Technologist;Edward Pieterse Jnr;Roamer
+ARC-RCM;WearCheck;WC274;Edward Frederick IV;Pieterse;edwardfp@wearcheckrs.com;Operations Manager;Annemie Willer;Longmeadow H/O
+ARC-TCA;AFS;WEC138;Edwin Ashley;Gibbons;edwin@wearcheckrs.com;ARC TC Machinery Inspector;Johan Stols;
+AFS;AFS;WC488;Ethel;Mienie;ethel.mienie@WearCheckRS.com;Administration Assistant;Adri Ludick;
+ARC-RCM;WearCheck;WC271;Edward;Pieterse;epieterse@wearcheckrs.com;ARC Reliability Specialist;Peet Peacock;Springs
+ARC-RCM;GP Consult;WEC090;Eugene;Scheepers;eugene@wearcheckrs.com;Reliability Technician;Francois Pretorius;Neopak - Rosslyn
+ARC-NDT;AFS;WC497;Evert;Viljoen;evertv@wearcheck.co.za;Senior Machinery Inspector;Adri Ludick;
+ARC-RCM;GP Consult;WEC080;Michael Francios ;Pretorius;Franciosp@wearcheckRS.com;Reliability Analyst;Peet Peacock;Neopak - Rosslyn
+ARC-RCM;WearCheck;WC287;Francois Jacobus;van Eeden;francoisve@wearcheckrs.com;Condition Monitoring Specialist;Andrew Robb;Remote Centre
+ARC-RCM;GP Consult;WEC111;Jozua Francois Joubert;Pienaar;francoisp@wearcheckrs.com;Reliability Analyst;Peet Peacock;KwaZulu Natal - Hillside
+ARC-RCM;WearCheck;WCN004;Freddy-Ben;Gariseb;Freddy-Ben@wearcheckRS.com;Reliability Technician;Rohan Willer;Namibia
+ARC-RCM;WearCheck;WCN007;Gabriel Shikongo;Nuunyango;gabriel@wearcheckrs.com;Reliability Technician;Rohan Willer;Namibia
+ARC-TCA;AFS;WC510;Godfrey;Boikhutso;godfreyb@wearcheck.co.za;Inspector;Johan Stols;
+AFS;GP Consult ;WEC093;Gordon John Frederick;Hoy;freddieh@wearcheck.co.za;Mechanical Technician;Adri Ludick;
+ARC-RCM;WearCheck;WC270;Gustav;Lourens;gustav@wearcheckrs.com;Reliability Technologist;Eddie Pieterse Snr;Springs
+ARC-RCM;GP Consult ;WEC047;Hannest;Koegelenberg;hannest@wearcheckrs.com;Reliability Technologist;Eddie Pieterse Snr;Springs
+ARC-RCM;GP Consult;WEC129;Hein;Coetzer;heinc@wearcheckrs.com;Precision Maintenance Technologist;Peet Peacock;Samancor - TAS
+ARC-RCA;GP Consult;WEC134;Fritz;Kusel;heinrich@wearcheckrs.com;RCA Technician;Roger Henwood;
+ARC-NDT;GP Consult;WEC098;Henry;Mherekumombe;henry@wearcheckrs.com;Level 2 Inspector;Adri Ludick;
+ARC-RCM;WearCheck;Unknown;Isac;Zacarias;isac@wearcheckrs.com;Reliability Technician;Riaan du Plooy;Mozambique
+ARC-NDT;AFS;WC493;Jacobus Frederick ;Venter;jacov@wearcheck.co.za;Senior Machinery Inspector;Adri Ludick;
+ARC-RCM;WearCheck;WC352;Jacobus Johannes;Willer;jaco@wearcheckrs.com;Foreign Operations Business Unit Manager;Philip Schutte;Longmeadow H/O
+ARC-RCM;GP Consult;WEC097;Theunis Gerhardus Jacobus;de Beer;jacodb@wearcheckrs.com;Reliability Technologist;Eben Prinsloo;Roamer
+ARC-RCM;WearCheck;WC236;James Papayito;Tshabalala;james@WearCheckRS.com;Reliability Technologist;Annah Modutwane;Valterra - Mototolo
+ARC-NDT;AFS;WC496;Jan;Booysens;janb@wearcheck.co.za;Senior Machinery Inspector;Adri Ludick;
+ ARC-NDT;AFS;WC494;Johann;Louw;janniel@wearcheck.co.za;Inspector;Adri Ludick;
+ARC-RCM;GP Consult;WEC137;Jean Jacques;de Beer;jj@wearcheckrs.com;Technical Advisor;Andrew Robb;Remote Centre
+ARC-TCA;AFS;;Jean Pierre;du Plessis;;Machinery Inspector;Johan Stols;
+ARC-TCA;AFS;WC645;Johan;Bekker;JohanB@wearcheckRS.com;ARC TC Inspector;Johan Stols;
+ARC-TCA;AFS;WC491;Johan;Rossouw;johanr@wearcheckrs.com;Senior Inspector;Johan Stols;
+ARC-TCA;AFS;WC508;Johannes Gideon Francios;Stols;Johans@wearcheckrs.com;ARC TC Manager;Philip Schutte;
+ARC-RCM;GP Consult;WEC089;Johannes Andreas;Oosthuizen;johandre@wearcheckrs.com;Reliability Technician;;Samancor - Mooinooi
+ARC-TCA;AFS;WC531;Joseph Benjamin;Kies;josephk@wearcheck.co.za;Machinery Inspector;Johan Stols;
+ ARC-NDT;AFS;WC527;Jean-Pierre;Jordaan;jeanj@wearcheck.co.za;Inspector (Lifting and NDT);Adri Ludick;
+ARC-RCA;GP Consult;WEC135;Kevin;Henwood;kevin@wearcheckrs.com;RCA Technician;Roger Henwood;
+ARC-TCA;AFS;WC482;Khotso Thabo;Mosala;khotso@wearcheckrs.com;Inspector;Johan Stols;
+ARC-RCM;WearCheck;WC455;Leon;Coetzee;Leon@wearcheckrs.com;Reliability Technologist;Londolani Managa;Steelpoort
+ARC-RCM;GP Consult;WEC126;Lesego;Khuthwane;Lesego@WearCheckRS.com;Remote Centre Administrator;Andrew Robb;Longmeadow H/O
+ARC-NDT;AFS;WC495;Lorraine Lerato;Mokgethi;lorrainem@wearcheck.co.za;Technician;Adri Ludick;
+ARC-RCM;WearCheck;WC648;Londolani;Managa;londolanim@wearcheckrs.com;Precision Maintenance Technologist;Peet Peacock;Samancor - MFC
+ARC-RCM;WearCheck;WC269;Bernard Lopi;Molangoane;lopim@wearcheck.co.za;Sampler;Annah Modutwane;Valterra - Mototolo
+ARC-RCM;WearCheck;WC277;Louis Robert;Peacock;louis@wearcheckrs.com;Technical & Training Manager;Annemie Willer;Longmeadow H/O
+ARC-RCM;GP Consult;WEC118;Labby Jeffrey;Lubis;lubby@wearcheckrs.com;Reliability Technologist - Site Suprevisor;Peet Peacock;Samancor - Doornbosch
+ARC-RCM;GP Consult;WEC068;Lucas Johannes Bartel;Luus;lucas@wearcheckrs.com ;Reliability Technician;Andrew Robb;Kathu
+ARC-RCM;GP Consult;WEC116;Mande;Coetzee;mande@wearcheckrs.com;RS Administrator;Shivon Alberts;Longmeadow H/O
+ARC-RCM;GP Consult;WEC102;Marcel;Schoeman;marcel@wearcheckrs.com;Sales Manager;Annemie Willer;Roamer
+ARC-RCM;GP Consult;WEC109;Mariette;du Rand;mariette@wearcheckrs.com;RS Administrator;Megan Salzwedel;Longmeadow H/O
+ARC-RCM;GP Consult;WEC106;Marthinus Jacobus;van Aarde;martiens@wearcheckrs.com;Reliability Technician;Tsietsi Monnanyne;Eskom - Matimba
+ARC-NDT;AFS;WC483;Mike Mbongeni;Shongwe;mikes@weacheckrs.com;Senior Inspector;Adri Ludick;
+ARC-RCM;GP Consult;WEC104;Megan;Salzwedel;megan@wearcheckrs.com;Administration Manager;Edward Pieterse Jnr;Longmeadow H/O
+ARC-TCA;AFS;WC536;Mervyn Thomas;Gibbons;mervyng@wearcheck.co.za;ARC TC Machinery Inspector;Johan Stols;
+ARC-RCM;GP Consult;WEC088;Meshack Welcome;Nxumalo;meshack@wearcheckrs.com;Reliability Technologist;Francois Pienaar;KwaZulu Natal
+ARC-RCM;GP Consult;WEC076;Micheal Francios;Pretorius;micheal@wearcheckrs.com;Reliability Analyst - Site Supervisor;Peet Peacock;RBMR and PMR
+ARC-RCM;WearCheck;WC291;Seporo Micheal;Masemola;michealm@wearcheckrs.com;Reliability Technologist;Annah Modutwane;Valterra - Mototolo
+ARC-RCM;WearCheck;WC465;Mmatapa Betty;Monyepao;betty@wearcheckrs.com;Reliability Technician;Annah Modutwane;Valterra - Mototolo
+ARC-RCM;WearCheck;WC361;Morne;Alberts;mornea@wearcheckrs.com;ARC Reliability Specialist;Andrew Robb;Remote Centre
+ARC-RCM;GP Consult;WEC113;Nadhira;Bux;nadhira@wearcheckrs.com;Integration Co-Ordinator;Louis Peacock;Longmeadow H/O
+ARC-RCA;AFS;WC506;Nicolaas;du Plessis;nico.duplessis@wearcheckrs.com;RCA Inspector;Roger Henwood;
+ARC-RCM;WearCheck;Unknown;Muhamad;Hanif;Muhamad@wearcheckRS.com;Reliability Technician;Riaan du Plooy;Mozambique
+ARC-NDT;GP Consult;WEC099;Lloyd;Ngobeni;lloyd@wearcheckrs.com;Precision Maintenance Technologist;Riaan de Beer;Valterra - Waterval
+ARC-RCM;WearCheck;WC651;Nomvula;Mkhize;nomvulam@wearcheckrs.com;Precision Maintenance Technologist;Peet Peacock;Samancor - MFC
+ARC-TCA;AFS;WC509;Norman Landus;Walters;Landus@wearcheckrs.com;Machinery Inspector;Johan Stols;
+ARC-RCM;WearCheck;WC348;Putaneng Paswell;Mashoeu;passwell@wearcheckrs.com;Sampler;Annah Modutwane;Valterra - Mototolo
+ARC-NDT;AFS;WC498;Patrick;Nel;patrick@wearcheckrs.com;Machinery Inspector;Adri Ludick;
+ARC-RCM;WearCheck;WC520;Petrus Johannes;Peacock;Peet@wearcheckrs.com;Service Manager;Annemie Willer;
+ARC-RCM;GP Consult;WEC115;Percy;Hall;percy@wearcheckrs.com;Reliability Technologist;Londolani Managa;Seriti - Khutala
+ARC-RCM;WearCheck;WC393;Katishi Permission;Malele;permission@wearcheckrs.com;Sampler;Annah Modutwane;Valterra - Mototolo
+ARC-RCM;WearCheck;;Peter Ivo Mateus;Mahlangu;N/A;Senior Technician;Riaan du Plooy;Mozambique
+ARC-RCM;WearCheck;WC253;Philippus Jacobus Wilhelmus (Philip);Schutte;philip@wearcheckrs.com;General Manager;N/A;Longmeadow H/O
+ARC-RCM;WearCheck;Unknown;Placido ;Maculuve;Placido@wearcheckrs.com;Senior Technician;Riaan du Plooy;Mozambique
+ARC-RCM;WearCheck;WC382;Reinier;Kalp;reinierk@wearcheckrs.com;Remote Center Analyst;Andrew Robb;Remote Centre
+ARC-RCM;WearCheck;WC591;Adriaan Johannes;du Plooy;Riaandp@wearcheckRS.com;Country Manager;Jaco Willer;Mozambique
+ARC-RCM;WearCheck;WC363;Riaan;de Beer;riaandb@wearcheckrs.com;Supervisor;Peet Peacock;Valterra - Waterval
+;AFS;WC507;Richard;van Vuuren;;;Adri Ludick;
+ARC-RCA;AFS;WC504;Roger;Henwood;rogerh@wearcheckrs.com;RCA Operations Manager;Philip Schutte;
+ARC-RCM;GP Consult ;WEC074;Rakcal Monroe ;Balaram;rakcal@wearcheckrs.com;Reliability Technologist;Francois Pienaar;KwaZulu Natal - Tronox
+ARC-RCM;WearCheck;WC381;Hermanus Johannes;Willer;rohan@wearcheckrs.com;Site Manager;Jaco Willer;Namibia
+ARC-NDT;GP Consult;WEC096;Rynhardt;Meyer;rynhardt@wearcheckrs.com;Precision Maintenance Technologist;Riaan de Beer;Valterra - Waterval
+ARC-RCA;AFS;WC501;Rynhardt;Smit;rynhardt.smit@wearcheckrs.com;RCA Inspector;Roger Henwood;
+ARC-RCM;Wearcheck;WC264;Sergant Sakhile;Tlou;sergent@wearcheckrs.com;Reliability Technologist;Eben Prinsloo;Roamer
+ARC-TCA;GP Consult;WEC136;Shaun;Janse van Rensburg;shaun@wearcheckrs.com;Machinery Inspector;Johan Stols;
+ARC-RCM;GP Consult;WEC130;Shivon Chantelle;Alberts;shivon@wearcheckrs.com;Financial Manager;Megan Salzwedel;Longmeadow H/O
+ARC-RCM;WearCheck;WC283;Mokale Simon;Mosima;simon@wearcheckrs.com;Reliability Technician;Tsietsi Monnanyne;Eskom - Matimba
+ARC-NDT;AFS;WC485;Simon Petrus;Difutso;simondifutso@WearCheckRS.com;AMM Junior Management;Adri Ludick;
+ARC-RCM;GP Consult;WC360;Sipho Petros;Zwane;siphoz@wearcheckrs.com;Reliability Analyst;Francois Pienaar;KwaZulu Natal - Hillside
+ARC-RCM;GP Consult;WEC039;Sipho Petros;Mathibela;siphom@wearcheckrs.com ;Reliability Technician;Londolani Managa;Samancor - MFC
+AFS;AFS;WC487;Teresa;Venter;teresa.venter@wearcheckRS.com;Administration Assistant;Adri Ludick;
+ARC-RCM;GP Consult;WEC132;Thapelo Pebetsi;Mohlala;Thapelo@wearCheckRS.com;Reliability Technologist Trainee;Allan Stuurman / Lubby Lubis;Samancor Tweefontein / Samancor Doornbosch
+ARC-RCM;WearCheck;WC243;Thomas;Mdhlala;Thomas@wearcheckrs.com;Reliability Technologist;Michael Preotrius;PMR
+ARC-RCM;GP Consult;WEC062;Thulani;Tembe;thulani@wearcheckrs.com;Precision Maintenance Technologist;Peet Peacock;Samancor - Millcell
+ARC-RCM;GP Consult ;WEC057;Tonny;Simelani;tonny@wearcheckrs.com;Reliability Technologist;Eddie Pieterse Snr;Springs
+ARC-RCM;GP Consult;WEC133;Tsietsi Petric;Monnanyane;tsietsi@wearcheckrs.com;Precision Maintenance Technologist;Peet Peacock;Eskom - Matimba
+ARC-RCM;GP Consult;WEC124;Vernon;Calvert;vernon@wearcheckrs.com;Reliability Technician;Riaan de Beer;Valterra - Waterval
+ARC-RCM;GP Consult;WEC127;Wihan Manu;Willer;wihan@wearcheckRS.com;Reliability Technician;Francois Pretorius;Neopak - Rosslyn

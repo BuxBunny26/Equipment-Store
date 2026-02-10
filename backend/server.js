@@ -41,6 +41,29 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Root route - API info
+app.get('/', (req, res) => {
+    res.json({
+        name: 'Equipment Store API',
+        version: '1.0.0',
+        status: 'running',
+        endpoints: {
+            health: '/api/health',
+            categories: '/api/categories',
+            subcategories: '/api/subcategories',
+            locations: '/api/locations',
+            personnel: '/api/personnel',
+            equipment: '/api/equipment',
+            movements: '/api/movements',
+            customers: '/api/customers',
+            calibration: '/api/calibration',
+            reservations: '/api/reservations',
+            maintenance: '/api/maintenance',
+            reports: '/api/reports'
+        }
+    });
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error('Error:', err.message);

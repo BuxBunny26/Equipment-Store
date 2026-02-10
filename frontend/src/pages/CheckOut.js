@@ -376,7 +376,7 @@ function CheckOut() {
                 <option value="">Select person...</option>
                 {personnel.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.full_name} ({p.employee_id}) - {p.department}
+                    {p.employee_id} - {p.first_name === p.last_name ? p.first_name : `${p.first_name} ${p.last_name}`}
                   </option>
                 ))}
               </select>

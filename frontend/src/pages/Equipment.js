@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { equipmentApi, categoriesApi } from '../services/api';
+import * as XLSX from 'xlsx';
 
 function Equipment() {
   const [loading, setLoading] = useState(true);
@@ -72,6 +73,54 @@ function Equipment() {
     return <span className="badge badge-checked-out">Checked Out</span>;
   };
 
+  const getCalibrationBadge = (item) => {
+    if (!item.calibration_status || item.calibration_status === 'N/A') {
+      return <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>N/A</span>;
+    }
+    if (item.calibration_status === 'Expired') {
+      return <span className="badge" style={{ background: '#ef4444' }}>Expired</span>;
+    }
+    if (item.calibration_status === 'Due Soon') {
+      return <span className="badge" style={{ background: '#f59e0b' }}>Due Soon</span>;
+    }
+    return <span className="badge" style={{ background: '#10b981' }}>Valid</span>;
+  };
+
+  const exportToExcel = () => {
+    const exportData = equipment.map(item => ({
+      'Equipment ID': item.equipment_id,
+      'Name': item.equipment_name,
+      'Category': item.category_name,
+      'Subcategory': item.subcategory_name || '',
+      'Serial Number': item.serial_number || '-',
+      'Status': item.status,
+      'Calibration Status': item.calibration_status || 'N/A',
+      'Location': item.current_location || '-',
+      'Holder': item.current_holder || '-'
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Equipment');
+
+    // Auto-size columns
+    const colWidths = [
+      { wch: 15 }, // Equipment ID
+      { wch: 25 }, // Name
+      { wch: 25 }, // Category
+      { wch: 20 }, // Subcategory
+      { wch: 20 }, // Serial Number
+      { wch: 12 }, // Status
+      { wch: 18 }, // Calibration Status
+      { wch: 15 }, // Location
+      { wch: 20 }  // Holder
+    ];
+    worksheet['!cols'] = colWidths;
+
+    const date = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `Equipment_List_${date}.xlsx`);
+  };
+
   return (
     <div>
       <div className="page-header">
@@ -79,9 +128,14 @@ function Equipment() {
           <h1 className="page-title">Equipment</h1>
           <p className="page-subtitle">Manage equipment inventory</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-          + Add Equipment
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn btn-secondary" onClick={exportToExcel} disabled={equipment.length === 0}>
+            Export to Excel
+          </button>
+          <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+            + Add Equipment
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -179,6 +233,7 @@ function Equipment() {
                   <th>Category</th>
                   <th>Serial Number</th>
                   <th>Status</th>
+                  <th>Calibration</th>
                   <th>Location</th>
                   <th>Holder</th>
                   <th>Actions</th>
@@ -209,6 +264,7 @@ function Equipment() {
                         </span>
                       )}
                     </td>
+                    <td>{getCalibrationBadge(item)}</td>
                     <td>{item.current_location || '-'}</td>
                     <td>{item.current_holder || '-'}</td>
                     <td>

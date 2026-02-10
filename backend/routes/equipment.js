@@ -45,16 +45,13 @@ router.get('/', async (req, res, next) => {
                 e.notes,
                 e.created_at,
                 e.updated_at,
-                e.requires_calibration,
+                e.manufacturer,
+                e.model,
                 CASE 
-                    WHEN e.requires_calibration = TRUE THEN
-                        CASE 
-                            WHEN cr.expiry_date IS NULL THEN 'Not Calibrated'
-                            WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
-                            WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
-                            ELSE 'Valid'
-                        END
-                    ELSE NULL
+                    WHEN cr.expiry_date IS NULL THEN NULL
+                    WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
+                    WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                    ELSE 'Valid'
                 END as calibration_status,
                 cr.expiry_date as calibration_expiry
             FROM equipment e
@@ -111,15 +108,15 @@ router.get('/', async (req, res, next) => {
         // Calibration status filter
         if (calibration_status) {
             if (calibration_status === 'Calibrated') {
-                conditions.push(`e.requires_calibration = TRUE AND cr.expiry_date IS NOT NULL AND cr.expiry_date >= CURRENT_DATE`);
+                conditions.push(`cr.expiry_date IS NOT NULL AND cr.expiry_date >= CURRENT_DATE`);
             } else if (calibration_status === 'Not Calibrated') {
-                conditions.push(`e.requires_calibration = TRUE AND cr.expiry_date IS NULL`);
+                conditions.push(`cr.expiry_date IS NULL`);
             } else if (calibration_status === 'Expired') {
-                conditions.push(`e.requires_calibration = TRUE AND cr.expiry_date < CURRENT_DATE`);
+                conditions.push(`cr.expiry_date < CURRENT_DATE`);
             } else if (calibration_status === 'Due Soon') {
-                conditions.push(`e.requires_calibration = TRUE AND cr.expiry_date >= CURRENT_DATE AND cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days'`);
+                conditions.push(`cr.expiry_date >= CURRENT_DATE AND cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days'`);
             } else if (calibration_status === 'Valid') {
-                conditions.push(`e.requires_calibration = TRUE AND cr.expiry_date > CURRENT_DATE + INTERVAL '30 days'`);
+                conditions.push(`cr.expiry_date > CURRENT_DATE + INTERVAL '30 days'`);
             }
         }
         

@@ -4,169 +4,150 @@ const pool = require('../database/db');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { createClient } = require('@supabase/supabase-js');
 
 // ============================================
-// SUPABASE STORAGE CONFIGURATION
+// SHAREPOINT CERTIFICATE URL CONFIGURATION
 // ============================================
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://widwzjnfxhsxzhqrzthy.supabase.co';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndpZHd6am5meGhzeHpocXJ6dGh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2ODI5MzcsImV4cCI6MjA4NTI1ODkzN30.e3leUBqvZeo_gPMj75mlzgP7uQg-iWTZvcLwQx1_Hpo';
-const BUCKET_NAME = 'certificates';
+// Shared folder link for all certificates
+const SHAREPOINT_FOLDER_URL = 'https://wearcheckrs-my.sharepoint.com/:f:/p/nadhira/IgB6x1TbBtpITZdiTDhf6_JfAWh3dPLS_2N4rxvWB8b4wWk?e=V3z8D6';
 
-// Initialize Supabase client
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Path for direct file access (download format)
+const SHAREPOINT_DOWNLOAD_BASE = 'https://wearcheckrs-my.sharepoint.com/personal/nadhira_wearcheckrs_com/_layouts/15/download.aspx?SourceUrl=/personal/nadhira_wearcheckrs_com/Documents/WearCheck%20ARC%20Documents/RS/Calibration%20Certificates';
 
-// Check if running in cloud mode (DATABASE_URL set)
-const isCloudMode = !!process.env.DATABASE_URL;
+// Generate certificate filename based on serial number and expiry date
+// Format: {serial} Exp.{MM}.{YYYY}.pdf
+function generateCertificateFileName(serialNumber, expiryDate) {
+    if (!serialNumber || !expiryDate) return null;
+    
+    const expiry = new Date(expiryDate);
+    const month = String(expiry.getMonth() + 1).padStart(2, '0');
+    const year = expiry.getFullYear();
+    
+    return `${serialNumber} Exp.${month}.${year}.pdf`;
+}
+
+// Generate full SharePoint URL for certificate using download.aspx format
+function generateCertificateUrl(serialNumber, expiryDate) {
+    const fileName = generateCertificateFileName(serialNumber, expiryDate);
+    if (!fileName) return null;
+    
+    const encodedFileName = encodeURIComponent(fileName);
+    return `${SHAREPOINT_DOWNLOAD_BASE}/${encodedFileName}`;
+}
+
+// Add certificate URL to calibration record (uses stored URL only)
+function addCertificateUrl(record) {
+    // Just return the record with its stored certificate_file_url
+    // URLs are manually added per record since SharePoint sharing links are unique
+    return record;
+}
 
 // ============================================
-// FILE UPLOAD CONFIGURATION
+// FILE UPLOAD CONFIGURATION (Local Storage)
 // ============================================
 
-// Use memory storage for cloud (Supabase), disk storage for local
-const storage = isCloudMode 
-    ? multer.memoryStorage()
-    : multer.diskStorage({
-        destination: (req, file, cb) => {
-            const uploadsDir = path.join(__dirname, '../uploads/certificates');
-            if (!fs.existsSync(uploadsDir)) {
-                fs.mkdirSync(uploadsDir, { recursive: true });
-            }
-            cb(null, uploadsDir);
-        },
-        filename: (req, file, cb) => {
-            const timestamp = Date.now();
-            const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
-            cb(null, `cert_${timestamp}_${safeName}`);
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const uploadsDir = path.join(__dirname, '../uploads/certificates');
+        if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
         }
-    });
+        cb(null, uploadsDir);
+    },
+    filename: (req, file, cb) => {
+        const timestamp = Date.now();
+        const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+        cb(null, `cert_${timestamp}_${safeName}`);
+    }
+});
 
 const upload = multer({
     storage: storage,
-    limits: {
-        fileSize: 10 * 1024 * 1024 // 10MB limit
-    },
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
     fileFilter: (req, file, cb) => {
-        // Allow PDF, images, and common document types
-        const allowedTypes = [
-            'application/pdf',
-            'image/jpeg',
-            'image/png',
-            'image/tiff',
-            'application/msword',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        ];
+        const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff'];
         if (allowedTypes.includes(file.mimetype)) {
             cb(null, true);
         } else {
-            cb(new Error('Invalid file type. Allowed: PDF, JPEG, PNG, TIFF, DOC, DOCX'), false);
+            cb(new Error('Invalid file type. Allowed: PDF, JPEG, PNG, TIFF'), false);
         }
     }
 });
 
-// Helper function to upload file to Supabase
-async function uploadToSupabase(file, equipmentId) {
-    const timestamp = Date.now();
-    const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const fileName = `${equipmentId}/${timestamp}_${safeName}`;
-    
-    const { data, error } = await supabase.storage
-        .from(BUCKET_NAME)
-        .upload(fileName, file.buffer, {
-            contentType: file.mimetype,
-            upsert: false
-        });
-    
-    if (error) {
-        console.error('Supabase upload error:', error);
-        throw new Error('Failed to upload certificate to storage');
-    }
-    
-    // Get public URL
-    const { data: urlData } = supabase.storage
-        .from(BUCKET_NAME)
-        .getPublicUrl(fileName);
-    
-    return {
-        path: fileName,
-        url: urlData.publicUrl,
-        fileName: file.originalname,
-        mimeType: file.mimetype
-    };
-}
-
 // ============================================
-// GET ALL EQUIPMENT CALIBRATION STATUS
+// GET ALL CALIBRATION RECORDS
 // ============================================
 
-router.get('/status', async (req, res) => {
+router.get('/', async (req, res) => {
     try {
         const { status, category, search } = req.query;
         
         let query = `
-            SELECT *
-            FROM v_equipment_calibration_status
-            WHERE requires_calibration = TRUE
+            SELECT 
+                cr.id,
+                cr.equipment_id,
+                cr.serial_number,
+                cr.calibration_date,
+                cr.expiry_date,
+                cr.certificate_number,
+                cr.calibration_status,
+                cr.calibration_provider,
+                cr.certificate_file_url,
+                cr.notes,
+                cr.created_at,
+                e.equipment_id AS equipment_code,
+                e.equipment_name,
+                e.manufacturer,
+                c.name AS category
+            FROM calibration_records cr
+            LEFT JOIN equipment e ON cr.equipment_id = e.id
+            LEFT JOIN categories c ON e.category_id = c.id
+            WHERE 1=1
         `;
         const params = [];
         let paramCount = 0;
 
         if (status) {
             paramCount++;
-            query += ` AND calibration_status = $${paramCount}`;
+            query += ` AND cr.calibration_status = $${paramCount}`;
             params.push(status);
         }
 
         if (category) {
             paramCount++;
-            query += ` AND category = $${paramCount}`;
+            query += ` AND c.name = $${paramCount}`;
             params.push(category);
         }
 
         if (search) {
             paramCount++;
             query += ` AND (
-                equipment_name ILIKE $${paramCount} 
-                OR serial_number ILIKE $${paramCount}
-                OR manufacturer ILIKE $${paramCount}
-                OR equipment_code ILIKE $${paramCount}
+                e.equipment_name ILIKE $${paramCount} 
+                OR cr.serial_number ILIKE $${paramCount}
+                OR e.manufacturer ILIKE $${paramCount}
+                OR e.equipment_id ILIKE $${paramCount}
             )`;
             params.push(`%${search}%`);
         }
 
         query += ` ORDER BY 
-            CASE calibration_status 
+            CASE cr.calibration_status 
                 WHEN 'Expired' THEN 1 
                 WHEN 'Due Soon' THEN 2 
                 WHEN 'Valid' THEN 3
-                WHEN 'Not Calibrated' THEN 4
-                ELSE 5
+                ELSE 4
             END,
-            calibration_expiry_date ASC NULLS LAST`;
+            cr.expiry_date ASC NULLS LAST`;
 
         const result = await pool.query(query, params);
-        res.json(result.rows);
+        
+        // Add certificate URLs to each record
+        const recordsWithUrls = result.rows.map(addCertificateUrl);
+        res.json(recordsWithUrls);
     } catch (err) {
-        console.error('Error fetching calibration status:', err);
-        res.status(500).json({ error: 'Failed to fetch calibration status' });
-    }
-});
-
-// ============================================
-// GET EQUIPMENT DUE FOR CALIBRATION
-// ============================================
-
-router.get('/due', async (req, res) => {
-    try {
-        const result = await pool.query(`
-            SELECT *
-            FROM v_calibration_due
-        `);
-        res.json(result.rows);
-    } catch (err) {
-        console.error('Error fetching calibration due:', err);
-        res.status(500).json({ error: 'Failed to fetch equipment due for calibration' });
+        console.error('Error fetching calibration records:', err);
+        res.status(500).json({ error: 'Failed to fetch calibration records' });
     }
 });
 
@@ -180,24 +161,18 @@ router.get('/summary', async (req, res) => {
             SELECT 
                 calibration_status,
                 COUNT(*) as count
-            FROM v_equipment_calibration_status
-            WHERE requires_calibration = TRUE
+            FROM calibration_records
             GROUP BY calibration_status
             ORDER BY 
                 CASE calibration_status 
                     WHEN 'Expired' THEN 1 
                     WHEN 'Due Soon' THEN 2 
                     WHEN 'Valid' THEN 3
-                    WHEN 'Not Calibrated' THEN 4
+                    ELSE 4
                 END
         `);
         
-        // Also get total count
-        const totalResult = await pool.query(`
-            SELECT COUNT(*) as total
-            FROM v_equipment_calibration_status
-            WHERE requires_calibration = TRUE
-        `);
+        const totalResult = await pool.query(`SELECT COUNT(*) as total FROM calibration_records`);
 
         res.json({
             summary: result.rows,
@@ -210,6 +185,38 @@ router.get('/summary', async (req, res) => {
 });
 
 // ============================================
+// GET EQUIPMENT DUE FOR CALIBRATION
+// ============================================
+
+router.get('/due', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT 
+                cr.id,
+                cr.serial_number,
+                cr.expiry_date,
+                cr.calibration_status,
+                cr.certificate_number,
+                e.equipment_id AS equipment_code,
+                e.equipment_name,
+                e.manufacturer,
+                c.name AS category,
+                CURRENT_DATE - cr.expiry_date AS days_overdue
+            FROM calibration_records cr
+            JOIN equipment e ON cr.equipment_id = e.id
+            LEFT JOIN categories c ON e.category_id = c.id
+            WHERE cr.calibration_status IN ('Expired', 'Due Soon')
+               OR cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days'
+            ORDER BY cr.expiry_date ASC
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Error fetching calibration due:', err);
+        res.status(500).json({ error: 'Failed to fetch equipment due for calibration' });
+    }
+});
+
+// ============================================
 // GET CALIBRATION HISTORY FOR EQUIPMENT
 // ============================================
 
@@ -217,10 +224,10 @@ router.get('/history/:equipmentId', async (req, res) => {
     try {
         const { equipmentId } = req.params;
         
-        // First, find the equipment by either numeric ID or equipment_id string
+        // Find equipment by ID or equipment_id code
         const equipmentResult = await pool.query(`
             SELECT id FROM equipment 
-            WHERE id = $1::integer OR equipment_id = $1::text
+            WHERE id::text = $1 OR equipment_id = $1
         `, [equipmentId]);
         
         if (equipmentResult.rows.length === 0) {
@@ -232,26 +239,57 @@ router.get('/history/:equipmentId', async (req, res) => {
         const result = await pool.query(`
             SELECT 
                 cr.id,
+                cr.serial_number,
                 cr.calibration_date,
                 cr.expiry_date,
                 cr.certificate_number,
-                cr.certificate_file_path,
-                cr.certificate_file_name,
-                cr.certificate_mime_type,
                 cr.calibration_provider,
+                cr.calibration_status,
+                cr.certificate_file_url,
                 cr.notes,
-                cr.created_at,
-                cr.created_by,
-                (cr.expiry_date - cr.calibration_date) as validity_days
+                cr.created_at
             FROM calibration_records cr
             WHERE cr.equipment_id = $1
             ORDER BY cr.calibration_date DESC
         `, [dbEquipmentId]);
 
-        res.json(result.rows);
+        // Add certificate URLs to each record
+        const recordsWithUrls = result.rows.map(addCertificateUrl);
+        res.json(recordsWithUrls);
     } catch (err) {
         console.error('Error fetching calibration history:', err);
         res.status(500).json({ error: 'Failed to fetch calibration history' });
+    }
+});
+
+// ============================================
+// GET SINGLE CALIBRATION RECORD
+// ============================================
+
+router.get('/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await pool.query(`
+            SELECT 
+                cr.*,
+                e.equipment_id AS equipment_code,
+                e.equipment_name,
+                e.manufacturer,
+                c.name AS category
+            FROM calibration_records cr
+            LEFT JOIN equipment e ON cr.equipment_id = e.id
+            LEFT JOIN categories c ON e.category_id = c.id
+            WHERE cr.id = $1
+        `, [id]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Calibration record not found' });
+        }
+
+        res.json(addCertificateUrl(result.rows[0]));
+    } catch (err) {
+        console.error('Error fetching calibration record:', err);
+        res.status(500).json({ error: 'Failed to fetch calibration record' });
     }
 });
 
@@ -263,84 +301,62 @@ router.post('/', upload.single('certificate'), async (req, res) => {
     try {
         const {
             equipment_id,
+            serial_number,
             calibration_date,
             expiry_date,
             certificate_number,
             calibration_provider,
+            calibration_status,
             notes
         } = req.body;
 
-        // Validate required fields
-        if (!equipment_id || !calibration_date || !expiry_date) {
+        if (!calibration_date || !expiry_date) {
             return res.status(400).json({ 
-                error: 'equipment_id, calibration_date, and expiry_date are required' 
+                error: 'calibration_date and expiry_date are required' 
             });
         }
 
-        // Get equipment internal ID if equipment_id is the code
-        const equipmentResult = await pool.query(`
-            SELECT id FROM equipment 
-            WHERE id = $1::integer OR equipment_id = $1
-        `, [equipment_id]);
+        // Get equipment internal ID if provided
+        let equipmentInternalId = null;
+        if (equipment_id) {
+            const equipmentResult = await pool.query(`
+                SELECT id FROM equipment 
+                WHERE id::text = $1 OR equipment_id = $1
+            `, [equipment_id]);
 
-        if (equipmentResult.rows.length === 0) {
-            return res.status(404).json({ error: 'Equipment not found' });
-        }
-
-        const equipmentInternalId = equipmentResult.rows[0].id;
-
-        // Prepare file info if uploaded
-        let filePath = null;
-        let fileName = null;
-        let mimeType = null;
-
-        if (req.file) {
-            if (isCloudMode) {
-                // Upload to Supabase Storage
-                const uploadResult = await uploadToSupabase(req.file, equipmentInternalId);
-                filePath = uploadResult.url; // Store the public URL
-                fileName = uploadResult.fileName;
-                mimeType = uploadResult.mimeType;
-            } else {
-                // Local storage
-                filePath = req.file.path;
-                fileName = req.file.originalname;
-                mimeType = req.file.mimetype;
+            if (equipmentResult.rows.length > 0) {
+                equipmentInternalId = equipmentResult.rows[0].id;
             }
         }
 
-        // Insert calibration record
+        // Calculate status if not provided
+        const today = new Date();
+        const expiry = new Date(expiry_date);
+        const daysUntilExpiry = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
+        
+        let status = calibration_status;
+        if (!status) {
+            if (daysUntilExpiry < 0) status = 'Expired';
+            else if (daysUntilExpiry <= 30) status = 'Due Soon';
+            else status = 'Valid';
+        }
+
         const result = await pool.query(`
             INSERT INTO calibration_records (
-                equipment_id,
-                calibration_date,
-                expiry_date,
-                certificate_number,
-                certificate_file_path,
-                certificate_file_name,
-                certificate_mime_type,
-                calibration_provider,
-                notes,
-                created_by
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                equipment_id, serial_number, calibration_date, expiry_date,
+                certificate_number, calibration_provider, calibration_status, notes
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING *
         `, [
-            equipmentInternalId,
-            calibration_date,
-            expiry_date,
-            certificate_number,
-            filePath,
-            fileName,
-            mimeType,
-            calibration_provider,
-            notes,
-            req.body.created_by || 'System'
+            equipmentInternalId, serial_number, calibration_date, expiry_date,
+            certificate_number, calibration_provider, status, notes
         ]);
 
         res.status(201).json(result.rows[0]);
     } catch (err) {
-        console.error('Error adding calibration record:', err);
-        res.status(500).json({ error: 'Failed to add calibration record' });
+        console.error('Error creating calibration record:', err);
+        res.status(500).json({ error: 'Failed to create calibration record' });
     }
 });
 
@@ -348,7 +364,7 @@ router.post('/', upload.single('certificate'), async (req, res) => {
 // UPDATE CALIBRATION RECORD
 // ============================================
 
-router.put('/:id', upload.single('certificate'), async (req, res) => {
+router.put('/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const {
@@ -356,91 +372,22 @@ router.put('/:id', upload.single('certificate'), async (req, res) => {
             expiry_date,
             certificate_number,
             calibration_provider,
+            calibration_status,
             notes
         } = req.body;
 
-        // Build update query dynamically
-        const updates = [];
-        const params = [];
-        let paramCount = 0;
-
-        if (calibration_date) {
-            paramCount++;
-            updates.push(`calibration_date = $${paramCount}`);
-            params.push(calibration_date);
-        }
-
-        if (expiry_date) {
-            paramCount++;
-            updates.push(`expiry_date = $${paramCount}`);
-            params.push(expiry_date);
-        }
-
-        if (certificate_number !== undefined) {
-            paramCount++;
-            updates.push(`certificate_number = $${paramCount}`);
-            params.push(certificate_number);
-        }
-
-        if (calibration_provider !== undefined) {
-            paramCount++;
-            updates.push(`calibration_provider = $${paramCount}`);
-            params.push(calibration_provider);
-        }
-
-        if (notes !== undefined) {
-            paramCount++;
-            updates.push(`notes = $${paramCount}`);
-            params.push(notes);
-        }
-
-        // Handle file upload
-        if (req.file) {
-            if (isCloudMode) {
-                // Upload to Supabase Storage
-                // Get equipment_id from the record first
-                const recordResult = await pool.query('SELECT equipment_id FROM calibration_records WHERE id = $1', [id]);
-                const equipmentId = recordResult.rows[0]?.equipment_id || 'unknown';
-                const uploadResult = await uploadToSupabase(req.file, equipmentId);
-                
-                paramCount++;
-                updates.push(`certificate_file_path = $${paramCount}`);
-                params.push(uploadResult.url);
-
-                paramCount++;
-                updates.push(`certificate_file_name = $${paramCount}`);
-                params.push(uploadResult.fileName);
-
-                paramCount++;
-                updates.push(`certificate_mime_type = $${paramCount}`);
-                params.push(uploadResult.mimeType);
-            } else {
-                // Local storage
-                paramCount++;
-                updates.push(`certificate_file_path = $${paramCount}`);
-                params.push(req.file.path);
-
-                paramCount++;
-                updates.push(`certificate_file_name = $${paramCount}`);
-                params.push(req.file.originalname);
-
-                paramCount++;
-                updates.push(`certificate_mime_type = $${paramCount}`);
-                params.push(req.file.mimetype);
-            }
-        }
-
-        updates.push('updated_at = CURRENT_TIMESTAMP');
-
-        paramCount++;
-        params.push(id);
-
         const result = await pool.query(`
-            UPDATE calibration_records
-            SET ${updates.join(', ')}
-            WHERE id = $${paramCount}
+            UPDATE calibration_records SET
+                calibration_date = COALESCE($1, calibration_date),
+                expiry_date = COALESCE($2, expiry_date),
+                certificate_number = COALESCE($3, certificate_number),
+                calibration_provider = COALESCE($4, calibration_provider),
+                calibration_status = COALESCE($5, calibration_status),
+                notes = COALESCE($6, notes),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $7
             RETURNING *
-        `, params);
+        `, [calibration_date, expiry_date, certificate_number, calibration_provider, calibration_status, notes, id]);
 
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Calibration record not found' });
@@ -460,23 +407,13 @@ router.put('/:id', upload.single('certificate'), async (req, res) => {
 router.delete('/:id', async (req, res) => {
     try {
         const { id } = req.params;
+        const result = await pool.query(
+            'DELETE FROM calibration_records WHERE id = $1 RETURNING id',
+            [id]
+        );
 
-        // Get file path before deleting
-        const fileResult = await pool.query(`
-            SELECT certificate_file_path FROM calibration_records WHERE id = $1
-        `, [id]);
-
-        if (fileResult.rows.length === 0) {
+        if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Calibration record not found' });
-        }
-
-        // Delete the record
-        await pool.query('DELETE FROM calibration_records WHERE id = $1', [id]);
-
-        // Delete the certificate file if exists
-        const filePath = fileResult.rows[0].certificate_file_path;
-        if (filePath && fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
         }
 
         res.json({ message: 'Calibration record deleted successfully' });
@@ -487,98 +424,78 @@ router.delete('/:id', async (req, res) => {
 });
 
 // ============================================
-// DOWNLOAD/VIEW CERTIFICATE FILE
+// UPDATE CALIBRATION STATUSES (Batch)
 // ============================================
 
-router.get('/certificate/:id', async (req, res) => {
+router.post('/update-statuses', async (req, res) => {
     try {
-        const { id } = req.params;
-
+        // Update all calibration statuses based on expiry dates
         const result = await pool.query(`
-            SELECT 
-                certificate_file_path,
-                certificate_file_name,
-                certificate_mime_type
-            FROM calibration_records 
-            WHERE id = $1
-        `, [id]);
+            UPDATE calibration_records SET
+                calibration_status = CASE
+                    WHEN expiry_date < CURRENT_DATE THEN 'Expired'
+                    WHEN expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                    ELSE 'Valid'
+                END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE expiry_date IS NOT NULL
+            RETURNING id, calibration_status
+        `);
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Calibration record not found' });
-        }
-
-        const { certificate_file_path, certificate_file_name, certificate_mime_type } = result.rows[0];
-
-        if (!certificate_file_path) {
-            return res.status(404).json({ error: 'Certificate file not found' });
-        }
-
-        // Check if it's a Supabase URL (cloud storage)
-        if (certificate_file_path.startsWith('http')) {
-            // Redirect to the Supabase public URL
-            return res.redirect(certificate_file_path);
-        }
-
-        // Local file handling
-        if (!fs.existsSync(certificate_file_path)) {
-            return res.status(404).json({ error: 'Certificate file not found' });
-        }
-
-        // Set headers for file download/view
-        res.setHeader('Content-Type', certificate_mime_type || 'application/octet-stream');
-        res.setHeader('Content-Disposition', `inline; filename="${certificate_file_name || 'certificate'}"`);
-
-        // Stream the file
-        const fileStream = fs.createReadStream(certificate_file_path);
-        fileStream.pipe(res);
+        res.json({
+            message: 'Calibration statuses updated',
+            updated: result.rows.length
+        });
     } catch (err) {
-        console.error('Error downloading certificate:', err);
-        res.status(500).json({ error: 'Failed to download certificate' });
+        console.error('Error updating calibration statuses:', err);
+        res.status(500).json({ error: 'Failed to update calibration statuses' });
     }
 });
 
 // ============================================
-// DOWNLOAD CERTIFICATE (FORCE DOWNLOAD)
+// SERVE CERTIFICATE FILE
 // ============================================
 
-router.get('/certificate/:id/download', async (req, res) => {
+router.get('/:id/certificate', async (req, res) => {
     try {
         const { id } = req.params;
-
-        const result = await pool.query(`
-            SELECT 
-                certificate_file_path,
-                certificate_file_name,
-                certificate_mime_type
-            FROM calibration_records 
-            WHERE id = $1
-        `, [id]);
-
+        
+        const result = await pool.query(
+            'SELECT certificate_file_url FROM calibration_records WHERE id = $1',
+            [id]
+        );
+        
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Calibration record not found' });
         }
-
-        const { certificate_file_path, certificate_file_name } = result.rows[0];
-
-        if (!certificate_file_path) {
-            return res.status(404).json({ error: 'Certificate file not found' });
+        
+        const fileUrl = result.rows[0].certificate_file_url;
+        
+        if (!fileUrl) {
+            return res.status(404).json({ error: 'No certificate file linked' });
         }
-
-        // Check if it's a Supabase URL (cloud storage)
-        if (certificate_file_path.startsWith('http')) {
-            // Redirect to the Supabase public URL with download parameter
-            return res.redirect(certificate_file_path);
+        
+        // If it's a web URL (SharePoint, etc.), redirect to it
+        if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+            return res.redirect(fileUrl);
         }
-
-        // Local file handling
-        if (!fs.existsSync(certificate_file_path)) {
-            return res.status(404).json({ error: 'Certificate file not found' });
+        
+        // Convert file:// URL to local path
+        let filePath = fileUrl;
+        if (fileUrl.startsWith('file:///')) {
+            filePath = decodeURIComponent(fileUrl.replace('file:///', ''));
         }
-
-        res.download(certificate_file_path, certificate_file_name);
+        
+        // Check if file exists
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ error: 'Certificate file not found on disk' });
+        }
+        
+        // Serve the file
+        res.sendFile(filePath);
     } catch (err) {
-        console.error('Error downloading certificate:', err);
-        res.status(500).json({ error: 'Failed to download certificate' });
+        console.error('Error serving certificate:', err);
+        res.status(500).json({ error: 'Failed to serve certificate' });
     }
 });
 

@@ -181,20 +181,30 @@ router.get('/available', async (req, res, next) => {
                 e.equipment_name,
                 c.name AS category,
                 c.is_checkout_allowed,
-                c.requires_calibration,
                 s.name AS subcategory,
                 e.serial_number,
                 e.is_quantity_tracked,
                 e.available_quantity,
                 e.unit,
                 l.name AS current_location,
-                v.calibration_status,
-                v.calibration_expiry_date
+                cal.expiry_date AS calibration_expiry_date,
+                CASE 
+                    WHEN cal.expiry_date IS NULL THEN 'N/A'
+                    WHEN cal.expiry_date < CURRENT_DATE THEN 'Expired'
+                    WHEN cal.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                    ELSE 'Valid'
+                END AS calibration_status
             FROM equipment e
             JOIN categories c ON e.category_id = c.id
             JOIN subcategories s ON e.subcategory_id = s.id
             LEFT JOIN locations l ON e.current_location_id = l.id
-            LEFT JOIN v_equipment_calibration_status v ON e.id = v.equipment_id
+            LEFT JOIN LATERAL (
+                SELECT expiry_date 
+                FROM calibration_records 
+                WHERE equipment_id = e.id 
+                ORDER BY calibration_date DESC 
+                LIMIT 1
+            ) cal ON true
             WHERE e.status = 'Available'
                 AND c.is_consumable = FALSE
         `;
