@@ -163,7 +163,7 @@ router.get('/status', async (req, res) => {
     try {
         const { status, category, search } = req.query;
         
-        // Get equipment that has calibration records
+        // Get all calibration records with latest expiry per equipment
         let query = `
             SELECT 
                 e.id,
@@ -185,15 +185,15 @@ router.get('/status', async (req, res) => {
                     WHEN cr.expiry_date IS NULL THEN NULL
                     ELSE cr.expiry_date - CURRENT_DATE
                 END AS days_left
-            FROM equipment e
+            FROM calibration_records cr
+            JOIN equipment e ON cr.equipment_id = e.id
             LEFT JOIN categories c ON e.category_id = c.id
-            INNER JOIN (
-                SELECT DISTINCT ON (equipment_id) 
-                    equipment_id, calibration_date, expiry_date, certificate_number
-                FROM calibration_records
-                ORDER BY equipment_id, expiry_date DESC NULLS LAST
-            ) cr ON cr.equipment_id = e.id
-            WHERE 1=1
+            WHERE cr.id = (
+                SELECT cr2.id FROM calibration_records cr2 
+                WHERE cr2.equipment_id = cr.equipment_id 
+                ORDER BY cr2.expiry_date DESC NULLS LAST 
+                LIMIT 1
+            )
         `;
         
         const params = [];
