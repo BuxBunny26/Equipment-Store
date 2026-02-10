@@ -105,7 +105,7 @@ router.get('/', async (req, res) => {
             SELECT 
                 cr.id,
                 cr.equipment_id,
-                cr.serial_number,
+                e.serial_number,
                 cr.calibration_date,
                 cr.expiry_date,
                 cr.certificate_number,
@@ -149,7 +149,7 @@ router.get('/', async (req, res) => {
             paramCount++;
             conditions.push(`(
                 e.equipment_name ILIKE $${paramCount} 
-                OR cr.serial_number ILIKE $${paramCount}
+                OR e.serial_number ILIKE $${paramCount}
                 OR e.manufacturer ILIKE $${paramCount}
                 OR e.equipment_id ILIKE $${paramCount}
             )`);
@@ -216,7 +216,7 @@ router.get('/due', async (req, res) => {
         const result = await pool.query(`
             SELECT 
                 cr.id,
-                cr.serial_number,
+                e.serial_number,
                 cr.expiry_date,
                 CASE 
                     WHEN cr.expiry_date IS NULL THEN 'N/A'
@@ -267,7 +267,7 @@ router.get('/history/:equipmentId', async (req, res) => {
         const result = await pool.query(`
             SELECT 
                 cr.id,
-                cr.serial_number,
+                e.serial_number,
                 cr.calibration_date,
                 cr.expiry_date,
                 cr.certificate_number,
@@ -280,6 +280,7 @@ router.get('/history/:equipmentId', async (req, res) => {
                 cr.notes,
                 cr.created_at
             FROM calibration_records cr
+            LEFT JOIN equipment e ON cr.equipment_id = e.id
             WHERE cr.equipment_id = $1
             ORDER BY cr.calibration_date DESC
         `, [dbEquipmentId]);
@@ -302,7 +303,7 @@ router.get('/:id', async (req, res) => {
             SELECT 
                 cr.id,
                 cr.equipment_id,
-                cr.serial_number,
+                e.serial_number,
                 cr.calibration_date,
                 cr.expiry_date,
                 cr.certificate_number,
