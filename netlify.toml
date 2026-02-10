@@ -10,6 +10,13 @@
   # Publish directory (relative to base)
   publish = "build"
 
+# Proxy API requests to backend on Render
+[[redirects]]
+  from = "/api/*"
+  to = "https://equipment-store-5gc9.onrender.com/api/:splat"
+  status = 200
+  force = true
+
 # Handle React Router - redirect all paths to index.html
 [[redirects]]
   from = "/*"

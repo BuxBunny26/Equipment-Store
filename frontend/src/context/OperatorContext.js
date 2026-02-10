@@ -15,18 +15,8 @@ export function OperatorProvider({ children }) {
     loadPersonnel();
   }, []);
 
-  // Load saved operator from localStorage
-  useEffect(() => {
-    const savedOperator = localStorage.getItem(STORAGE_KEY);
-    if (savedOperator) {
-      try {
-        const parsed = JSON.parse(savedOperator);
-        setOperator(parsed);
-      } catch (e) {
-        localStorage.removeItem(STORAGE_KEY);
-      }
-    }
-  }, []);
+  // Note: Operator is NOT auto-loaded from localStorage on page load
+  // Users must manually select an operator each session for security
 
   const loadPersonnel = async () => {
     try {
