@@ -54,10 +54,12 @@ function Dashboard() {
         maintenanceApi.getDue(),
         maintenanceApi.getOverdue(),
       ]);
+      const dueData = Array.isArray(dueRes?.data) ? dueRes.data : [];
+      const overdueData = Array.isArray(overdueRes?.data) ? overdueRes.data : [];
       setMaintenanceStats({
-        due_count: dueRes.data.length,
-        overdue_count: overdueRes.data.length,
-        upcoming: dueRes.data.slice(0, 5),
+        due_count: dueData.length,
+        overdue_count: overdueData.length,
+        upcoming: dueData.slice(0, 5),
       });
     } catch (err) {
       console.error('Error fetching maintenance stats:', err);
@@ -71,14 +73,17 @@ function Dashboard() {
         reservationsApi.getAll({ status: 'approved' }),
       ]);
       
+      const pendingData = Array.isArray(pendingRes?.data) ? pendingRes.data : [];
+      const approvedData = Array.isArray(approvedRes?.data) ? approvedRes.data : [];
+      
       const today = new Date().toISOString().split('T')[0];
-      const todayReservations = approvedRes.data.filter(r => 
+      const todayReservations = approvedData.filter(r => 
         r.start_date <= today && r.end_date >= today
       );
       
       setReservationStats({
-        pending: pendingRes.data.length,
-        approved: approvedRes.data.length,
+        pending: pendingData.length,
+        approved: approvedData.length,
         today: todayReservations.slice(0, 5),
       });
     } catch (err) {
@@ -89,7 +94,8 @@ function Dashboard() {
   const fetchNotifications = async () => {
     try {
       const response = await notificationsApi.getAlerts();
-      setNotifications(response.data.slice(0, 5));
+      const notifData = Array.isArray(response?.data) ? response.data : [];
+      setNotifications(notifData.slice(0, 5));
     } catch (err) {
       console.error('Error fetching notifications:', err);
     }
@@ -98,7 +104,8 @@ function Dashboard() {
   const fetchCalibrationSummary = async () => {
     try {
       const response = await calibrationApi.getSummary();
-      const { summary, total } = response.data;
+      const summaryData = response?.data?.summary;
+      const total = response?.data?.total || 0;
       
       // Convert array to object for easier access
       const counts = {
@@ -106,15 +113,17 @@ function Dashboard() {
         due_soon: 0,
         expired: 0,
         not_calibrated: 0,
-        total: total || 0,
+        total: total,
       };
       
-      summary.forEach(item => {
-        if (item.calibration_status === 'Valid') counts.valid = parseInt(item.count);
-        else if (item.calibration_status === 'Due Soon') counts.due_soon = parseInt(item.count);
-        else if (item.calibration_status === 'Expired') counts.expired = parseInt(item.count);
-        else if (item.calibration_status === 'Not Calibrated') counts.not_calibrated = parseInt(item.count);
-      });
+      if (Array.isArray(summaryData)) {
+        summaryData.forEach(item => {
+          if (item.calibration_status === 'Valid') counts.valid = parseInt(item.count);
+          else if (item.calibration_status === 'Due Soon') counts.due_soon = parseInt(item.count);
+          else if (item.calibration_status === 'Expired') counts.expired = parseInt(item.count);
+          else if (item.calibration_status === 'Not Calibrated') counts.not_calibrated = parseInt(item.count);
+        });
+      }
       
       setCalibrationSummary(counts);
     } catch (err) {
@@ -126,7 +135,19 @@ function Dashboard() {
     try {
       setLoading(true);
       const response = await reportsApi.getDashboard();
-      setData(response.data);
+      const responseData = response?.data || {};
+      setData({
+        summary: responseData.summary || {
+          total_equipment: 0,
+          available_equipment: 0,
+          checked_out_equipment: 0,
+          overdue_equipment: 0,
+          total_consumables: 0,
+          low_stock_consumables: 0,
+          overdue_threshold_days: 14,
+        },
+        recent_movements: Array.isArray(responseData.recent_movements) ? responseData.recent_movements : [],
+      });
       setError(null);
     } catch (err) {
       setError(err.message);
