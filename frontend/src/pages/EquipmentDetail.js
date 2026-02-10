@@ -83,9 +83,11 @@ function EquipmentDetail() {
     return <span className="badge badge-valid" style={{ background: '#10b981' }}>Valid</span>;
   };
 
-  const openCertificate = (recordId) => {
-    // Open certificate via backend endpoint (direct to backend port)
-    window.open(`http://localhost:3001/api/calibration/${recordId}/certificate`, '_blank');
+  const openCertificate = (record) => {
+    // Open certificate via SharePoint URL
+    if (record.certificate_file_url) {
+      window.open(record.certificate_file_url, '_blank');
+    }
   };
 
   const getStatusBadge = (item) => {
@@ -346,7 +348,7 @@ function EquipmentDetail() {
                         {record.certificate_file_url ? (
                           <button
                             className="btn btn-sm btn-primary"
-                            onClick={() => openCertificate(record.id)}
+                            onClick={() => openCertificate(record)}
                             title="View Certificate"
                           >
                             📄 View

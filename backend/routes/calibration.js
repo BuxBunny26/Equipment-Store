@@ -267,7 +267,13 @@ router.get('/history/:equipmentId', async (req, res) => {
             ORDER BY cr.calibration_date DESC
         `, [dbEquipmentId]);
 
-        res.json(result.rows);
+        // Add certificate URLs to each record
+        const recordsWithUrls = result.rows.map(record => ({
+            ...record,
+            certificate_file_url: generateCertificateUrl(record.serial_number, record.expiry_date)
+        }));
+
+        res.json(recordsWithUrls);
     } catch (err) {
         console.error('Error fetching calibration history:', err);
         res.status(500).json({ error: 'Failed to fetch calibration history' });
