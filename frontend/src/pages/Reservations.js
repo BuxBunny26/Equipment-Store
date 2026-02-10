@@ -55,7 +55,7 @@ function Reservations() {
   const fetchData = async () => {
     try {
       const [equipmentRes, personnelRes, customersRes, summaryRes] = await Promise.all([
-        equipmentApi.getAll({ status: 'Available' }),
+        equipmentApi.getAll(), // Get ALL equipment to show status
         personnelApi.getAll(true),
         customersApi.getAll(),
         reservationsApi.getSummary(),
@@ -409,7 +409,7 @@ function Reservations() {
                     <option value="">Select equipment...</option>
                     {equipment.map(eq => (
                       <option key={eq.id} value={eq.id}>
-                        {eq.equipment_id} - {eq.equipment_name}
+                        {eq.equipment_id} - {eq.equipment_name} {eq.serial_number ? `(S/N: ${eq.serial_number})` : ''} [{eq.status}] {eq.calibration_status ? `[${eq.calibration_status}]` : ''}
                       </option>
                     ))}
                   </select>
