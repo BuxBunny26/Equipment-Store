@@ -316,10 +316,10 @@ async function importCalibration() {
             await pool.query(`
                 INSERT INTO calibration_records (
                     equipment_id, serial_number, calibration_date, expiry_date,
-                    certificate_number, calibration_status, notes
+                    certificate_number, notes
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
-            `, [equipmentDbId, serialNumber, calibrationDate, expiryDate, certificate, calibrationStatus, notes]);
+                VALUES ($1, $2, $3, $4, $5, $6)
+            `, [equipmentDbId, serialNumber, calibrationDate, expiryDate, certificate, notes]);
             
             calibrationImported++;
         } catch (err) {

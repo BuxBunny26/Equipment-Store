@@ -91,7 +91,11 @@ router.get('/', async (req, res) => {
                 cr.calibration_date,
                 cr.expiry_date,
                 cr.certificate_number,
-                cr.calibration_status,
+                CASE 
+                    WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
+                    WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                    ELSE 'Valid'
+                END AS calibration_status,
                 cr.calibration_provider,
                 cr.certificate_file_url,
                 cr.notes,
@@ -109,8 +113,12 @@ router.get('/', async (req, res) => {
         let paramCount = 0;
 
         if (status) {
-            paramCount++;
-            query += ` AND cr.calibration_status = $${paramCount}`;
+            // Filter by computed status using CASE expression
+            query += ` AND CASE 
+                WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
+                WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                ELSE 'Valid'
+            END = $${++paramCount}`;
             params.push(status);
         }
 
@@ -132,11 +140,10 @@ router.get('/', async (req, res) => {
         }
 
         query += ` ORDER BY 
-            CASE cr.calibration_status 
-                WHEN 'Expired' THEN 1 
-                WHEN 'Due Soon' THEN 2 
-                WHEN 'Valid' THEN 3
-                ELSE 4
+            CASE 
+                WHEN cr.expiry_date < CURRENT_DATE THEN 1
+                WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 2
+                ELSE 3
             END,
             cr.expiry_date ASC NULLS LAST`;
 
@@ -159,16 +166,27 @@ router.get('/summary', async (req, res) => {
     try {
         const result = await pool.query(`
             SELECT 
-                calibration_status,
+                CASE 
+                    WHEN expiry_date IS NULL THEN 'N/A'
+                    WHEN expiry_date < CURRENT_DATE THEN 'Expired'
+                    WHEN expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                    ELSE 'Valid'
+                END as calibration_status,
                 COUNT(*) as count
             FROM calibration_records
-            GROUP BY calibration_status
+            GROUP BY 
+                CASE 
+                    WHEN expiry_date IS NULL THEN 'N/A'
+                    WHEN expiry_date < CURRENT_DATE THEN 'Expired'
+                    WHEN expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                    ELSE 'Valid'
+                END
             ORDER BY 
-                CASE calibration_status 
-                    WHEN 'Expired' THEN 1 
-                    WHEN 'Due Soon' THEN 2 
-                    WHEN 'Valid' THEN 3
-                    ELSE 4
+                CASE 
+                    WHEN expiry_date IS NULL THEN 4
+                    WHEN expiry_date < CURRENT_DATE THEN 1
+                    WHEN expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 2
+                    ELSE 3
                 END
         `);
         
@@ -195,7 +213,12 @@ router.get('/due', async (req, res) => {
                 cr.id,
                 cr.serial_number,
                 cr.expiry_date,
-                cr.calibration_status,
+                CASE 
+                    WHEN cr.expiry_date IS NULL THEN 'N/A'
+                    WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
+                    WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                    ELSE 'Valid'
+                END as calibration_status,
                 cr.certificate_number,
                 e.equipment_id AS equipment_code,
                 e.equipment_name,
@@ -205,8 +228,8 @@ router.get('/due', async (req, res) => {
             FROM calibration_records cr
             JOIN equipment e ON cr.equipment_id = e.id
             LEFT JOIN categories c ON e.category_id = c.id
-            WHERE cr.calibration_status IN ('Expired', 'Due Soon')
-               OR cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days'
+            WHERE cr.expiry_date IS NOT NULL 
+              AND cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days'
             ORDER BY cr.expiry_date ASC
         `);
         res.json(result.rows);
@@ -244,7 +267,11 @@ router.get('/history/:equipmentId', async (req, res) => {
                 cr.expiry_date,
                 cr.certificate_number,
                 cr.calibration_provider,
-                cr.calibration_status,
+                CASE 
+                    WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
+                    WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                    ELSE 'Valid'
+                END AS calibration_status,
                 cr.certificate_file_url,
                 cr.notes,
                 cr.created_at
@@ -271,7 +298,21 @@ router.get('/:id', async (req, res) => {
         const { id } = req.params;
         const result = await pool.query(`
             SELECT 
-                cr.*,
+                cr.id,
+                cr.equipment_id,
+                cr.serial_number,
+                cr.calibration_date,
+                cr.expiry_date,
+                cr.certificate_number,
+                cr.calibration_provider,
+                CASE 
+                    WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
+                    WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                    ELSE 'Valid'
+                END AS calibration_status,
+                cr.certificate_file_url,
+                cr.notes,
+                cr.created_at,
                 e.equipment_id AS equipment_code,
                 e.equipment_name,
                 e.manufacturer,
@@ -306,7 +347,6 @@ router.post('/', upload.single('certificate'), async (req, res) => {
             expiry_date,
             certificate_number,
             calibration_provider,
-            calibration_status,
             notes
         } = req.body;
 
@@ -329,28 +369,30 @@ router.post('/', upload.single('certificate'), async (req, res) => {
             }
         }
 
-        // Calculate status if not provided
-        const today = new Date();
-        const expiry = new Date(expiry_date);
-        const daysUntilExpiry = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
-        
-        let status = calibration_status;
-        if (!status) {
-            if (daysUntilExpiry < 0) status = 'Expired';
-            else if (daysUntilExpiry <= 30) status = 'Due Soon';
-            else status = 'Valid';
-        }
-
         const result = await pool.query(`
             INSERT INTO calibration_records (
                 equipment_id, serial_number, calibration_date, expiry_date,
-                certificate_number, calibration_provider, calibration_status, notes
+                certificate_number, calibration_provider, notes
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            RETURNING *
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING 
+                id,
+                equipment_id,
+                serial_number,
+                calibration_date,
+                expiry_date,
+                certificate_number,
+                calibration_provider,
+                notes,
+                created_at,
+                CASE 
+                    WHEN expiry_date < CURRENT_DATE THEN 'Expired'
+                    WHEN expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                    ELSE 'Valid'
+                END AS calibration_status
         `, [
             equipmentInternalId, serial_number, calibration_date, expiry_date,
-            certificate_number, calibration_provider, status, notes
+            certificate_number, calibration_provider, notes
         ]);
 
         res.status(201).json(result.rows[0]);
@@ -372,7 +414,6 @@ router.put('/:id', async (req, res) => {
             expiry_date,
             certificate_number,
             calibration_provider,
-            calibration_status,
             notes
         } = req.body;
 
@@ -382,12 +423,26 @@ router.put('/:id', async (req, res) => {
                 expiry_date = COALESCE($2, expiry_date),
                 certificate_number = COALESCE($3, certificate_number),
                 calibration_provider = COALESCE($4, calibration_provider),
-                calibration_status = COALESCE($5, calibration_status),
-                notes = COALESCE($6, notes),
+                notes = COALESCE($5, notes),
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = $7
-            RETURNING *
-        `, [calibration_date, expiry_date, certificate_number, calibration_provider, calibration_status, notes, id]);
+            WHERE id = $6
+            RETURNING 
+                id,
+                equipment_id,
+                serial_number,
+                calibration_date,
+                expiry_date,
+                certificate_number,
+                calibration_provider,
+                notes,
+                created_at,
+                updated_at,
+                CASE 
+                    WHEN expiry_date < CURRENT_DATE THEN 'Expired'
+                    WHEN expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                    ELSE 'Valid'
+                END AS calibration_status
+        `, [calibration_date, expiry_date, certificate_number, calibration_provider, notes, id]);
 
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Calibration record not found' });
@@ -429,26 +484,19 @@ router.delete('/:id', async (req, res) => {
 
 router.post('/update-statuses', async (req, res) => {
     try {
-        // Update all calibration statuses based on expiry dates
+        // Status is now computed dynamically from expiry_date in all queries
+        // This endpoint is kept for backwards compatibility but doesn't need to update anything
         const result = await pool.query(`
-            UPDATE calibration_records SET
-                calibration_status = CASE
-                    WHEN expiry_date < CURRENT_DATE THEN 'Expired'
-                    WHEN expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
-                    ELSE 'Valid'
-                END,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE expiry_date IS NOT NULL
-            RETURNING id, calibration_status
+            SELECT COUNT(*) as count FROM calibration_records WHERE expiry_date IS NOT NULL
         `);
 
         res.json({
-            message: 'Calibration statuses updated',
-            updated: result.rows.length
+            message: 'Calibration statuses are computed dynamically',
+            count: parseInt(result.rows[0].count)
         });
     } catch (err) {
-        console.error('Error updating calibration statuses:', err);
-        res.status(500).json({ error: 'Failed to update calibration statuses' });
+        console.error('Error fetching calibration count:', err);
+        res.status(500).json({ error: 'Failed to process request' });
     }
 });
 
