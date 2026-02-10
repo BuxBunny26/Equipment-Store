@@ -76,24 +76,6 @@ const upload = multer({
 });
 
 // ============================================
-// GET CALIBRATION TABLE SCHEMA (for debugging)
-// ============================================
-
-router.get('/debug-schema', async (req, res) => {
-    try {
-        const result = await pool.query(`
-            SELECT column_name, data_type 
-            FROM information_schema.columns 
-            WHERE table_name = 'calibration_records' 
-            ORDER BY ordinal_position
-        `);
-        res.json({ columns: result.rows });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// ============================================
 // GET ALL CALIBRATION RECORDS
 // ============================================
 
