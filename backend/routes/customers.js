@@ -9,9 +9,9 @@ router.get('/', async (req, res) => {
         
         let query = `
             SELECT id, customer_number, display_name, currency_code,
-                   billing_city, billing_state, billing_country,
-                   shipping_city, shipping_state, shipping_country,
-                   tax_registration_number, vat_treatment, email, 
+                   billing_city, shipping_city, country,
+                   city, province_state, region,
+                   vat_number, vat_treatment, email, 
                    is_active, created_at
             FROM customers
             WHERE 1=1
@@ -26,7 +26,7 @@ router.get('/', async (req, res) => {
         // Filter by country
         if (country) {
             params.push(country);
-            query += ` AND billing_country = $${params.length}`;
+            query += ` AND country = $${params.length}`;
         }
         
         // Search by name or customer number
