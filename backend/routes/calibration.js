@@ -97,7 +97,6 @@ router.get('/', async (req, res) => {
                     ELSE 'Valid'
                 END AS calibration_status,
                 cr.calibration_provider,
-                cr.certificate_file_url,
                 cr.notes,
                 cr.created_at,
                 e.equipment_id AS equipment_code,
@@ -266,7 +265,6 @@ router.get('/history/:equipmentId', async (req, res) => {
                     WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
                     ELSE 'Valid'
                 END AS calibration_status,
-                cr.certificate_file_url,
                 cr.notes,
                 cr.created_at
             FROM calibration_records cr
@@ -274,9 +272,7 @@ router.get('/history/:equipmentId', async (req, res) => {
             ORDER BY cr.calibration_date DESC
         `, [dbEquipmentId]);
 
-        // Add certificate URLs to each record
-        const recordsWithUrls = result.rows.map(addCertificateUrl);
-        res.json(recordsWithUrls);
+        res.json(result.rows);
     } catch (err) {
         console.error('Error fetching calibration history:', err);
         res.status(500).json({ error: 'Failed to fetch calibration history' });
@@ -304,7 +300,6 @@ router.get('/:id', async (req, res) => {
                     WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
                     ELSE 'Valid'
                 END AS calibration_status,
-                cr.certificate_file_url,
                 cr.notes,
                 cr.created_at,
                 e.equipment_id AS equipment_code,
@@ -321,7 +316,7 @@ router.get('/:id', async (req, res) => {
             return res.status(404).json({ error: 'Calibration record not found' });
         }
 
-        res.json(addCertificateUrl(result.rows[0]));
+        res.json(result.rows[0]);
     } catch (err) {
         console.error('Error fetching calibration record:', err);
         res.status(500).json({ error: 'Failed to fetch calibration record' });
@@ -502,39 +497,9 @@ router.get('/:id/certificate', async (req, res) => {
     try {
         const { id } = req.params;
         
-        const result = await pool.query(
-            'SELECT certificate_file_url FROM calibration_records WHERE id = $1',
-            [id]
-        );
-        
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Calibration record not found' });
-        }
-        
-        const fileUrl = result.rows[0].certificate_file_url;
-        
-        if (!fileUrl) {
-            return res.status(404).json({ error: 'No certificate file linked' });
-        }
-        
-        // If it's a web URL (SharePoint, etc.), redirect to it
-        if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
-            return res.redirect(fileUrl);
-        }
-        
-        // Convert file:// URL to local path
-        let filePath = fileUrl;
-        if (fileUrl.startsWith('file:///')) {
-            filePath = decodeURIComponent(fileUrl.replace('file:///', ''));
-        }
-        
-        // Check if file exists
-        if (!fs.existsSync(filePath)) {
-            return res.status(404).json({ error: 'Certificate file not found on disk' });
-        }
-        
-        // Serve the file
-        res.sendFile(filePath);
+        // Certificate file URLs are no longer stored in the database
+        // This endpoint is kept for future use
+        return res.status(404).json({ error: 'Certificate feature not available in this version' });
     } catch (err) {
         console.error('Error serving certificate:', err);
         res.status(500).json({ error: 'Failed to serve certificate' });
