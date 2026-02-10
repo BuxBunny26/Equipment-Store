@@ -307,11 +307,13 @@ function CheckIn() {
                 required
               >
                 <option value="">Select return location...</option>
-                {locations.map((loc) => (
-                  <option key={loc.id} value={loc.id}>
-                    {loc.name}
-                  </option>
-                ))}
+                {locations
+                  .filter(loc => loc.name.startsWith('WearCheck'))
+                  .map((loc) => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.name}
+                    </option>
+                  ))}
               </select>
             </div>
 

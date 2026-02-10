@@ -1,9 +1,9 @@
 /* eslint-disable no-restricted-globals */
 
-const CACHE_NAME = 'equipment-store-v6';
-const STATIC_CACHE = 'static-v6';
-const DYNAMIC_CACHE = 'dynamic-v6';
-const API_CACHE = 'api-v6';
+const CACHE_NAME = 'equipment-store-v7';
+const STATIC_CACHE = 'static-v7';
+const DYNAMIC_CACHE = 'dynamic-v7';
+const API_CACHE = 'api-v7';
 
 // Only cache the shell - JS/CSS files are hashed and fetched fresh
 const STATIC_ASSETS = [
