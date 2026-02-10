@@ -4,6 +4,7 @@ const pool = require('../database/db');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const XLSX = require('xlsx');
 
 // ============================================
 // SHAREPOINT CERTIFICATE URL CONFIGURATION
@@ -242,6 +243,94 @@ router.get('/status', async (req, res) => {
     } catch (err) {
         console.error('Error fetching calibration status:', err.message);
         res.status(500).json({ error: 'Failed to fetch calibration status', details: err.message });
+    }
+});
+
+// ============================================
+// EXPORT CALIBRATION DATA TO EXCEL
+// ============================================
+
+router.get('/export', async (req, res) => {
+    try {
+        // Get all calibration data
+        const result = await pool.query(`
+            SELECT 
+                e.equipment_id AS "Equipment ID",
+                e.equipment_name AS "Equipment Name",
+                c.name AS "Category",
+                e.serial_number AS "Serial Number",
+                e.manufacturer AS "Manufacturer",
+                cr.calibration_date AS "Last Calibration",
+                cr.expiry_date AS "Expiry Date",
+                cr.expiry_date - CURRENT_DATE AS "Days Until Expiry",
+                CASE 
+                    WHEN cr.expiry_date IS NULL THEN 'Not Calibrated'
+                    WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
+                    WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                    ELSE 'Valid'
+                END AS "Status",
+                cr.certificate_number AS "Certificate Number",
+                cr.calibration_provider AS "Calibration Provider"
+            FROM calibration_records cr
+            JOIN equipment e ON cr.equipment_id = e.id
+            LEFT JOIN categories c ON e.category_id = c.id
+            WHERE cr.id = (
+                SELECT cr2.id FROM calibration_records cr2 
+                WHERE cr2.equipment_id = cr.equipment_id 
+                ORDER BY cr2.expiry_date DESC NULLS LAST 
+                LIMIT 1
+            )
+            ORDER BY 
+                CASE 
+                    WHEN cr.expiry_date IS NULL THEN 4
+                    WHEN cr.expiry_date < CURRENT_DATE THEN 1
+                    WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 2
+                    ELSE 3
+                END,
+                cr.expiry_date ASC NULLS LAST
+        `);
+        
+        // Format dates for Excel
+        const data = result.rows.map(row => ({
+            ...row,
+            'Last Calibration': row['Last Calibration'] ? new Date(row['Last Calibration']).toLocaleDateString('en-ZA') : '-',
+            'Expiry Date': row['Expiry Date'] ? new Date(row['Expiry Date']).toLocaleDateString('en-ZA') : '-',
+            'Days Until Expiry': row['Days Until Expiry'] !== null ? parseInt(row['Days Until Expiry']) : '-'
+        }));
+        
+        // Create workbook
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet(data);
+        
+        // Set column widths
+        ws['!cols'] = [
+            { wch: 12 },  // Equipment ID
+            { wch: 25 },  // Equipment Name
+            { wch: 20 },  // Category
+            { wch: 15 },  // Serial Number
+            { wch: 25 },  // Manufacturer
+            { wch: 15 },  // Last Calibration
+            { wch: 15 },  // Expiry Date
+            { wch: 15 },  // Days Until Expiry
+            { wch: 12 },  // Status
+            { wch: 20 },  // Certificate Number
+            { wch: 30 },  // Calibration Provider
+        ];
+        
+        XLSX.utils.book_append_sheet(wb, ws, 'Calibration Status');
+        
+        // Generate buffer
+        const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+        
+        // Set headers for download
+        const filename = `Calibration_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        
+        res.send(buffer);
+    } catch (err) {
+        console.error('Error exporting calibration data:', err);
+        res.status(500).json({ error: 'Failed to export calibration data', details: err.message });
     }
 });
 
