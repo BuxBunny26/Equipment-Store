@@ -9,11 +9,27 @@ const fs = require('fs');
 // SHAREPOINT CERTIFICATE URL CONFIGURATION
 // ============================================
 
-// Shared folder link for all certificates
+// Shared folder link for all certificates (fallback)
 const SHAREPOINT_FOLDER_URL = 'https://wearcheckrs-my.sharepoint.com/:f:/p/nadhira/IgB6x1TbBtpITZdiTDhf6_JfAWh3dPLS_2N4rxvWB8b4wWk?e=8YWAWg';
 
-// Generate certificate URL - returns folder link for all records
+// Base path for direct file download
+const SHAREPOINT_FILE_BASE = 'https://wearcheckrs-my.sharepoint.com/personal/nadhira_wearcheckrs_com/_layouts/15/download.aspx?share=';
+
+// Generate certificate filename: {serial} Exp. {MM}.{YYYY}.pdf
+function generateCertificateFileName(serialNumber, expiryDate) {
+    if (!serialNumber || !expiryDate) return null;
+    
+    const expiry = new Date(expiryDate);
+    const month = String(expiry.getMonth() + 1).padStart(2, '0');
+    const year = expiry.getFullYear();
+    
+    return `${serialNumber} Exp. ${month}.${year}.pdf`;
+}
+
+// Generate certificate URL - links to shared folder (user finds file by serial number)
 function generateCertificateUrl(serialNumber, expiryDate) {
+    // Return folder URL - user can search for their file by serial number
+    // Direct file linking requires individual share links per file
     return SHAREPOINT_FOLDER_URL;
 }
 
@@ -248,10 +264,11 @@ router.get('/history/:equipmentId', async (req, res) => {
             ORDER BY cr.calibration_date DESC
         `, [dbEquipmentId]);
 
-        // Add certificate URLs to each record
+        // Add certificate URLs and filenames to each record
         const recordsWithUrls = result.rows.map(record => ({
             ...record,
-            certificate_file_url: generateCertificateUrl(record.serial_number, record.expiry_date)
+            certificate_file_url: generateCertificateUrl(record.serial_number, record.expiry_date),
+            certificate_filename: generateCertificateFileName(record.serial_number, record.expiry_date)
         }));
 
         res.json(recordsWithUrls);

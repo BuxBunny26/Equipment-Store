@@ -346,13 +346,20 @@ function EquipmentDetail() {
                       <td style={{ fontWeight: 500 }}>{record.certificate_number || '-'}</td>
                       <td>
                         {record.certificate_file_url ? (
-                          <button
-                            className="btn btn-sm btn-primary"
-                            onClick={() => openCertificate(record)}
-                            title="View Certificate"
-                          >
-                            📄 View
-                          </button>
+                          <div>
+                            <button
+                              className="btn btn-sm btn-primary"
+                              onClick={() => openCertificate(record)}
+                              title={record.certificate_filename ? `Look for: ${record.certificate_filename}` : 'Open Certificate Folder'}
+                            >
+                              📂 Open Folder
+                            </button>
+                            {record.certificate_filename && (
+                              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                                File: {record.certificate_filename}
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>No file</span>
                         )}
