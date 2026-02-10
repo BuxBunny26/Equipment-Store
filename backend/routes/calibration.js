@@ -12,10 +12,11 @@ const fs = require('fs');
 // Shared folder link for all certificates
 const SHAREPOINT_FOLDER_URL = 'https://wearcheckrs-my.sharepoint.com/:f:/p/nadhira/IgB6x1TbBtpITZdiTDhf6_JfAWh3dPLS_2N4rxvWB8b4wWk?e=8YWAWg';
 
-// Generate certificate URL - returns folder link for all records
+// Generate certificate URL - disabled until SharePoint sharing is configured
 function generateCertificateUrl(serialNumber, expiryDate) {
-    // Return the shared folder URL so users can find the certificate manually
-    return SHAREPOINT_FOLDER_URL;
+    // Certificate viewing disabled - SharePoint link requires authentication
+    // To enable: ensure the folder is shared with "Anyone with the link"
+    return null;
 }
 
 // Add certificate URL to calibration record (uses stored URL only)
