@@ -174,13 +174,7 @@ router.get('/summary', async (req, res) => {
                 END as calibration_status,
                 COUNT(*) as count
             FROM calibration_records
-            GROUP BY 
-                CASE 
-                    WHEN expiry_date IS NULL THEN 'N/A'
-                    WHEN expiry_date < CURRENT_DATE THEN 'Expired'
-                    WHEN expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
-                    ELSE 'Valid'
-                END
+            GROUP BY 1
             ORDER BY 
                 CASE 
                     WHEN expiry_date IS NULL THEN 4
