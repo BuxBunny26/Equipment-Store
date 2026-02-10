@@ -163,6 +163,7 @@ router.get('/status', async (req, res) => {
     try {
         const { status, category, search } = req.query;
         
+        // Get equipment that has calibration records
         let query = `
             SELECT 
                 e.id,
@@ -187,14 +188,13 @@ router.get('/status', async (req, res) => {
                 END AS days_left
             FROM equipment e
             LEFT JOIN categories c ON e.category_id = c.id
-            LEFT JOIN LATERAL (
-                SELECT calibration_date, expiry_date, certificate_number, certificate_file_url
+            INNER JOIN (
+                SELECT DISTINCT ON (equipment_id) 
+                    equipment_id, calibration_date, expiry_date, certificate_number, certificate_file_url
                 FROM calibration_records
-                WHERE equipment_id = e.id
-                ORDER BY expiry_date DESC NULLS LAST
-                LIMIT 1
-            ) cr ON true
-            WHERE e.requires_calibration = TRUE
+                ORDER BY equipment_id, expiry_date DESC NULLS LAST
+            ) cr ON cr.equipment_id = e.id
+            WHERE 1=1
         `;
         
         const params = [];
@@ -260,19 +260,15 @@ router.get('/summary', async (req, res) => {
                     ELSE 'Valid'
                 END as calibration_status,
                 COUNT(*) as count
-            FROM equipment e
-            LEFT JOIN LATERAL (
-                SELECT expiry_date
+            FROM (
+                SELECT DISTINCT ON (equipment_id) equipment_id, expiry_date
                 FROM calibration_records
-                WHERE equipment_id = e.id
-                ORDER BY expiry_date DESC NULLS LAST
-                LIMIT 1
-            ) cr ON true
-            WHERE e.requires_calibration = TRUE
+                ORDER BY equipment_id, expiry_date DESC NULLS LAST
+            ) cr
             GROUP BY 1
         `);
         
-        const totalResult = await pool.query(`SELECT COUNT(*) as total FROM equipment WHERE requires_calibration = TRUE`);
+        const totalResult = await pool.query(`SELECT COUNT(DISTINCT equipment_id) as total FROM calibration_records`);
 
         res.json({
             summary: Array.isArray(result.rows) ? result.rows : [],
