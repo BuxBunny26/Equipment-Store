@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { calibrationApi, categoriesApi } from '../services/api';
+import { calibrationApi, categoriesApi, exportsApi } from '../services/api';
 import { Icons } from '../components/Icons';
 
 function Calibration() {
@@ -41,11 +41,10 @@ function Calibration() {
       if (filters.search) params.search = filters.search;
 
       const response = await calibrationApi.getStatus(params);
-      setEquipment(Array.isArray(response?.data) ? response.data : []);
+      setEquipment(response.data);
       setError(null);
     } catch (err) {
       setError(err.message);
-      setEquipment([]);
     } finally {
       setLoading(false);
     }
@@ -54,7 +53,7 @@ function Calibration() {
   const fetchSummary = async () => {
     try {
       const response = await calibrationApi.getSummary();
-      setSummary(response?.data || { summary: [], total: 0 });
+      setSummary(response.data);
     } catch (err) {
       console.error('Error fetching summary:', err);
     }
@@ -63,10 +62,9 @@ function Calibration() {
   const fetchCategories = async () => {
     try {
       const response = await categoriesApi.getAll();
-      setCategories(Array.isArray(response?.data) ? response.data : []);
+      setCategories(response.data);
     } catch (err) {
       console.error('Error fetching categories:', err);
-      setCategories([]);
     }
   };
 
@@ -154,8 +152,7 @@ function Calibration() {
   };
 
   const getSummaryCount = (status) => {
-    const summaryArray = Array.isArray(summary?.summary) ? summary.summary : [];
-    const item = summaryArray.find(s => s.calibration_status === status);
+    const item = summary.summary.find(s => s.calibration_status === status);
     return item ? parseInt(item.count) : 0;
   };
 
@@ -212,7 +209,7 @@ function Calibration() {
             </button>
           </div>
 
-          <div className="filter-row" style={{ marginTop: '1rem' }}>
+          <div className="filter-row" style={{ marginTop: '1rem', alignItems: 'flex-end' }}>
             <div className="filter-group">
               <label className="form-label">Status</label>
               <select
@@ -236,25 +233,25 @@ function Calibration() {
                 onChange={(e) => setFilters({ ...filters, category: e.target.value })}
               >
                 <option value="">All Categories</option>
-                {Array.isArray(categories) && categories.filter(c => c.requires_calibration).map((category) => (
+                {categories.filter(c => c.requires_calibration).map((category) => (
                   <option key={category.id} value={category.name}>
                     {category.name}
                   </option>
                 ))}
               </select>
             </div>
-            
-            <div className="filter-group">
-              <label className="form-label">&nbsp;</label>
-              <a 
-                href={`${process.env.REACT_APP_API_URL || 'https://equipment-store-5gc9.onrender.com/api'}/calibration/export`}
-                className="btn btn-secondary"
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '38px' }}
-                download
-              >
-                <Icons.Download size={16} /> Export to Excel
-              </a>
-            </div>
+
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => window.open(exportsApi.getCalibrationUrl({
+                status: filters.status,
+                category: filters.category
+              }), '_blank')}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', height: 'fit-content' }}
+            >
+              <Icons.Download size={16} /> Export to Excel
+            </button>
           </div>
         </form>
       </div>
