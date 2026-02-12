@@ -470,7 +470,7 @@ router.get('/customer-equipment', async (req, res) => {
     let query = `
       SELECT 
         c.display_name AS "Customer",
-        c.city AS "City",
+        c.shipping_city AS "City",
         e.equipment_id AS "Equipment ID",
         e.equipment_name AS "Equipment Name",
         e.serial_number AS "Serial Number",
