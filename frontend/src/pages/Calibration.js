@@ -248,7 +248,7 @@ function Calibration() {
                 status: filters.status,
                 category: filters.category
               }), '_blank')}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', height: 'fit-content' }}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px' }}
             >
               <Icons.Download size={16} /> Export to Excel
             </button>
