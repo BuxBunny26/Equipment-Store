@@ -1,5 +1,5 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, NavLink, useLocation } from 'react-router-dom';
 
 // Context
 import { OperatorProvider } from './context/OperatorContext';
@@ -120,110 +120,189 @@ const Icons = {
       <path d="M12 7v5l4 2" />
     </svg>
   ),
+  Menu: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+    </svg>
+  ),
+  Close: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  ),
 };
+
+// Wrapper component to handle mobile menu with location
+function AppContent() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const location = useLocation();
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  // Close mobile menu on window resize to desktop
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth > 768) {
+        setMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Prevent body scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileMenuOpen]);
+
+  return (
+    <div className="app-container">
+      {/* Mobile Header */}
+      <header className="mobile-header">
+        <button 
+          className="hamburger-btn" 
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+        >
+          {mobileMenuOpen ? <Icons.Close /> : <Icons.Menu />}
+        </button>
+        <h1 className="mobile-title">Equipment Store</h1>
+        <div className="mobile-header-spacer"></div>
+      </header>
+
+      {/* Mobile Overlay */}
+      {mobileMenuOpen && (
+        <div 
+          className="mobile-overlay" 
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar Navigation */}
+      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
+        <div className="sidebar-header">
+          <h1>Equipment Store</h1>
+          <p>Inventory Management</p>
+          <button 
+            className="sidebar-close-btn"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close menu"
+          >
+            <Icons.Close />
+          </button>
+        </div>
+
+        {/* Operator Selector */}
+        <div className="sidebar-operator">
+          <OperatorSelector />
+        </div>
+        
+        <nav className="sidebar-nav">
+          <div className="nav-section">
+            <div className="nav-section-title">Overview</div>
+            <NavLink to="/" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+              <Icons.Dashboard /> Dashboard
+            </NavLink>
+          </div>
+        
+        <div className="nav-section">
+          <div className="nav-section-title">Equipment</div>
+          <NavLink to="/equipment" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.Equipment /> Equipment List
+          </NavLink>
+          <NavLink to="/check-out" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.CheckOut /> Check Out
+          </NavLink>
+          <NavLink to="/check-in" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.CheckIn /> Check In
+          </NavLink>
+          <NavLink to="/reservations" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.Calendar /> Reservations
+          </NavLink>
+        </div>
+        
+        <div className="nav-section">
+          <div className="nav-section-title">Stock</div>
+          <NavLink to="/consumables" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.Consumables /> Consumables
+          </NavLink>
+          <NavLink to="/calibration" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.Calibration /> Calibration
+          </NavLink>
+          <NavLink to="/maintenance" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.Wrench /> Maintenance
+          </NavLink>
+        </div>
+        
+        <div className="nav-section">
+          <div className="nav-section-title">Analysis</div>
+          <NavLink to="/reports" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.Reports /> Reports
+          </NavLink>
+          <NavLink to="/customer-sites" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.Building /> Customer Sites
+          </NavLink>
+          <NavLink to="/audit-log" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.History /> Audit Log
+          </NavLink>
+        </div>
+        
+        <div className="nav-section">
+          <div className="nav-section-title">System</div>
+          <NavLink to="/users" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.Users /> Users
+          </NavLink>
+          <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.Settings /> Settings
+          </NavLink>
+        </div>
+      </nav>
+    </aside>
+
+    {/* Main Content */}
+    <main className="main-content">
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/equipment" element={<Equipment />} />
+        <Route path="/equipment/:id" element={<EquipmentDetail />} />
+        <Route path="/check-out" element={<CheckOut />} />
+        <Route path="/check-in" element={<CheckIn />} />
+        <Route path="/consumables" element={<Consumables />} />
+        <Route path="/calibration" element={<Calibration />} />
+        <Route path="/reservations" element={<Reservations />} />
+        <Route path="/maintenance" element={<Maintenance />} />
+        <Route path="/reports" element={<Reports />} />
+        <Route path="/customer-sites" element={<CustomerSites />} />
+        <Route path="/audit-log" element={<AuditLog />} />
+        <Route path="/users" element={<UserManagement />} />
+        <Route path="/settings" element={<Settings />} />
+      </Routes>
+    </main>
+  </div>
+  );
+}
 
 function App() {
   return (
     <ThemeProvider>
-    <OperatorProvider>
-      <Router>
-        <div className="app-container">
-          {/* Sidebar Navigation */}
-          <aside className="sidebar">
-            <div className="sidebar-header">
-              <h1>Equipment Store</h1>
-              <p>Inventory Management</p>
-            </div>
-
-            {/* Operator Selector */}
-            <div className="sidebar-operator">
-              <OperatorSelector />
-            </div>
-            
-            <nav className="sidebar-nav">
-              <div className="nav-section">
-                <div className="nav-section-title">Overview</div>
-                <NavLink to="/" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                  <Icons.Dashboard /> Dashboard
-                </NavLink>
-              </div>
-            
-            <div className="nav-section">
-              <div className="nav-section-title">Equipment</div>
-              <NavLink to="/equipment" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                <Icons.Equipment /> Equipment List
-              </NavLink>
-              <NavLink to="/check-out" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                <Icons.CheckOut /> Check Out
-              </NavLink>
-              <NavLink to="/check-in" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                <Icons.CheckIn /> Check In
-              </NavLink>
-              <NavLink to="/reservations" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                <Icons.Calendar /> Reservations
-              </NavLink>
-            </div>
-            
-            <div className="nav-section">
-              <div className="nav-section-title">Stock</div>
-              <NavLink to="/consumables" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                <Icons.Consumables /> Consumables
-              </NavLink>
-              <NavLink to="/calibration" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                <Icons.Calibration /> Calibration
-              </NavLink>
-              <NavLink to="/maintenance" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                <Icons.Wrench /> Maintenance
-              </NavLink>
-            </div>
-            
-            <div className="nav-section">
-              <div className="nav-section-title">Analysis</div>
-              <NavLink to="/reports" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                <Icons.Reports /> Reports
-              </NavLink>
-              <NavLink to="/customer-sites" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                <Icons.Building /> Customer Sites
-              </NavLink>
-              <NavLink to="/audit-log" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                <Icons.History /> Audit Log
-              </NavLink>
-            </div>
-            
-            <div className="nav-section">
-              <div className="nav-section-title">System</div>
-              <NavLink to="/users" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                <Icons.Users /> Users
-              </NavLink>
-              <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                <Icons.Settings /> Settings
-              </NavLink>
-            </div>
-          </nav>
-        </aside>
-
-        {/* Main Content */}
-        <main className="main-content">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/equipment" element={<Equipment />} />
-            <Route path="/equipment/:id" element={<EquipmentDetail />} />
-            <Route path="/check-out" element={<CheckOut />} />
-            <Route path="/check-in" element={<CheckIn />} />
-            <Route path="/consumables" element={<Consumables />} />
-            <Route path="/calibration" element={<Calibration />} />
-            <Route path="/reservations" element={<Reservations />} />
-            <Route path="/maintenance" element={<Maintenance />} />
-            <Route path="/reports" element={<Reports />} />
-            <Route path="/customer-sites" element={<CustomerSites />} />
-            <Route path="/audit-log" element={<AuditLog />} />
-            <Route path="/users" element={<UserManagement />} />
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
-        </main>
-      </div>
-      </Router>
-    </OperatorProvider>
+      <OperatorProvider>
+        <Router>
+          <AppContent />
+        </Router>
+      </OperatorProvider>
     </ThemeProvider>
   );
 }
