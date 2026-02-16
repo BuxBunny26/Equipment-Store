@@ -419,11 +419,13 @@ function CheckOut() {
                   required
                 >
                   <option value="">Select branch location...</option>
-                  {locations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.name}
-                    </option>
-                  ))}
+                  {locations
+                    .filter(loc => loc.name.startsWith('WearCheck'))
+                    .map((loc) => (
+                      <option key={loc.id} value={loc.id}>
+                        {loc.name}
+                      </option>
+                    ))}
                 </select>
               </div>
             ) : (
@@ -450,14 +452,14 @@ function CheckOut() {
                     .filter(c => {
                       if (!customerSearch) return true;
                       const term = customerSearch.toLowerCase();
-                      return c.display_name.toLowerCase().includes(term) ||
+                      return c.display_name?.toLowerCase().includes(term) ||
                              c.customer_number?.toLowerCase().includes(term) ||
-                             c.city?.toLowerCase().includes(term);
+                             c.billing_city?.toLowerCase().includes(term);
                     })
                     .slice(0, 50)
                     .map((cust) => (
                       <option key={cust.id} value={cust.id}>
-                        {cust.display_name} {cust.city ? `(${cust.city})` : ''} - {cust.region}
+                        {cust.display_name} {cust.billing_city ? `(${cust.billing_city})` : ''} {cust.billing_state ? `- ${cust.billing_state}` : ''}
                       </option>
                     ))}
                 </select>
@@ -465,9 +467,9 @@ function CheckOut() {
                   {customers.filter(c => {
                     if (!customerSearch) return true;
                     const term = customerSearch.toLowerCase();
-                    return c.display_name.toLowerCase().includes(term) ||
+                    return c.display_name?.toLowerCase().includes(term) ||
                            c.customer_number?.toLowerCase().includes(term) ||
-                           c.city?.toLowerCase().includes(term);
+                           c.billing_city?.toLowerCase().includes(term);
                   }).length} customers found
                 </small>
               </div>
