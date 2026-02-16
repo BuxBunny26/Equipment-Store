@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { equipmentApi, categoriesApi } from '../services/api';
-import * as XLSX from 'xlsx';
 
 function Equipment() {
   const [loading, setLoading] = useState(true);
@@ -28,10 +27,9 @@ function Equipment() {
   const fetchCategories = async () => {
     try {
       const response = await categoriesApi.getAll();
-      setCategories(Array.isArray(response.data) ? response.data : []);
+      setCategories(response.data);
     } catch (err) {
       console.error('Error fetching categories:', err);
-      setCategories([]);
     }
   };
 
@@ -46,11 +44,10 @@ function Equipment() {
       if (filters.calibration_status) params.calibration_status = filters.calibration_status;
 
       const response = await equipmentApi.getAll(params);
-      setEquipment(Array.isArray(response.data) ? response.data : []);
+      setEquipment(response.data);
       setError(null);
     } catch (err) {
       setError(err.message);
-      setEquipment([]);
     } finally {
       setLoading(false);
     }
@@ -88,41 +85,6 @@ function Equipment() {
     return <span className="badge" style={{ background: '#10b981' }}>Valid</span>;
   };
 
-  const exportToExcel = () => {
-    const exportData = equipment.map(item => ({
-      'Equipment ID': item.equipment_id,
-      'Name': item.equipment_name,
-      'Category': item.category_name,
-      'Subcategory': item.subcategory_name || '',
-      'Serial Number': item.serial_number || '-',
-      'Status': item.status,
-      'Calibration Status': item.calibration_status || 'N/A',
-      'Location': item.current_location || '-',
-      'Holder': item.current_holder || '-'
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Equipment');
-
-    // Auto-size columns
-    const colWidths = [
-      { wch: 15 }, // Equipment ID
-      { wch: 25 }, // Name
-      { wch: 25 }, // Category
-      { wch: 20 }, // Subcategory
-      { wch: 20 }, // Serial Number
-      { wch: 12 }, // Status
-      { wch: 18 }, // Calibration Status
-      { wch: 15 }, // Location
-      { wch: 20 }  // Holder
-    ];
-    worksheet['!cols'] = colWidths;
-
-    const date = new Date().toISOString().split('T')[0];
-    XLSX.writeFile(workbook, `Equipment_List_${date}.xlsx`);
-  };
-
   return (
     <div>
       <div className="page-header">
@@ -130,14 +92,9 @@ function Equipment() {
           <h1 className="page-title">Equipment</h1>
           <p className="page-subtitle">Manage equipment inventory</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-secondary" onClick={exportToExcel} disabled={equipment.length === 0}>
-            Export to Excel
-          </button>
-          <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-            + Add Equipment
-          </button>
-        </div>
+        <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+          + Add Equipment
+        </button>
       </div>
 
       {/* Filters */}
@@ -159,7 +116,6 @@ function Equipment() {
           <div className="filter-group">
             <select
               className="form-select"
-              style={{ width: 'auto' }}
               value={filters.status}
               onChange={(e) => setFilters({ ...filters, status: e.target.value })}
             >
@@ -170,12 +126,11 @@ function Equipment() {
 
             <select
               className="form-select"
-              style={{ width: 'auto' }}
               value={filters.category_id}
               onChange={(e) => setFilters({ ...filters, category_id: e.target.value })}
             >
               <option value="">All Categories</option>
-              {Array.isArray(categories) && categories.filter(c => !c.is_consumable).map((cat) => (
+              {categories.filter(c => !c.is_consumable).map((cat) => (
                 <option key={cat.id} value={cat.id}>
                   {cat.name}
                 </option>
@@ -184,7 +139,6 @@ function Equipment() {
 
             <select
               className="form-select"
-              style={{ width: 'auto' }}
               value={filters.calibration_status}
               onChange={(e) => setFilters({ ...filters, calibration_status: e.target.value })}
             >
@@ -227,7 +181,7 @@ function Equipment() {
           </div>
         ) : (
           <div className="table-container">
-            <table>
+            <table className="equipment-table">
               <thead>
                 <tr>
                   <th>Equipment ID</th>
@@ -270,7 +224,7 @@ function Equipment() {
                     <td>{item.current_location || '-'}</td>
                     <td>{item.current_holder || '-'}</td>
                     <td>
-                      <div style={{ display: 'flex', gap: '4px' }}>
+                      <div className="actions-cell">
                         <Link to={`/equipment/${item.id}`} className="btn btn-sm btn-secondary">
                           View
                         </Link>
@@ -347,10 +301,9 @@ function AddEquipmentModal({ categories, onClose, onSuccess }) {
     try {
       const response = await fetch('/api/locations?active_only=true');
       const data = await response.json();
-      setLocations(Array.isArray(data) ? data : []);
+      setLocations(data);
     } catch (err) {
       console.error('Error fetching locations:', err);
-      setLocations([]);
     }
   };
 
@@ -358,10 +311,9 @@ function AddEquipmentModal({ categories, onClose, onSuccess }) {
     try {
       const response = await fetch(`/api/subcategories?category_id=${categoryId}`);
       const data = await response.json();
-      setSubcategories(Array.isArray(data) ? data : []);
+      setSubcategories(data);
     } catch (err) {
       console.error('Error fetching subcategories:', err);
-      setSubcategories([]);
     }
   };
 
@@ -452,7 +404,7 @@ function AddEquipmentModal({ categories, onClose, onSuccess }) {
                   required
                 >
                   <option value="">Select category...</option>
-                  {Array.isArray(categories) && categories.map((cat) => (
+                  {categories.map((cat) => (
                     <option key={cat.id} value={cat.id}>
                       {cat.name} {cat.is_consumable ? '(Consumable)' : ''} {!cat.is_checkout_allowed ? '(Non-checkout)' : ''}
                     </option>
@@ -471,7 +423,7 @@ function AddEquipmentModal({ categories, onClose, onSuccess }) {
                   disabled={!formData.category_id}
                 >
                   <option value="">Select subcategory...</option>
-                  {Array.isArray(subcategories) && subcategories.map((sub) => (
+                  {subcategories.map((sub) => (
                     <option key={sub.id} value={sub.id}>
                       {sub.name}
                     </option>
@@ -558,7 +510,7 @@ function AddEquipmentModal({ categories, onClose, onSuccess }) {
                 onChange={handleChange}
               >
                 <option value="">Select location...</option>
-                {Array.isArray(locations) && locations.map((loc) => (
+                {locations.map((loc) => (
                   <option key={loc.id} value={loc.id}>
                     {loc.name}
                   </option>

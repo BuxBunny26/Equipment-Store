@@ -190,7 +190,7 @@ function CheckIn() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+      <div className="two-column-grid">
         {/* Equipment Selection */}
         <div className="card">
           <div className="card-header">
@@ -210,7 +210,7 @@ function CheckIn() {
             />
           </div>
 
-          <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+          <div className="equipment-selection-list">
             {filteredEquipment.length === 0 ? (
               <div className="empty-state">
                 <p>No equipment currently checked out</p>
@@ -319,16 +319,15 @@ function CheckIn() {
 
             <div className="form-group">
               <label className="form-label">Photo (Optional)</label>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <div className="photo-buttons">
                 <button 
                   type="button"
                   className="btn btn-secondary" 
                   onClick={() => setShowCamera(true)}
-                  style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}
                 >
                   <Icons.Camera size={16} /> Take Photo
                 </button>
-                <label className="btn btn-secondary" style={{ cursor: 'pointer', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
                   <Icons.Image size={16} /> Choose from Gallery
                   <input
                     type="file"
@@ -386,12 +385,11 @@ function CheckIn() {
               />
             </div>
 
-            <div style={{ display: 'flex', gap: '12px' }}>
+            <div className="form-actions">
               <button
                 type="submit"
                 className="btn btn-success btn-lg"
                 disabled={!formData.equipment_id || !formData.location_id || submitting}
-                style={{ flex: 1 }}
               >
                 {submitting ? 'Processing...' : 'Check In Equipment'}
               </button>

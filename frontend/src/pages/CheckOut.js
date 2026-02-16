@@ -69,10 +69,10 @@ function CheckOut() {
         customersApi.getAll(),
       ]);
 
-      setAvailableEquipment(Array.isArray(equipmentRes?.data) ? equipmentRes.data : []);
-      setLocations(Array.isArray(locationsRes?.data) ? locationsRes.data : []);
-      setPersonnel(Array.isArray(personnelRes?.data) ? personnelRes.data : []);
-      setCustomers(Array.isArray(customersRes?.data) ? customersRes.data : []);
+      setAvailableEquipment(equipmentRes.data);
+      setLocations(locationsRes.data);
+      setPersonnel(personnelRes.data);
+      setCustomers(customersRes.data);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -89,13 +89,13 @@ function CheckOut() {
 
     try {
       // Find customer name for notes if customer site selected
-      const selectedCustomer = formData.destination_type === 'customer' && formData.customer_id && Array.isArray(customers)
+      const selectedCustomer = formData.destination_type === 'customer' && formData.customer_id
         ? customers.find(c => c.id === parseInt(formData.customer_id))
         : null;
 
-      const selectedItems = Array.isArray(availableEquipment) ? availableEquipment.filter(eq => 
+      const selectedItems = availableEquipment.filter(eq => 
         selectedEquipmentIds.includes(eq.id.toString())
-      ) : [];
+      );
 
       const successNames = [];
       const errors = [];
@@ -177,7 +177,7 @@ function CheckOut() {
     setPhotoPreview(null);
   };
 
-  const filteredEquipment = Array.isArray(availableEquipment) ? availableEquipment.filter((eq) => {
+  const filteredEquipment = availableEquipment.filter((eq) => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
@@ -186,11 +186,11 @@ function CheckOut() {
       eq.serial_number?.toLowerCase().includes(term) ||
       eq.category?.toLowerCase().includes(term)
     );
-  }) : [];
+  });
 
-  const selectedEquipmentList = Array.isArray(availableEquipment) ? availableEquipment.filter(
+  const selectedEquipmentList = availableEquipment.filter(
     (eq) => selectedEquipmentIds.includes(eq.id.toString())
-  ) : [];
+  );
 
   if (loading) {
     return (
@@ -229,7 +229,7 @@ function CheckOut() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+      <div className="two-column-grid">
         {/* Equipment Selection */}
         <div className="card">
           <div className="card-header">
@@ -249,7 +249,7 @@ function CheckOut() {
             />
           </div>
 
-          <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+          <div className="equipment-selection-list">
             {filteredEquipment.length === 0 ? (
               <div className="empty-state">
                 <p>No available equipment found</p>
@@ -307,9 +307,9 @@ function CheckOut() {
                           {eq.available_quantity} {eq.unit} avail.
                         </span>
                       ) : (
-                        <span className="badge badge-available">AVAILABLE</span>
+                        <span className="badge badge-available">Available</span>
                       )}
-                      {eq.calibration_status && (
+                      {eq.requires_calibration && eq.calibration_status && (
                         <span 
                           className={`badge ${
                             eq.calibration_status === 'Valid' ? 'badge-available' :
@@ -317,12 +317,12 @@ function CheckOut() {
                             eq.calibration_status === 'Expired' ? 'badge-overdue' :
                             'badge-checked-out'
                           }`}
-                          style={{ display: 'block', marginTop: '4px' }}
+                          style={{ marginLeft: '4px', display: 'block', marginTop: '4px' }}
                         >
-                          {eq.calibration_status === 'Valid' ? <><Icons.Check size={12} /> CALIBRATED</> :
-                           eq.calibration_status === 'Due Soon' ? <><Icons.Clock size={12} /> CAL DUE SOON</> :
-                           eq.calibration_status === 'Expired' ? <><Icons.Warning size={12} /> CAL EXPIRED</> :
-                           <><Icons.Minus size={12} /> NOT CALIBRATED</>}
+                          {eq.calibration_status === 'Valid' ? <><Icons.Check size={12} /> Calibrated</> :
+                           eq.calibration_status === 'Due Soon' ? <><Icons.Clock size={12} /> Cal Due Soon</> :
+                           eq.calibration_status === 'Expired' ? <><Icons.Warning size={12} /> Cal Expired</> :
+                           <><Icons.Minus size={12} /> Not Calibrated</>}
                         </span>
                       )}
                       {!eq.is_checkout_allowed && (
@@ -376,7 +376,7 @@ function CheckOut() {
                 <option value="">Select person...</option>
                 {personnel.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.employee_id} - {p.full_name}
+                    {p.employee_id} - {p.first_name === p.last_name ? p.first_name : `${p.first_name} ${p.last_name}`}
                   </option>
                 ))}
               </select>
@@ -384,8 +384,8 @@ function CheckOut() {
 
             <div className="form-group">
               <label className="form-label">Destination Type *</label>
-              <div style={{ display: 'flex', gap: '12px', marginBottom: '8px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+              <div className="radio-group">
+                <label>
                   <input
                     type="radio"
                     name="destination_type"
@@ -395,7 +395,7 @@ function CheckOut() {
                   />
                   <span>Internal Location (Branch)</span>
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                <label>
                   <input
                     type="radio"
                     name="destination_type"
@@ -419,32 +419,57 @@ function CheckOut() {
                   required
                 >
                   <option value="">Select branch location...</option>
-                  {locations
-                    .filter(loc => loc.name.startsWith('WearCheck'))
-                    .map((loc) => (
-                      <option key={loc.id} value={loc.id}>
-                        {loc.name}
-                      </option>
-                    ))}
+                  {locations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             ) : (
               <div className="form-group">
                 <label className="form-label">Customer Site *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Search customers..."
+                  value={customerSearch}
+                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  style={{ marginBottom: '8px' }}
+                />
                 <select
                   name="customer_id"
                   className="form-select"
                   value={formData.customer_id}
                   onChange={handleChange}
                   required
+                  size={5}
+                  style={{ height: 'auto' }}
                 >
-                  <option value="">Select customer site...</option>
-                  {customers.map((cust) => (
-                    <option key={cust.id} value={cust.id}>
-                      {cust.customer_number} - {cust.display_name} {cust.city ? `(${cust.city})` : ''}
-                    </option>
-                  ))}
+                  {customers
+                    .filter(c => {
+                      if (!customerSearch) return true;
+                      const term = customerSearch.toLowerCase();
+                      return c.display_name.toLowerCase().includes(term) ||
+                             c.customer_number?.toLowerCase().includes(term) ||
+                             c.city?.toLowerCase().includes(term);
+                    })
+                    .slice(0, 50)
+                    .map((cust) => (
+                      <option key={cust.id} value={cust.id}>
+                        {cust.display_name} {cust.city ? `(${cust.city})` : ''} - {cust.region}
+                      </option>
+                    ))}
                 </select>
+                <small style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                  {customers.filter(c => {
+                    if (!customerSearch) return true;
+                    const term = customerSearch.toLowerCase();
+                    return c.display_name.toLowerCase().includes(term) ||
+                           c.customer_number?.toLowerCase().includes(term) ||
+                           c.city?.toLowerCase().includes(term);
+                  }).length} customers found
+                </small>
               </div>
             )}
 
@@ -468,16 +493,15 @@ function CheckOut() {
 
             <div className="form-group">
               <label className="form-label">Photo (Optional)</label>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <div className="photo-buttons">
                 <button 
                   type="button"
                   className="btn btn-secondary" 
                   onClick={() => setShowCamera(true)}
-                  style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}
                 >
                   <Icons.Camera size={16} /> Take Photo
                 </button>
-                <label className="btn btn-secondary" style={{ cursor: 'pointer', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
                   <Icons.Image size={16} /> Choose from Gallery
                   <input
                     type="file"
@@ -535,7 +559,7 @@ function CheckOut() {
               />
             </div>
 
-            <div style={{ display: 'flex', gap: '12px' }}>
+            <div className="form-actions">
               <button
                 type="submit"
                 className="btn btn-primary btn-lg"
@@ -545,7 +569,6 @@ function CheckOut() {
                   (formData.destination_type === 'internal' ? !formData.location_id : !formData.customer_id) ||
                   submitting
                 }
-                style={{ flex: 1 }}
               >
                 {submitting ? 'Processing...' : 'Check Out Equipment'}
               </button>

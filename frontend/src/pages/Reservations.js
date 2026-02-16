@@ -43,7 +43,7 @@ function Reservations() {
       if (filters.end_date) params.end_date = filters.end_date;
       
       const response = await reservationsApi.getAll(params);
-      setReservations(Array.isArray(response?.data) ? response.data : []);
+      setReservations(response.data);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -55,15 +55,15 @@ function Reservations() {
   const fetchData = async () => {
     try {
       const [equipmentRes, personnelRes, customersRes, summaryRes] = await Promise.all([
-        equipmentApi.getAll(), // Get ALL equipment to show status
+        equipmentApi.getAll({ status: 'Available' }),
         personnelApi.getAll(true),
         customersApi.getAll(),
         reservationsApi.getSummary(),
       ]);
-      setEquipment(Array.isArray(equipmentRes?.data) ? equipmentRes.data : []);
-      setPersonnel(Array.isArray(personnelRes?.data) ? personnelRes.data : []);
-      setCustomers(Array.isArray(customersRes?.data) ? customersRes.data : []);
-      setSummary(summaryRes?.data || { pending: 0, approved: 0, total: 0 });
+      setEquipment(equipmentRes.data);
+      setPersonnel(personnelRes.data);
+      setCustomers(customersRes.data);
+      setSummary(summaryRes.data);
     } catch (err) {
       console.error('Error fetching data:', err);
     }
@@ -216,7 +216,7 @@ function Reservations() {
       )}
 
       {/* Summary Cards */}
-      <div className="dashboard-grid" style={{ marginBottom: '1.5rem' }}>
+      <div className="summary-grid" style={{ marginBottom: '1.5rem' }}>
         <div className="stat-card">
           <div className="stat-value">{summary.upcoming_week}</div>
           <div className="stat-label">Upcoming (7 days)</div>
@@ -230,8 +230,8 @@ function Reservations() {
       </div>
 
       {/* Filters */}
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+      <div className="card filter-card">
+        <div className="filter-row">
           <div className="form-group" style={{ marginBottom: 0, minWidth: '150px' }}>
             <label className="form-label">Status</label>
             <select 
@@ -276,7 +276,8 @@ function Reservations() {
 
       {/* Reservations Table */}
       <div className="card">
-        <table className="table">
+        <div className="table-container">
+        <table className="reservations-table">
           <thead>
             <tr>
               <th>Equipment</th>
@@ -386,6 +387,7 @@ function Reservations() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Add/Edit Modal */}
@@ -409,13 +411,13 @@ function Reservations() {
                     <option value="">Select equipment...</option>
                     {equipment.map(eq => (
                       <option key={eq.id} value={eq.id}>
-                        {eq.equipment_id} - {eq.equipment_name} {eq.serial_number ? `(S/N: ${eq.serial_number})` : ''} [{eq.status}] {eq.calibration_status ? `[${eq.calibration_status}]` : ''}
+                        {eq.equipment_id} - {eq.equipment_name}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div className="two-column-grid">
                   <div className="form-group">
                     <label className="form-label">Start Date *</label>
                     <input
