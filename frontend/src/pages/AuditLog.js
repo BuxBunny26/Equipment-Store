@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { auditApi, exportsApi } from '../services/api';
+import { auditApi } from '../services/api';
+import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
 import { Icons } from '../components/Icons';
 
 function AuditLog() {
@@ -76,8 +77,8 @@ function AuditLog() {
     return badges[action] || 'badge';
   };
 
-  const handleExport = () => {
-    alert('Excel export coming soon. Use browser print to save as PDF for now.');
+  const handleExport = (format = 'excel') => {
+    exportData(format, logs, EXPORT_COLUMNS.auditLog, 'audit_log', 'Audit Log');
   };
 
   const handleNextPage = () => {
@@ -127,9 +128,17 @@ function AuditLog() {
           <h1>Audit Log</h1>
           <p className="subtitle">Track all changes made to the system</p>
         </div>
-        <button className="btn btn-secondary" onClick={handleExport} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Icons.Download size={16} /> Export to Excel
-        </button>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <button className="btn btn-secondary" onClick={() => handleExport('csv')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Icons.Download size={16} /> CSV
+          </button>
+          <button className="btn btn-secondary" onClick={() => handleExport('excel')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Icons.Download size={16} /> Excel
+          </button>
+          <button className="btn btn-secondary" onClick={() => handleExport('pdf')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Icons.Download size={16} /> PDF
+          </button>
+        </div>
       </div>
 
       {error && (

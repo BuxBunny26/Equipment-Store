@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { customersApi, exportsApi } from '../services/api';
+import { customersApi } from '../services/api';
+import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
 import { Icons } from '../components/Icons';
 
 function CustomerSites() {
@@ -54,8 +55,20 @@ function CustomerSites() {
     }
   };
 
-  const handleExport = (customerId = null) => {
-    alert('Excel export coming soon. Use browser print to save as PDF for now.');
+  const handleExport = async (customerId = null, format = 'excel') => {
+    if (customerId) {
+      // Export equipment for a specific customer
+      try {
+        const res = await customersApi.getEquipment(customerId);
+        const customer = customers.find(c => c.id === customerId);
+        exportData(format, res.data || [], EXPORT_COLUMNS.customerEquipment, `customer_equipment_${customer?.display_name || customerId}`, `Equipment at ${customer?.display_name || 'Customer'}`);
+      } catch (err) {
+        console.error('Export error:', err);
+      }
+    } else {
+      // Export all customers
+      exportData(format, customers, EXPORT_COLUMNS.customers, 'all_customers', 'All Customers');
+    }
   };
 
   const formatDate = (dateString) => {
@@ -91,9 +104,17 @@ function CustomerSites() {
           <h1>Customer Sites</h1>
           <p className="subtitle">Track equipment deployed at customer locations</p>
         </div>
-        <button className="btn btn-secondary" onClick={() => handleExport()} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Icons.Download size={16} /> Export All
-        </button>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <button className="btn btn-secondary" onClick={() => handleExport(null, 'csv')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Icons.Download size={16} /> CSV
+          </button>
+          <button className="btn btn-secondary" onClick={() => handleExport(null, 'excel')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Icons.Download size={16} /> Excel
+          </button>
+          <button className="btn btn-secondary" onClick={() => handleExport(null, 'pdf')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Icons.Download size={16} /> PDF
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -186,7 +207,7 @@ function CustomerSites() {
                       <h4>Equipment at {customer.display_name}</h4>
                       <button 
                         className="btn btn-sm btn-secondary"
-                        onClick={(e) => { e.stopPropagation(); handleExport(customer.id); }}
+                        onClick={(e) => { e.stopPropagation(); handleExport(customer.id, 'excel'); }}
                         style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
                       >
                         <Icons.Download size={14} /> Export

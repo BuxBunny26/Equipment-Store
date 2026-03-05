@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { maintenanceApi, equipmentApi } from '../services/api';
 import { Icons } from '../components/Icons';
+import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
 
 function Maintenance() {
   const [loading, setLoading] = useState(true);
@@ -51,7 +52,7 @@ function Maintenance() {
     try {
       setLoading(true);
       const response = await maintenanceApi.getAll(filters);
-      setRecords(Array.isArray(response?.data) ? response.data : []);
+      setRecords(response.data);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -68,10 +69,10 @@ function Maintenance() {
         maintenanceApi.getSummary(),
         maintenanceApi.getDue(30),
       ]);
-      setMaintenanceTypes(Array.isArray(typesRes?.data) ? typesRes.data : []);
-      setEquipment(Array.isArray(equipmentRes?.data) ? equipmentRes.data : []);
-      setSummary(summaryRes?.data || null);
-      setDueRecords(Array.isArray(dueRes?.data) ? dueRes.data : []);
+      setMaintenanceTypes(typesRes.data);
+      setEquipment(equipmentRes.data);
+      setSummary(summaryRes.data);
+      setDueRecords(dueRes.data);
     } catch (err) {
       console.error('Error fetching data:', err);
     }
@@ -217,9 +218,20 @@ function Maintenance() {
           <h1>Equipment Maintenance</h1>
           <p className="subtitle">Track repairs, servicing, and maintenance history</p>
         </div>
-        <button className="btn btn-primary" onClick={() => handleOpenModal()}>
-          + Add Maintenance Record
-        </button>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <button className="btn btn-secondary" onClick={() => exportData('csv', records, EXPORT_COLUMNS.maintenance, 'maintenance', 'Maintenance Records')} disabled={records.length === 0}>
+            <Icons.Download size={16} /> CSV
+          </button>
+          <button className="btn btn-secondary" onClick={() => exportData('excel', records, EXPORT_COLUMNS.maintenance, 'maintenance', 'Maintenance Records')} disabled={records.length === 0}>
+            <Icons.Download size={16} /> Excel
+          </button>
+          <button className="btn btn-secondary" onClick={() => exportData('pdf', records, EXPORT_COLUMNS.maintenance, 'maintenance', 'Maintenance Records')} disabled={records.length === 0}>
+            <Icons.Download size={16} /> PDF
+          </button>
+          <button className="btn btn-primary" onClick={() => handleOpenModal()}>
+            + Add Maintenance Record
+          </button>
+        </div>
       </div>
 
       {error && (

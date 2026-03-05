@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { equipmentApi, categoriesApi, locationsApi, subcategoriesApi } from '../services/api';
+import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
+import { Icons } from '../components/Icons';
 
 function Equipment() {
   const [loading, setLoading] = useState(true);
@@ -92,9 +94,20 @@ function Equipment() {
           <h1 className="page-title">Equipment</h1>
           <p className="page-subtitle">Manage equipment inventory</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-          + Add Equipment
-        </button>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <button className="btn btn-secondary" onClick={() => exportData('csv', equipment, EXPORT_COLUMNS.equipment, 'equipment', 'Equipment List')} disabled={equipment.length === 0}>
+            <Icons.Download size={16} /> CSV
+          </button>
+          <button className="btn btn-secondary" onClick={() => exportData('excel', equipment, EXPORT_COLUMNS.equipment, 'equipment', 'Equipment List')} disabled={equipment.length === 0}>
+            <Icons.Download size={16} /> Excel
+          </button>
+          <button className="btn btn-secondary" onClick={() => exportData('pdf', equipment, EXPORT_COLUMNS.equipment, 'equipment', 'Equipment List')} disabled={equipment.length === 0}>
+            <Icons.Download size={16} /> PDF
+          </button>
+          <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+            + Add Equipment
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
