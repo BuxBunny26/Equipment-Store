@@ -19,7 +19,7 @@ function EquipmentImageGallery({ equipmentId, editable = false }) {
   const fetchImages = async () => {
     try {
       setLoading(true);
-      const response = await equipmentImagesApi.getByEquipment(equipmentId);
+      const response = await equipmentImagesApi.getAll(equipmentId);
       setImages(response.data);
       setError(null);
     } catch (err) {
@@ -37,12 +37,8 @@ function EquipmentImageGallery({ equipmentId, editable = false }) {
     setError(null);
 
     try {
-      const formData = new FormData();
-      for (let i = 0; i < files.length; i++) {
-        formData.append('images', files[i]);
-      }
-
-      await equipmentImagesApi.uploadMultiple(equipmentId, formData);
+      const filesArray = Array.from(files);
+      await equipmentImagesApi.uploadMultiple(equipmentId, filesArray);
       fetchImages();
     } catch (err) {
       setError(err.message || 'Error uploading images');
@@ -56,7 +52,7 @@ function EquipmentImageGallery({ equipmentId, editable = false }) {
 
   const handleSetPrimary = async (imageId) => {
     try {
-      await equipmentImagesApi.setPrimary(equipmentId, imageId);
+      await equipmentImagesApi.setPrimary(imageId);
       fetchImages();
     } catch (err) {
       setError(err.message);
@@ -123,7 +119,7 @@ function EquipmentImageGallery({ equipmentId, editable = false }) {
       >
         {primaryImage ? (
           <img
-            src={`/api${primaryImage.image_path}`}
+            src={primaryImage.file_path}
             alt={primaryImage.caption || 'Equipment'}
             style={{
               maxWidth: '100%',
@@ -183,7 +179,7 @@ function EquipmentImageGallery({ equipmentId, editable = false }) {
               }}
             >
               <img
-                src={`/api${img.image_path}`}
+                src={img.file_path}
                 alt={img.caption || 'Thumbnail'}
                 style={{
                   width: '100%',
@@ -284,7 +280,7 @@ function EquipmentImageGallery({ equipmentId, editable = false }) {
               maxHeight: '70vh',
             }}>
               <img
-                src={`/api${selectedImage.image_path}`}
+                src={selectedImage.file_path}
                 alt={selectedImage.caption || 'Equipment'}
                 style={{
                   maxWidth: '100%',

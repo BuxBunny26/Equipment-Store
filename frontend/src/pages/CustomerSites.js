@@ -27,12 +27,8 @@ function CustomerSites() {
         customersApi.getAll({ has_equipment: true }),
         customersApi.getStats()
       ]);
-      setCustomers(Array.isArray(customersRes?.data) ? customersRes.data : []);
-      setStats(statsRes?.data || {
-        total_customers: 0,
-        customers_with_equipment: 0,
-        total_equipment_out: 0
-      });
+      setCustomers(customersRes.data);
+      setStats(statsRes.data);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -50,9 +46,7 @@ function CustomerSites() {
     
     setSelectedCustomer(customer);
     try {
-      // We'll get equipment from the movements/checked-out endpoint
-      const response = await fetch(`/api/reports/checked-out?customer_id=${customer.id}`);
-      const data = await response.json();
+      const { data } = await customersApi.getEquipment(customer.id);
       setCustomerEquipment(data);
     } catch (err) {
       console.error('Error fetching customer equipment:', err);
@@ -61,7 +55,7 @@ function CustomerSites() {
   };
 
   const handleExport = (customerId = null) => {
-    window.open(exportsApi.getCustomerEquipmentUrl(customerId), '_blank');
+    alert('Excel export coming soon. Use browser print to save as PDF for now.');
   };
 
   const formatDate = (dateString) => {
@@ -73,13 +67,13 @@ function CustomerSites() {
     });
   };
 
-  const filteredCustomers = Array.isArray(customers) ? customers.filter(c => {
+  const filteredCustomers = customers.filter(c => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return c.display_name?.toLowerCase().includes(term) ||
            c.city?.toLowerCase().includes(term) ||
            c.customer_number?.toLowerCase().includes(term);
-  }) : [];
+  });
 
   if (loading) {
     return (

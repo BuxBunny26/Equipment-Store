@@ -22,7 +22,7 @@ function EquipmentDetail() {
     try {
       setLoading(true);
       const response = await equipmentApi.getById(id);
-      setEquipment(response?.data || null);
+      setEquipment(response.data);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -34,7 +34,7 @@ function EquipmentDetail() {
   const fetchHistory = async () => {
     try {
       const response = await equipmentApi.getHistory(id, 100);
-      setHistory(Array.isArray(response?.data) ? response.data : []);
+      setHistory(response.data);
     } catch (err) {
       console.error('Error fetching history:', err);
     }
@@ -43,7 +43,7 @@ function EquipmentDetail() {
   const fetchCalibrationHistory = async () => {
     try {
       const response = await calibrationApi.getHistory(id);
-      setCalibrationHistory(Array.isArray(response?.data) ? response.data : []);
+      setCalibrationHistory(response.data);
     } catch (err) {
       console.error('Error fetching calibration history:', err);
     }
@@ -84,7 +84,6 @@ function EquipmentDetail() {
   };
 
   const openCertificate = (record) => {
-    // Open certificate via SharePoint URL
     if (record.certificate_file_url) {
       window.open(record.certificate_file_url, '_blank');
     }
@@ -346,20 +345,13 @@ function EquipmentDetail() {
                       <td style={{ fontWeight: 500 }}>{record.certificate_number || '-'}</td>
                       <td>
                         {record.certificate_file_url ? (
-                          <div>
-                            <button
-                              className="btn btn-sm btn-primary"
-                              onClick={() => openCertificate(record)}
-                              title={record.certificate_filename ? `Look for: ${record.certificate_filename}` : 'Open Certificate Folder'}
-                            >
-                              📂 Open Folder
-                            </button>
-                            {record.certificate_filename && (
-                              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                                File: {record.certificate_filename}
-                              </div>
-                            )}
-                          </div>
+                          <button
+                            className="btn btn-sm btn-primary"
+                            onClick={() => openCertificate(record)}
+                            title="View Certificate"
+                          >
+                            📄 View
+                          </button>
                         ) : (
                           <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>No file</span>
                         )}

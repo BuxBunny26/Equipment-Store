@@ -1,302 +1,883 @@
-import axios from 'axios';
+import { supabase } from './supabaseClient';
 
-// Use direct backend URL in development, proxy in production
-const API_BASE_URL = process.env.NODE_ENV === 'development' 
-    ? 'http://localhost:3001/api' 
-    : '/api';
+// ============================================
+// Helper: wrap Supabase responses to match axios { data } shape
+// ============================================
+function wrap(promise) {
+    return promise.then(({ data, error }) => {
+        if (error) throw new Error(error.message);
+        return { data };
+    });
+}
 
-// For direct file access (window.open), we need the full URL
-const getFullApiUrl = () => {
-    if (process.env.NODE_ENV === 'development') {
-        return 'http://localhost:3001/api';
-    }
-    return window.location.origin + '/api';
-};
-
-const api = axios.create({
-    baseURL: API_BASE_URL,
-    headers: {
-        'Content-Type': 'application/json',
-    },
-});
-
-// Request interceptor for error handling
-api.interceptors.response.use(
-    (response) => response,
-    (error) => {
-        const message = error.response?.data?.error?.message || error.message || 'An error occurred';
-        return Promise.reject(new Error(message));
-    }
-);
+// For RPC calls
+function wrapRpc(promise) {
+    return promise.then(({ data, error }) => {
+        if (error) throw new Error(error.message);
+        return { data };
+    });
+}
 
 // Categories
 export const categoriesApi = {
-    getAll: () => api.get('/categories'),
-    getById: (id) => api.get(`/categories/${id}`),
-    create: (data) => api.post('/categories', data),
-    update: (id, data) => api.put(`/categories/${id}`, data),
+    getAll: () => wrap(
+        supabase.from('categories')
+            .select('id, name, is_checkout_allowed, is_consumable, created_at, updated_at')
+            .order('name')
+    ),
+    getById: (id) => wrap(
+        supabase.from('categories').select('*').eq('id', id).single()
+    ).then(async (res) => {
+        const { data: subs } = await supabase.from('subcategories')
+            .select('id, name').eq('category_id', id).order('name');
+        return { data: { ...res.data, subcategories: subs || [] } };
+    }),
+    create: (data) => wrap(
+        supabase.from('categories').insert(data).select().single()
+    ),
+    update: (id, data) => wrap(
+        supabase.from('categories').update(data).eq('id', id).select().single()
+    ),
 };
 
 // Subcategories
 export const subcategoriesApi = {
-    getAll: (categoryId) => api.get('/subcategories', { params: { category_id: categoryId } }),
-    getById: (id) => api.get(`/subcategories/${id}`),
-    create: (data) => api.post('/subcategories', data),
-    update: (id, data) => api.put(`/subcategories/${id}`, data),
+    getAll: (categoryId) => {
+        let query = supabase.from('subcategories')
+            .select('id, name, category_id, categories(name)')
+            .order('name');
+        if (categoryId) query = query.eq('category_id', categoryId);
+        return wrap(query).then(res => ({
+            data: (res.data || []).map(s => ({
+                ...s,
+                category_name: s.categories?.name,
+                categories: undefined
+            }))
+        }));
+    },
+    getById: (id) => wrap(
+        supabase.from('subcategories')
+            .select('*, categories(name)')
+            .eq('id', id).single()
+    ).then(res => ({
+        data: { ...res.data, category_name: res.data.categories?.name, categories: undefined }
+    })),
+    create: (data) => wrap(
+        supabase.from('subcategories').insert(data).select().single()
+    ),
+    update: (id, data) => wrap(
+        supabase.from('subcategories').update({ name: data.name }).eq('id', id).select().single()
+    ),
 };
 
 // Locations
 export const locationsApi = {
-    getAll: (activeOnly = true) => api.get('/locations', { params: { active_only: activeOnly } }),
-    getById: (id) => api.get(`/locations/${id}`),
-    create: (data) => api.post('/locations', data),
-    update: (id, data) => api.put(`/locations/${id}`, data),
+    getAll: (activeOnly = true) => {
+        let query = supabase.from('locations').select('*').order('name');
+        if (activeOnly) query = query.eq('is_active', true);
+        return wrap(query);
+    },
+    getById: (id) => wrap(
+        supabase.from('locations').select('*').eq('id', id).single()
+    ),
+    create: (data) => wrap(
+        supabase.from('locations').insert(data).select().single()
+    ),
+    update: (id, data) => wrap(
+        supabase.from('locations').update(data).eq('id', id).select().single()
+    ),
 };
 
 // Personnel
 export const personnelApi = {
-    getAll: (activeOnly = true, search = '') => 
-        api.get('/personnel', { params: { active_only: activeOnly, search } }),
-    getById: (id) => api.get(`/personnel/${id}`),
-    create: (data) => api.post('/personnel', data),
-    update: (id, data) => api.put(`/personnel/${id}`, data),
+    getAll: (activeOnly = true, search = '') => {
+        let query = supabase.from('personnel').select('*').order('full_name');
+        if (activeOnly) query = query.eq('is_active', true);
+        if (search) query = query.or(`full_name.ilike.%${search}%,employee_id.ilike.%${search}%,email.ilike.%${search}%`);
+        return wrap(query);
+    },
+    getById: (id) => wrap(
+        supabase.from('personnel').select('*').eq('id', id).single()
+    ),
+    create: (data) => wrap(
+        supabase.from('personnel').insert(data).select().single()
+    ),
+    update: (id, data) => wrap(
+        supabase.from('personnel').update(data).eq('id', id).select().single()
+    ),
 };
 
 // Equipment
 export const equipmentApi = {
-    getAll: (params = {}) => api.get('/equipment', { params }),
-    getById: (id) => api.get(`/equipment/${id}`),
-    getByCode: (equipmentId) => api.get(`/equipment/by-code/${equipmentId}`),
-    create: (data) => api.post('/equipment', data),
-    update: (id, data) => api.put(`/equipment/${id}`, data),
-    getHistory: (id, limit = 50) => api.get(`/equipment/${id}/history`, { params: { limit } }),
+    getAll: (params = {}) => {
+        const { status, category_id, subcategory_id, search, is_consumable } = params;
+        let query = supabase.from('equipment')
+            .select(`
+                id, equipment_id, equipment_name, description,
+                category_id, categories(name, is_checkout_allowed, is_consumable),
+                subcategory_id, subcategories(name),
+                is_serialised, serial_number,
+                is_quantity_tracked, total_quantity, available_quantity, unit, reorder_level,
+                status, current_location_id, locations(name),
+                current_holder_id, personnel(full_name, employee_id),
+                last_action, last_action_timestamp,
+                notes, created_at, updated_at, manufacturer, model
+            `)
+            .order('equipment_name');
+        if (status) query = query.eq('status', status);
+        if (category_id) query = query.eq('category_id', category_id);
+        if (subcategory_id) query = query.eq('subcategory_id', subcategory_id);
+        if (search) {
+            query = query.or(`equipment_id.ilike.%${search}%,equipment_name.ilike.%${search}%,serial_number.ilike.%${search}%,description.ilike.%${search}%`);
+        }
+        return wrap(query).then(res => ({
+            data: (res.data || []).filter(e => {
+                if (is_consumable === 'true' && !e.categories?.is_consumable) return false;
+                if (is_consumable === 'false' && e.categories?.is_consumable) return false;
+                return true;
+            }).map(e => ({
+                ...e,
+                category_name: e.categories?.name,
+                is_checkout_allowed: e.categories?.is_checkout_allowed,
+                is_consumable: e.categories?.is_consumable,
+                subcategory_name: e.subcategories?.name,
+                current_location: e.locations?.name,
+                current_holder: e.personnel?.full_name,
+                holder_employee_id: e.personnel?.employee_id,
+                categories: undefined, subcategories: undefined,
+                locations: undefined, personnel: undefined,
+            }))
+        }));
+    },
+
+    getById: (id) => wrap(
+        supabase.from('equipment')
+            .select(`*, categories(name, is_checkout_allowed, is_consumable), subcategories(name), locations(name), personnel(full_name, employee_id, email)`)
+            .eq('id', id).single()
+    ).then(res => {
+        const e = res.data;
+        return { data: { ...e,
+            category_name: e.categories?.name, is_checkout_allowed: e.categories?.is_checkout_allowed,
+            is_consumable: e.categories?.is_consumable, subcategory_name: e.subcategories?.name,
+            current_location: e.locations?.name, current_holder: e.personnel?.full_name,
+            holder_employee_id: e.personnel?.employee_id, holder_email: e.personnel?.email,
+            categories: undefined, subcategories: undefined, locations: undefined, personnel: undefined,
+        }};
+    }),
+
+    getByCode: (equipmentId) => wrap(
+        supabase.from('equipment')
+            .select(`*, categories(name, is_checkout_allowed, is_consumable), subcategories(name), locations(name), personnel(full_name, employee_id)`)
+            .eq('equipment_id', equipmentId).single()
+    ).then(res => {
+        const e = res.data;
+        return { data: { ...e,
+            category_name: e.categories?.name, is_checkout_allowed: e.categories?.is_checkout_allowed,
+            is_consumable: e.categories?.is_consumable, subcategory_name: e.subcategories?.name,
+            current_location: e.locations?.name, current_holder: e.personnel?.full_name,
+            holder_employee_id: e.personnel?.employee_id,
+            categories: undefined, subcategories: undefined, locations: undefined, personnel: undefined,
+        }};
+    }),
+
+    create: (data) => wrap(
+        supabase.from('equipment').insert({
+            ...data, status: 'Available', available_quantity: data.total_quantity || 1,
+        }).select().single()
+    ),
+    update: (id, data) => wrap(
+        supabase.from('equipment').update(data).eq('id', id).select().single()
+    ),
+
+    getHistory: (id, limit = 50) => wrap(
+        supabase.from('equipment_movements')
+            .select(`id, action, quantity, notes, created_at, created_by, locations(name), personnel(full_name, employee_id)`)
+            .eq('equipment_id', id)
+            .order('created_at', { ascending: false })
+            .limit(limit)
+    ).then(res => ({
+        data: (res.data || []).map(m => ({
+            ...m, location: m.locations?.name, personnel_name: m.personnel?.full_name,
+            personnel_employee_id: m.personnel?.employee_id, locations: undefined,
+        }))
+    })),
 };
 
 // Movements
 export const movementsApi = {
-    getAll: (params = {}) => api.get('/movements', { params }),
+    getAll: (params = {}) => {
+        const { equipment_id, action, personnel_id, location_id, from_date, to_date, limit = 100 } = params;
+        let query = supabase.from('equipment_movements')
+            .select(`
+                id, equipment_id, action, quantity, location_id, customer_id,
+                personnel_id, notes, created_at, created_by,
+                equipment(equipment_id, equipment_name),
+                locations(name), customers(display_name),
+                personnel(full_name, employee_id)
+            `)
+            .order('created_at', { ascending: false })
+            .limit(limit);
+        if (equipment_id) query = query.eq('equipment_id', equipment_id);
+        if (action) query = query.eq('action', action);
+        if (personnel_id) query = query.eq('personnel_id', personnel_id);
+        if (location_id) query = query.eq('location_id', location_id);
+        if (from_date) query = query.gte('created_at', from_date);
+        if (to_date) query = query.lte('created_at', to_date);
+        return wrap(query).then(res => ({
+            data: (res.data || []).map(m => ({
+                ...m,
+                equipment_pk: m.equipment_id,
+                equipment_code: m.equipment?.equipment_id,
+                equipment_name: m.equipment?.equipment_name,
+                location: m.locations?.name,
+                customer_name: m.customers?.display_name,
+                personnel_name: m.personnel?.full_name,
+                personnel_employee_id: m.personnel?.employee_id,
+                equipment: undefined, locations: undefined, customers: undefined,
+            }))
+        }));
+    },
+
     create: (data, photoFile) => {
+        const rpcCall = wrapRpc(
+            supabase.rpc('create_movement', {
+                p_equipment_id: parseInt(data.equipment_id),
+                p_action: data.action,
+                p_quantity: parseInt(data.quantity) || 1,
+                p_location_id: data.location_id ? parseInt(data.location_id) : null,
+                p_customer_id: data.customer_id ? parseInt(data.customer_id) : null,
+                p_personnel_id: data.personnel_id ? parseInt(data.personnel_id) : null,
+                p_notes: data.notes || null,
+                p_created_by: data.created_by || null,
+            })
+        );
         if (photoFile) {
-            const formData = new FormData();
-            Object.keys(data).forEach(key => {
-                if (data[key] !== undefined && data[key] !== null) {
-                    formData.append(key, data[key]);
+            return rpcCall.then(async (result) => {
+                const movementId = result.data?.movement?.id || result.data?.id;
+                if (movementId) {
+                    const fileName = `movement_${movementId}_${Date.now()}.jpg`;
+                    await supabase.storage.from('movement-photos')
+                        .upload(fileName, photoFile, { contentType: photoFile.type });
                 }
-            });
-            formData.append('photo', photoFile);
-            return api.post('/movements', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
+                return result;
             });
         }
-        return api.post('/movements', data);
+        return rpcCall;
     },
-    handover: (data) => api.post('/movements/handover', data),
-    getPhotoUrl: (movementId) => `${getFullApiUrl()}/movements/photo/${movementId}`,
+
+    handover: (data) => wrapRpc(
+        supabase.rpc('create_handover', {
+            p_equipment_id: parseInt(data.equipment_id),
+            p_return_location_id: parseInt(data.return_location_id),
+            p_new_personnel_id: parseInt(data.new_personnel_id),
+            p_new_location_id: parseInt(data.new_location_id),
+            p_notes: data.notes || null,
+            p_created_by: data.created_by || null,
+        })
+    ),
+
+    getPhotoUrl: (movementId) => {
+        return supabase.storage.from('movement-photos').getPublicUrl(`movement_${movementId}`).data?.publicUrl || '';
+    },
 };
 
 // Reports
 export const reportsApi = {
-    getDashboard: () => api.get('/reports/dashboard'),
-    getCheckedOut: () => api.get('/reports/checked-out'),
-    getOverdue: () => api.get('/reports/overdue'),
-    getAvailable: (categoryId) => api.get('/reports/available', { params: { category_id: categoryId } }),
-    getLowStock: () => api.get('/reports/low-stock'),
-    getConsumables: () => api.get('/reports/consumables'),
-    getByCategory: () => api.get('/reports/by-category'),
-    getByLocation: () => api.get('/reports/by-location'),
-    getMovementHistory: (params) => api.get('/reports/movement-history', { params }),
-    getUsageStats: (params) => api.get('/reports/usage-stats', { params }),
+    getDashboard: () => wrapRpc(supabase.rpc('get_dashboard', { p_overdue_days: 14 })),
+    getCheckedOut: () => wrapRpc(supabase.rpc('get_checked_out_report', { p_overdue_days: 14 })),
+    getOverdue: () => wrapRpc(supabase.rpc('get_overdue_report', { p_overdue_days: 14 })),
+    getAvailable: (categoryId) => wrapRpc(
+        supabase.rpc('get_available_report', { p_category_id: categoryId ? parseInt(categoryId) : null })
+    ),
+    getLowStock: () => wrap(
+        supabase.from('equipment')
+            .select(`id, equipment_id, equipment_name, categories!inner(name, is_consumable), subcategories(name), available_quantity, total_quantity, reorder_level, unit, locations(name)`)
+            .eq('categories.is_consumable', true)
+    ).then(res => ({
+        data: (res.data || [])
+            .filter(e => e.available_quantity <= e.reorder_level)
+            .map(e => ({ ...e,
+                category: e.categories?.name, subcategory: e.subcategories?.name,
+                current_location: e.locations?.name,
+                categories: undefined, subcategories: undefined, locations: undefined,
+            }))
+    })),
+    getConsumables: () => wrap(
+        supabase.from('equipment')
+            .select(`id, equipment_id, equipment_name, categories!inner(name, is_consumable), subcategories(name), available_quantity, total_quantity, reorder_level, unit, locations(name)`)
+            .eq('categories.is_consumable', true)
+            .order('equipment_name')
+    ).then(res => ({
+        data: (res.data || []).map(e => ({ ...e,
+            category: e.categories?.name, subcategory: e.subcategories?.name,
+            current_location: e.locations?.name, is_low_stock: e.available_quantity <= e.reorder_level,
+            categories: undefined, subcategories: undefined, locations: undefined,
+        }))
+    })),
+    getByCategory: () => wrap(
+        supabase.from('categories').select(`id, name, is_checkout_allowed, is_consumable, equipment(id, status)`).order('name')
+    ).then(res => ({
+        data: (res.data || []).map(c => ({
+            category_id: c.id, category: c.name, is_checkout_allowed: c.is_checkout_allowed,
+            is_consumable: c.is_consumable, total_items: c.equipment?.length || 0,
+            available: c.equipment?.filter(e => e.status === 'Available').length || 0,
+            checked_out: c.equipment?.filter(e => e.status === 'Checked Out').length || 0,
+            equipment: undefined,
+        }))
+    })),
+    getByLocation: () => wrap(
+        supabase.from('locations').select(`id, name, equipment(id, status)`).eq('is_active', true).order('name')
+    ).then(res => ({
+        data: (res.data || []).map(l => ({
+            location_id: l.id, location: l.name, total_items: l.equipment?.length || 0,
+            available: l.equipment?.filter(e => e.status === 'Available').length || 0,
+            checked_out: l.equipment?.filter(e => e.status === 'Checked Out').length || 0,
+            equipment: undefined,
+        }))
+    })),
+    getMovementHistory: (params = {}) => {
+        const { from_date, to_date, action, personnel_id, limit = 500 } = params;
+        let query = supabase.from('equipment_movements')
+            .select(`id, action, quantity, notes, created_at, created_by,
+                equipment(equipment_id, equipment_name, categories(name)),
+                locations(name), personnel(full_name, employee_id)`)
+            .order('created_at', { ascending: false }).limit(limit);
+        if (from_date) query = query.gte('created_at', from_date);
+        if (to_date) query = query.lte('created_at', to_date);
+        if (action) query = query.eq('action', action);
+        if (personnel_id) query = query.eq('personnel_id', personnel_id);
+        return wrap(query).then(res => ({
+            data: (res.data || []).map(m => ({ ...m,
+                equipment_id: m.equipment?.equipment_id, equipment_name: m.equipment?.equipment_name,
+                category: m.equipment?.categories?.name, location: m.locations?.name,
+                personnel_name: m.personnel?.full_name, personnel_employee_id: m.personnel?.employee_id,
+                equipment: undefined, locations: undefined,
+            }))
+        }));
+    },
+    getUsageStats: (params = {}) => wrapRpc(
+        supabase.rpc('get_usage_stats', { p_from_date: params.from_date || null, p_to_date: params.to_date || null })
+    ),
 };
 
 // Customers
 export const customersApi = {
-    getAll: (params = {}) => api.get('/customers', { params }),
-    getById: (id) => api.get(`/customers/${id}`),
-    create: (data) => api.post('/customers', data),
-    update: (id, data) => api.put(`/customers/${id}`, data),
-    getStats: () => api.get('/customers/stats/summary'),
+    getAll: (params = {}) => {
+        const { country, search, active_only } = params;
+        let query = supabase.from('customers')
+            .select('id, customer_number, display_name, currency_code, billing_city, billing_state, billing_country, shipping_city, shipping_state, shipping_country, tax_registration_number, vat_treatment, email, is_active, created_at')
+            .order('display_name');
+        if (active_only !== 'false') query = query.eq('is_active', true);
+        if (country) query = query.eq('billing_country', country);
+        if (search) query = query.or(`display_name.ilike.%${search}%,customer_number.ilike.%${search}%`);
+        return wrap(query);
+    },
+    getById: (id) => wrap(supabase.from('customers').select('*').eq('id', id).single()),
+    create: (data) => wrap(supabase.from('customers').insert({ ...data, currency_code: data.currency_code || 'ZAR' }).select().single()),
+    update: (id, data) => wrap(supabase.from('customers').update(data).eq('id', id).select().single()),
+    getStats: () => wrapRpc(supabase.rpc('get_customer_stats')),
+    getEquipment: (customerId) => wrap(
+        supabase.from('equipment_movements')
+            .select(`id, action, created_at, notes,
+                equipment!inner(id, equipment_id, equipment_name, serial_number, status, categories(name)),
+                personnel(full_name)`)
+            .eq('customer_id', customerId)
+            .eq('action', 'OUT')
+            .eq('equipment.status', 'Checked Out')
+            .order('created_at', { ascending: false })
+    ).then(res => ({
+        data: (res.data || []).map(m => ({
+            id: m.equipment?.id,
+            equipment_id: m.equipment?.equipment_id,
+            equipment_name: m.equipment?.equipment_name,
+            serial_number: m.equipment?.serial_number,
+            category: m.equipment?.categories?.name,
+            checked_out_to: m.personnel?.full_name,
+            checked_out_at: m.created_at,
+        }))
+    })),
 };
 
 // Calibration
 export const calibrationApi = {
-    // Get all equipment calibration status
-    getStatus: (params = {}) => api.get('/calibration/status', { params }),
-    
-    // Get equipment due for calibration
-    getDue: () => api.get('/calibration/due'),
-    
-    // Get calibration summary (counts by status)
-    getSummary: () => api.get('/calibration/summary'),
-    
-    // Get calibration history for specific equipment
-    getHistory: (equipmentId) => api.get(`/calibration/history/${equipmentId}`),
-    
-    // Add new calibration record (with optional certificate file)
+    getStatus: (params = {}) => {
+        const { status, search } = params;
+        let query = supabase.from('calibration_records')
+            .select(`id, equipment_id, serial_number, calibration_date, expiry_date,
+                certificate_number, calibration_status, calibration_provider,
+                certificate_file_url, notes, created_at,
+                equipment(equipment_id, equipment_name, manufacturer, categories(name))`)
+            .order('expiry_date', { ascending: true, nullsFirst: true });
+        if (status) query = query.eq('calibration_status', status);
+        if (search) query = query.or(`serial_number.ilike.%${search}%,certificate_number.ilike.%${search}%`);
+        return wrap(query).then(res => ({
+            data: (res.data || []).map(r => ({ ...r,
+                equipment_code: r.equipment?.equipment_id, equipment_name: r.equipment?.equipment_name,
+                manufacturer: r.equipment?.manufacturer, category: r.equipment?.categories?.name,
+                equipment: undefined,
+            }))
+        }));
+    },
+
+    getDue: () => wrap(
+        supabase.from('calibration_records')
+            .select(`id, serial_number, expiry_date, calibration_status, certificate_number,
+                equipment(equipment_id, equipment_name, manufacturer, categories(name))`)
+            .in('calibration_status', ['Expired', 'Due Soon'])
+            .order('expiry_date', { ascending: true })
+    ).then(res => ({
+        data: (res.data || []).map(r => ({ ...r,
+            equipment_code: r.equipment?.equipment_id, equipment_name: r.equipment?.equipment_name,
+            manufacturer: r.equipment?.manufacturer, category: r.equipment?.categories?.name,
+            equipment: undefined,
+        }))
+    })),
+
+    getSummary: () => wrap(
+        supabase.from('calibration_records').select('calibration_status')
+    ).then(res => {
+        const counts = {};
+        (res.data || []).forEach(r => { counts[r.calibration_status] = (counts[r.calibration_status] || 0) + 1; });
+        return { data: {
+            summary: Object.entries(counts).map(([calibration_status, count]) => ({ calibration_status, count })),
+            total: res.data?.length || 0,
+        }};
+    }),
+
+    getHistory: (equipmentId) => wrap(
+        supabase.from('calibration_records')
+            .select('id, serial_number, calibration_date, expiry_date, certificate_number, calibration_provider, calibration_status, certificate_file_url, notes, created_at')
+            .eq('equipment_id', equipmentId)
+            .order('calibration_date', { ascending: false })
+    ),
+
     create: (data, certificateFile) => {
-        const formData = new FormData();
-        Object.keys(data).forEach(key => {
-            if (data[key] !== undefined && data[key] !== null) {
-                formData.append(key, data[key]);
-            }
-        });
-        if (certificateFile) {
-            formData.append('certificate', certificateFile);
+        let status = data.calibration_status;
+        if (!status && data.expiry_date) {
+            const days = Math.ceil((new Date(data.expiry_date) - new Date()) / (1000 * 60 * 60 * 24));
+            if (days < 0) status = 'Expired';
+            else if (days <= 30) status = 'Due Soon';
+            else status = 'Valid';
         }
-        return api.post('/calibration', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-        });
+        const insertData = {
+            equipment_id: data.equipment_id || null, serial_number: data.serial_number,
+            calibration_date: data.calibration_date, expiry_date: data.expiry_date,
+            certificate_number: data.certificate_number, calibration_provider: data.calibration_provider,
+            calibration_status: status || 'Valid', notes: data.notes,
+        };
+        const promise = wrap(supabase.from('calibration_records').insert(insertData).select().single());
+        if (certificateFile) {
+            return promise.then(async (result) => {
+                const record = result.data;
+                const fileName = `cert_${record.id}_${Date.now()}.pdf`;
+                await supabase.storage.from('calibration-certificates').upload(fileName, certificateFile, { contentType: certificateFile.type });
+                const { data: urlData } = supabase.storage.from('calibration-certificates').getPublicUrl(fileName);
+                await supabase.from('calibration_records').update({ certificate_file_url: urlData.publicUrl }).eq('id', record.id);
+                return { data: { ...record, certificate_file_url: urlData.publicUrl } };
+            });
+        }
+        return promise;
     },
-    
-    // Update calibration record
+
     update: (id, data, certificateFile) => {
-        const formData = new FormData();
-        Object.keys(data).forEach(key => {
-            if (data[key] !== undefined && data[key] !== null) {
-                formData.append(key, data[key]);
-            }
-        });
+        const promise = wrap(supabase.from('calibration_records').update({
+            calibration_date: data.calibration_date, expiry_date: data.expiry_date,
+            certificate_number: data.certificate_number, calibration_provider: data.calibration_provider,
+            calibration_status: data.calibration_status, notes: data.notes,
+        }).eq('id', id).select().single());
         if (certificateFile) {
-            formData.append('certificate', certificateFile);
+            return promise.then(async (result) => {
+                const record = result.data;
+                const fileName = `cert_${id}_${Date.now()}.pdf`;
+                await supabase.storage.from('calibration-certificates').upload(fileName, certificateFile, { contentType: certificateFile.type });
+                const { data: urlData } = supabase.storage.from('calibration-certificates').getPublicUrl(fileName);
+                await supabase.from('calibration_records').update({ certificate_file_url: urlData.publicUrl }).eq('id', id);
+                return { data: { ...record, certificate_file_url: urlData.publicUrl } };
+            });
         }
-        return api.put(`/calibration/${id}`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-        });
+        return promise;
     },
-    
-    // Delete calibration record
-    delete: (id) => api.delete(`/calibration/${id}`),
-    
-    // Get certificate file URL (for viewing in browser) - uses full URL for window.open
-    getCertificateUrl: (recordId) => `${getFullApiUrl()}/calibration/${recordId}/certificate`,
-    
-    // Get certificate download URL - uses full URL for window.open
-    getDownloadUrl: (recordId) => `${getFullApiUrl()}/calibration/${recordId}/certificate`,
+
+    delete: (id) => wrap(supabase.from('calibration_records').delete().eq('id', id)),
+    getCertificateUrl: (recordId) => '',
+    getDownloadUrl: (recordId) => '',
 };
 
 // Reservations
 export const reservationsApi = {
-    getAll: (params = {}) => api.get('/reservations', { params }),
-    getCalendar: (start, end) => api.get('/reservations/calendar', { params: { start, end } }),
-    checkAvailability: (equipmentId, startDate, endDate, excludeId) => 
-        api.get('/reservations/check-availability', { 
-            params: { equipment_id: equipmentId, start_date: startDate, end_date: endDate, exclude_id: excludeId } 
-        }),
-    getSummary: () => api.get('/reservations/summary'),
-    create: (data) => api.post('/reservations', data),
-    update: (id, data) => api.put(`/reservations/${id}`, data),
-    updateStatus: (id, status, approvedBy) => 
-        api.patch(`/reservations/${id}/status`, { status, approved_by: approvedBy }),
-    delete: (id) => api.delete(`/reservations/${id}`),
+    getAll: (params = {}) => {
+        const { status, equipment_id, personnel_id, customer_id, start_date, end_date } = params;
+        let query = supabase.from('reservations')
+            .select(`id, equipment_id, personnel_id, customer_id, start_date, end_date,
+                purpose, status, notes, created_at, approved_at,
+                equipment(equipment_id, equipment_name, serial_number, categories(name)),
+                personnel(full_name), customers(display_name)`)
+            .order('start_date', { ascending: false });
+        if (status) query = query.eq('status', status);
+        if (equipment_id) query = query.eq('equipment_id', equipment_id);
+        if (personnel_id) query = query.eq('personnel_id', personnel_id);
+        if (customer_id) query = query.eq('customer_id', customer_id);
+        if (start_date) query = query.gte('end_date', start_date);
+        if (end_date) query = query.lte('start_date', end_date);
+        return wrap(query).then(res => ({
+            data: (res.data || []).map(r => ({ ...r,
+                equipment_code: r.equipment?.equipment_id, equipment_name: r.equipment?.equipment_name,
+                serial_number: r.equipment?.serial_number, category: r.equipment?.categories?.name,
+                personnel_name: r.personnel?.full_name, customer_name: r.customers?.display_name,
+                equipment: undefined, personnel: undefined, customers: undefined,
+            }))
+        }));
+    },
+    getCalendar: (start, end) => wrap(
+        supabase.from('reservations')
+            .select(`id, equipment_id, personnel_id, start_date, end_date, status, purpose,
+                equipment(equipment_id, equipment_name), personnel(full_name)`)
+            .not('status', 'eq', 'cancelled')
+            .lte('start_date', end).gte('end_date', start).order('start_date')
+    ).then(res => ({
+        data: (res.data || []).map(r => ({ ...r,
+            equipment_code: r.equipment?.equipment_id, equipment_name: r.equipment?.equipment_name,
+            personnel_name: r.personnel?.full_name,
+            equipment: undefined, personnel: undefined,
+        }))
+    })),
+    checkAvailability: (equipmentId, startDate, endDate, excludeId) => {
+        let query = supabase.from('reservations')
+            .select('id, start_date, end_date, status, personnel(full_name)')
+            .eq('equipment_id', equipmentId)
+            .not('status', 'in', '(cancelled,completed)')
+            .lte('start_date', endDate).gte('end_date', startDate);
+        if (excludeId) query = query.neq('id', excludeId);
+        return wrap(query).then(res => ({
+            data: { available: (res.data || []).length === 0,
+                conflicts: (res.data || []).map(r => ({ ...r,
+                    reserved_by: r.personnel?.full_name, personnel: undefined,
+                })),
+            }
+        }));
+    },
+    getSummary: () => wrapRpc(supabase.rpc('get_reservation_summary')),
+    create: (data) => wrap(supabase.from('reservations').insert({ ...data, status: 'pending', customer_id: data.customer_id || null }).select().single()),
+    update: (id, data) => wrap(supabase.from('reservations').update({
+        equipment_id: data.equipment_id, personnel_id: data.personnel_id,
+        customer_id: data.customer_id || null, start_date: data.start_date,
+        end_date: data.end_date, purpose: data.purpose, notes: data.notes,
+    }).eq('id', id).select().single()),
+    updateStatus: (id, status, approvedBy) => {
+        const updateData = { status };
+        if (status === 'approved' && approvedBy) {
+            updateData.approved_by = approvedBy;
+            updateData.approved_at = new Date().toISOString();
+        }
+        return wrap(supabase.from('reservations').update(updateData).eq('id', id).select().single());
+    },
+    delete: (id) => wrap(supabase.from('reservations').delete().eq('id', id)),
 };
 
 // Maintenance
 export const maintenanceApi = {
-    getTypes: () => api.get('/maintenance/types'),
-    getAll: (params = {}) => api.get('/maintenance', { params }),
-    getForEquipment: (equipmentId) => api.get(`/maintenance/equipment/${equipmentId}`),
-    getDue: (days = 30) => api.get('/maintenance/due', { params: { days } }),
-    getOverdue: () => api.get('/maintenance/overdue'),
-    getSummary: () => api.get('/maintenance/summary'),
-    create: (data) => api.post('/maintenance', data),
-    update: (id, data) => api.put(`/maintenance/${id}`, data),
-    complete: (id, data) => api.patch(`/maintenance/${id}/complete`, data),
-    delete: (id) => api.delete(`/maintenance/${id}`),
+    getTypes: () => wrap(supabase.from('maintenance_types').select('*').eq('is_active', true).order('name')),
+    getAll: (params = {}) => {
+        const { equipment_id, status, type_id, from_date, to_date, search } = params;
+        let query = supabase.from('maintenance_log')
+            .select(`id, equipment_id, maintenance_type_id, maintenance_date, completed_date,
+                description, performed_by, external_provider, cost, cost_currency,
+                downtime_days, next_maintenance_date, status, work_order_number, notes, created_at,
+                equipment(equipment_id, equipment_name, serial_number, categories(name)),
+                maintenance_types(name)`)
+            .order('maintenance_date', { ascending: false });
+        if (equipment_id) query = query.eq('equipment_id', equipment_id);
+        if (status) query = query.eq('status', status);
+        if (type_id) query = query.eq('maintenance_type_id', type_id);
+        if (from_date) query = query.gte('maintenance_date', from_date);
+        if (to_date) query = query.lte('maintenance_date', to_date);
+        if (search) query = query.or(`description.ilike.%${search}%,work_order_number.ilike.%${search}%`);
+        return wrap(query).then(res => ({
+            data: (res.data || []).map(m => ({ ...m,
+                equipment_code: m.equipment?.equipment_id, equipment_name: m.equipment?.equipment_name,
+                serial_number: m.equipment?.serial_number, category: m.equipment?.categories?.name,
+                maintenance_type: m.maintenance_types?.name,
+                equipment: undefined, maintenance_types: undefined,
+            }))
+        }));
+    },
+    getForEquipment: (equipmentId) => wrap(
+        supabase.from('maintenance_log').select('*, maintenance_types(name)')
+            .eq('equipment_id', equipmentId).order('maintenance_date', { ascending: false })
+    ).then(res => ({
+        data: (res.data || []).map(m => ({ ...m, maintenance_type: m.maintenance_types?.name, maintenance_types: undefined }))
+    })),
+    getDue: (days = 30) => wrap(
+        supabase.from('equipment')
+            .select('id, equipment_id, equipment_name, serial_number, next_maintenance_date, categories(name)')
+            .not('next_maintenance_date', 'is', null)
+            .lte('next_maintenance_date', new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+            .order('next_maintenance_date')
+    ).then(res => ({
+        data: (res.data || []).map(e => ({ ...e,
+            category: e.categories?.name,
+            maintenance_status: new Date(e.next_maintenance_date) < new Date() ? 'overdue' : 'due_soon',
+            days_until_due: Math.ceil((new Date(e.next_maintenance_date) - new Date()) / (1000 * 60 * 60 * 24)),
+            categories: undefined,
+        }))
+    })),
+    getOverdue: () => wrap(
+        supabase.from('equipment')
+            .select('id, equipment_id, equipment_name, serial_number, next_maintenance_date, categories(name)')
+            .not('next_maintenance_date', 'is', null)
+            .lt('next_maintenance_date', new Date().toISOString().split('T')[0])
+            .order('next_maintenance_date')
+    ).then(res => ({
+        data: (res.data || []).map(e => ({ ...e,
+            category: e.categories?.name,
+            days_overdue: Math.ceil((new Date() - new Date(e.next_maintenance_date)) / (1000 * 60 * 60 * 24)),
+            categories: undefined,
+        }))
+    })),
+    getSummary: () => wrapRpc(supabase.rpc('get_maintenance_summary')),
+    create: (data) => wrap(
+        supabase.from('maintenance_log').insert({
+            equipment_id: data.equipment_id, maintenance_type_id: data.maintenance_type_id,
+            maintenance_date: data.maintenance_date, completed_date: data.completed_date || null,
+            description: data.description, performed_by: data.performed_by || null,
+            external_provider: data.external_provider || null, cost: data.cost || null,
+            cost_currency: data.cost_currency || 'ZAR', downtime_days: data.downtime_days || 0,
+            next_maintenance_date: data.next_maintenance_date || null,
+            status: data.status || 'scheduled', work_order_number: data.work_order_number || null,
+            notes: data.notes || null,
+        }).select().single()
+    ).then(async (result) => {
+        if (data.next_maintenance_date) {
+            await supabase.from('equipment')
+                .update({ next_maintenance_date: data.next_maintenance_date })
+                .eq('id', data.equipment_id);
+        }
+        return result;
+    }),
+    update: (id, data) => wrap(supabase.from('maintenance_log').update(data).eq('id', id).select().single()),
+    complete: (id, data) => wrap(supabase.from('maintenance_log').update({
+        status: 'completed', completed_date: data.completed_date || new Date().toISOString().split('T')[0], ...data,
+    }).eq('id', id).select().single()),
+    delete: (id) => wrap(supabase.from('maintenance_log').delete().eq('id', id)),
 };
 
 // Audit Log
 export const auditApi = {
-    getAll: (params = {}) => api.get('/audit', { params }),
-    getForRecord: (tableName, recordId) => api.get(`/audit/${tableName}/${recordId}`),
-    getSummary: (days = 30) => api.get('/audit/summary/stats', { params: { days } }),
+    getAll: (params = {}) => {
+        const { table_name, record_id, action, user_id, from_date, to_date, limit = 100, offset = 0 } = params;
+        let query = supabase.from('audit_log')
+            .select('*', { count: 'exact' })
+            .order('created_at', { ascending: false })
+            .range(offset, offset + limit - 1);
+        if (table_name) query = query.eq('table_name', table_name);
+        if (record_id) query = query.eq('record_id', record_id);
+        if (action) query = query.eq('action', action);
+        if (user_id) query = query.eq('changed_by', user_id);
+        if (from_date) query = query.gte('created_at', from_date);
+        if (to_date) query = query.lte('created_at', to_date);
+        return query.then(({ data, error, count }) => {
+            if (error) throw new Error(error.message);
+            return { data: {
+                items: (data || []).map(a => ({ ...a, user_full_name: a.changed_by_name || 'System' })),
+                total: count || 0, limit: parseInt(limit), offset: parseInt(offset),
+            }};
+        });
+    },
+    getForRecord: (tableName, recordId) => wrap(
+        supabase.from('audit_log').select('*').eq('table_name', tableName).eq('record_id', recordId)
+            .order('created_at', { ascending: false })
+    ).then(res => ({
+        data: (res.data || []).map(a => ({ ...a, user_full_name: a.changed_by_name || 'System' }))
+    })),
+    getSummary: (days = 30) => wrapRpc(supabase.rpc('get_audit_summary', { p_days: days })),
 };
 
 // Notifications
 export const notificationsApi = {
-    getAll: (params = {}) => api.get('/notifications', { params }),
-    getAlerts: () => api.get('/notifications', { params: { limit: 10 } }),
-    getUnreadCount: (userId) => api.get('/notifications/unread-count', { params: { user_id: userId } }),
-    markAsRead: (id) => api.patch(`/notifications/${id}/read`),
-    markAllAsRead: (userId) => api.patch('/notifications/mark-all-read', { user_id: userId }),
-    delete: (id) => api.delete(`/notifications/${id}`),
-    generate: () => api.post('/notifications/generate'),
-    getSettings: (userId) => api.get(`/notifications/settings/${userId}`),
-    updateSettings: (userId, data) => api.put(`/notifications/settings/${userId}`, data),
+    getAll: (params = {}) => {
+        const { user_id, is_read, type, limit = 50 } = params;
+        let query = supabase.from('notifications').select('*')
+            .order('created_at', { ascending: false }).limit(limit);
+        if (user_id) query = query.or(`user_id.eq.${user_id},user_id.is.null`);
+        if (is_read !== undefined) query = query.eq('is_read', is_read === 'true');
+        if (type) query = query.eq('type', type);
+        return wrap(query);
+    },
+    getAlerts: () => wrap(supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(10)),
+    getUnreadCount: (userId) => supabase.from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_read', false)
+        .or(`user_id.eq.${userId},user_id.is.null`)
+        .then(({ count, error }) => {
+            if (error) return { data: { count: 0 } };
+            return { data: { count: count || 0 } };
+        }),
+    markAsRead: (id) => wrap(supabase.from('notifications').update({ is_read: true }).eq('id', id).select().single()),
+    markAllAsRead: (userId) => wrap(
+        supabase.from('notifications').update({ is_read: true })
+            .eq('is_read', false).or(`user_id.eq.${userId},user_id.is.null`).select()
+    ).then(() => ({ data: { message: 'All notifications marked as read' } })),
+    delete: (id) => wrap(supabase.from('notifications').delete().eq('id', id)),
+    generate: () => wrapRpc(supabase.rpc('generate_notifications')),
+    getSettings: (userId) => Promise.resolve({ data: {} }),
+    updateSettings: (userId, data) => Promise.resolve({ data: {} }),
 };
 
-// Exports
+// Exports (client-side - URLs are placeholders, actual export handled in components)
 export const exportsApi = {
-    getEquipmentUrl: (params = {}) => {
-        const queryString = new URLSearchParams(params).toString();
-        return `${getFullApiUrl()}/exports/equipment${queryString ? '?' + queryString : ''}`;
-    },
-    getMovementsUrl: (params = {}) => {
-        const queryString = new URLSearchParams(params).toString();
-        return `${getFullApiUrl()}/exports/movements${queryString ? '?' + queryString : ''}`;
-    },
-    getCalibrationUrl: (params = {}) => {
-        const queryString = new URLSearchParams(params).toString();
-        return `${getFullApiUrl()}/exports/calibration${queryString ? '?' + queryString : ''}`;
-    },
-    getCheckedOutUrl: () => `${getFullApiUrl()}/exports/checked-out`,
-    getMaintenanceUrl: (params = {}) => {
-        const queryString = new URLSearchParams(params).toString();
-        return `${getFullApiUrl()}/exports/maintenance${queryString ? '?' + queryString : ''}`;
-    },
-    getAuditUrl: (params = {}) => {
-        const queryString = new URLSearchParams(params).toString();
-        return `${getFullApiUrl()}/exports/audit${queryString ? '?' + queryString : ''}`;
-    },
-    getCustomerEquipmentUrl: (customerId) => {
-        const params = customerId ? `?customer_id=${customerId}` : '';
-        return `${getFullApiUrl()}/exports/customer-equipment${params}`;
-    },
+    getEquipmentUrl: (params = {}) => '#export-equipment',
+    getMovementsUrl: (params = {}) => '#export-movements',
+    getCalibrationUrl: (params = {}) => '#export-calibration',
+    getCheckedOutUrl: () => '#export-checked-out',
+    getMaintenanceUrl: (params = {}) => '#export-maintenance',
+    getAuditUrl: (params = {}) => '#export-audit',
+    getCustomerEquipmentUrl: (customerId) => '#export-customer-equipment',
 };
 
 // Users & Roles
 export const usersApi = {
-    getRoles: () => api.get('/users/roles'),
-    getAll: (params = {}) => api.get('/users', { params }),
-    getById: (id) => api.get(`/users/${id}`),
-    create: (data) => api.post('/users', data),
-    update: (id, data) => api.put(`/users/${id}`, data),
-    updateRole: (id, roleId) => api.patch(`/users/${id}/role`, { role_id: roleId }),
-    updateStatus: (id, isActive) => api.patch(`/users/${id}/status`, { is_active: isActive }),
-    delete: (id) => api.delete(`/users/${id}`),
-    getPermissions: (id) => api.get(`/users/${id}/permissions`),
-    bulkImport: (personnelIds, roleId) => api.post('/users/bulk-import', { personnel_ids: personnelIds, role_id: roleId }),
-    createRole: (data) => api.post('/users/roles', data),
-    updateRole: (id, data) => api.put(`/users/roles/${id}`, data),
-    deleteRole: (id) => api.delete(`/users/roles/${id}`),
+    getRoles: () => wrap(supabase.from('roles').select('*').order('id')),
+    getAll: (params = {}) => {
+        const { role_id, is_active, search } = params;
+        let query = supabase.from('users')
+            .select(`id, username, email, full_name, role_id, personnel_id,
+                is_active, last_login, phone, department, created_at,
+                roles(name, permissions), personnel(employee_id)`)
+            .order('full_name');
+        if (role_id) query = query.eq('role_id', role_id);
+        if (is_active !== undefined) query = query.eq('is_active', is_active === 'true');
+        if (search) query = query.or(`username.ilike.%${search}%,full_name.ilike.%${search}%,email.ilike.%${search}%`);
+        return wrap(query).then(res => ({
+            data: (res.data || []).map(u => ({ ...u,
+                role_name: u.roles?.name, permissions: u.roles?.permissions,
+                employee_id: u.personnel?.employee_id,
+                roles: undefined, personnel: undefined,
+            }))
+        }));
+    },
+    getById: (id) => wrap(
+        supabase.from('users').select('*, roles(name, permissions), personnel(employee_id, full_name)').eq('id', id).single()
+    ).then(res => {
+        const u = res.data;
+        const result = { ...u, role_name: u.roles?.name, permissions: u.roles?.permissions,
+            employee_id: u.personnel?.employee_id, personnel_name: u.personnel?.full_name,
+            roles: undefined, personnel: undefined,
+        };
+        delete result.password_hash;
+        return { data: result };
+    }),
+    create: (data) => wrap(supabase.from('users').insert({
+        username: data.username, email: data.email, full_name: data.full_name,
+        role_id: data.role_id || 3, personnel_id: data.personnel_id || null,
+        is_active: data.is_active !== false, phone: data.phone || null, department: data.department || null,
+    }).select().single()),
+    update: (id, data) => wrap(supabase.from('users').update({
+        username: data.username, email: data.email, full_name: data.full_name,
+        role_id: data.role_id, personnel_id: data.personnel_id || null,
+        is_active: data.is_active, phone: data.phone || null, department: data.department || null,
+    }).eq('id', id).select().single()),
+    updateRole: (id, roleId) => wrap(supabase.from('users').update({ role_id: roleId }).eq('id', id).select().single()),
+    updateStatus: (id, isActive) => wrap(supabase.from('users').update({ is_active: isActive }).eq('id', id).select().single()),
+    delete: (id) => wrap(supabase.from('users').delete().eq('id', id)),
+    getPermissions: (id) => wrap(
+        supabase.from('users').select('roles(permissions)').eq('id', id).single()
+    ).then(res => ({ data: res.data?.roles?.permissions || {} })),
+    bulkImport: async (personnelIds, roleId) => {
+        const { data: people } = await supabase.from('personnel')
+            .select('id, full_name, email, employee_id').in('id', personnelIds);
+        const { data: existing } = await supabase.from('users')
+            .select('personnel_id').in('personnel_id', personnelIds);
+        const existingSet = new Set((existing || []).map(r => r.personnel_id));
+        const created = [], skipped = [];
+        for (const person of (people || [])) {
+            if (existingSet.has(person.id)) { skipped.push({ id: person.id, name: person.full_name, reason: 'Already linked' }); continue; }
+            const username = person.employee_id || person.full_name.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z.]/g, '');
+            const { data: check } = await supabase.from('users').select('id').eq('username', username).limit(1);
+            if (check?.length > 0) { skipped.push({ id: person.id, name: person.full_name, reason: 'Username exists' }); continue; }
+            const { data: newUser } = await supabase.from('users').insert({
+                username, email: person.email, full_name: person.full_name,
+                role_id: roleId || 3, personnel_id: person.id, is_active: true,
+            }).select().single();
+            if (newUser) created.push(newUser);
+        }
+        return { data: { message: `Created ${created.length} users, skipped ${skipped.length}`, created, skipped } };
+    },
+    createRole: (data) => wrap(supabase.from('roles').insert(data).select().single()),
+    deleteRole: (id) => wrap(supabase.from('roles').delete().eq('id', id)),
 };
 
 // Equipment Images
 export const equipmentImagesApi = {
-    getAll: (equipmentId) => api.get(`/equipment-images/${equipmentId}`),
-    getImageUrl: (imageId) => `${getFullApiUrl()}/equipment-images/file/${imageId}`,
-    getPrimary: (equipmentId) => api.get(`/equipment-images/${equipmentId}/primary`),
-    upload: (equipmentId, file, caption, isPrimary, uploadedBy) => {
-        const formData = new FormData();
-        formData.append('image', file);
-        if (caption) formData.append('caption', caption);
-        if (isPrimary) formData.append('is_primary', isPrimary);
-        if (uploadedBy) formData.append('uploaded_by', uploadedBy);
-        return api.post(`/equipment-images/${equipmentId}`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-        });
+    getAll: (equipmentId) => wrap(
+        supabase.from('equipment_images').select('*')
+            .eq('equipment_id', equipmentId)
+            .order('is_primary', { ascending: false })
+            .order('sort_order').order('created_at')
+    ),
+    getImageUrl: (imageId) => {
+        return supabase.storage.from('equipment-images').getPublicUrl(`image_${imageId}`).data?.publicUrl || '';
     },
-    uploadMultiple: (equipmentId, files, uploadedBy) => {
-        const formData = new FormData();
-        files.forEach(file => formData.append('images', file));
-        if (uploadedBy) formData.append('uploaded_by', uploadedBy);
-        return api.post(`/equipment-images/${equipmentId}/multiple`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-        });
+    getPrimary: (equipmentId) => wrap(
+        supabase.from('equipment_images').select('*')
+            .eq('equipment_id', equipmentId).eq('is_primary', true).limit(1).single()
+    ),
+    upload: async (equipmentId, file, caption, isPrimary, uploadedBy) => {
+        if (isPrimary === 'true' || isPrimary === true) {
+            await supabase.from('equipment_images').update({ is_primary: false }).eq('equipment_id', equipmentId);
+        }
+        const fileName = `eq-${equipmentId}-${Date.now()}-${file.name}`;
+        const { error: uploadError } = await supabase.storage.from('equipment-images')
+            .upload(fileName, file, { contentType: file.type });
+        if (uploadError) throw new Error(uploadError.message);
+        const { data: urlData } = supabase.storage.from('equipment-images').getPublicUrl(fileName);
+        const { data: maxOrder } = await supabase.from('equipment_images')
+            .select('sort_order').eq('equipment_id', equipmentId)
+            .order('sort_order', { ascending: false }).limit(1);
+        const nextOrder = (maxOrder?.[0]?.sort_order || 0) + 1;
+        return wrap(supabase.from('equipment_images').insert({
+            equipment_id: equipmentId, filename: fileName, original_filename: file.name,
+            file_path: urlData.publicUrl, file_size: file.size, mime_type: file.type,
+            caption: caption || null, is_primary: isPrimary === 'true' || isPrimary === true,
+            sort_order: nextOrder, uploaded_by: uploadedBy || null,
+        }).select().single());
     },
-    update: (imageId, data) => api.put(`/equipment-images/${imageId}`, data),
-    setPrimary: (imageId) => api.patch(`/equipment-images/${imageId}/primary`),
-    reorder: (equipmentId, imageIds) => 
-        api.patch(`/equipment-images/${equipmentId}/reorder`, { imageIds }),
-    delete: (imageId) => api.delete(`/equipment-images/${imageId}`),
+    uploadMultiple: async (equipmentId, files, uploadedBy) => {
+        const { data: maxOrder } = await supabase.from('equipment_images')
+            .select('sort_order').eq('equipment_id', equipmentId)
+            .order('sort_order', { ascending: false }).limit(1);
+        let currentOrder = maxOrder?.[0]?.sort_order || 0;
+        const uploaded = [];
+        for (const file of files) {
+            currentOrder++;
+            const fileName = `eq-${equipmentId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}${file.name.substring(file.name.lastIndexOf('.'))}`;
+            await supabase.storage.from('equipment-images').upload(fileName, file, { contentType: file.type });
+            const { data: urlData } = supabase.storage.from('equipment-images').getPublicUrl(fileName);
+            const { data: img } = await supabase.from('equipment_images').insert({
+                equipment_id: equipmentId, filename: fileName, original_filename: file.name,
+                file_path: urlData.publicUrl, file_size: file.size, mime_type: file.type,
+                sort_order: currentOrder, uploaded_by: uploadedBy || null,
+            }).select().single();
+            if (img) uploaded.push(img);
+        }
+        return { data: uploaded };
+    },
+    update: (imageId, data) => wrap(supabase.from('equipment_images').update(data).eq('id', imageId).select().single()),
+    setPrimary: async (imageId) => {
+        const { data: img } = await supabase.from('equipment_images').select('equipment_id').eq('id', imageId).single();
+        if (img) await supabase.from('equipment_images').update({ is_primary: false }).eq('equipment_id', img.equipment_id);
+        return wrap(supabase.from('equipment_images').update({ is_primary: true }).eq('id', imageId).select().single());
+    },
+    reorder: async (equipmentId, imageIds) => {
+        for (let i = 0; i < imageIds.length; i++) {
+            await supabase.from('equipment_images').update({ sort_order: i + 1 }).eq('id', imageIds[i]).eq('equipment_id', equipmentId);
+        }
+        return wrap(supabase.from('equipment_images').select('*').eq('equipment_id', equipmentId).order('sort_order'));
+    },
+    delete: async (imageId) => {
+        const { data: img } = await supabase.from('equipment_images').select('filename').eq('id', imageId).single();
+        if (img?.filename) await supabase.storage.from('equipment-images').remove([img.filename]);
+        return wrap(supabase.from('equipment_images').delete().eq('id', imageId));
+    },
 };
 
-export default api;
+export default supabase;

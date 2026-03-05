@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { equipmentApi, categoriesApi } from '../services/api';
+import { equipmentApi, categoriesApi, locationsApi, subcategoriesApi } from '../services/api';
 
 function Equipment() {
   const [loading, setLoading] = useState(true);
@@ -299,8 +299,7 @@ function AddEquipmentModal({ categories, onClose, onSuccess }) {
 
   const fetchLocations = async () => {
     try {
-      const response = await fetch('/api/locations?active_only=true');
-      const data = await response.json();
+      const { data } = await locationsApi.getAll(true);
       setLocations(data);
     } catch (err) {
       console.error('Error fetching locations:', err);
@@ -309,8 +308,7 @@ function AddEquipmentModal({ categories, onClose, onSuccess }) {
 
   const fetchSubcategories = async (categoryId) => {
     try {
-      const response = await fetch(`/api/subcategories?category_id=${categoryId}`);
-      const data = await response.json();
+      const { data } = await subcategoriesApi.getAll(categoryId);
       setSubcategories(data);
     } catch (err) {
       console.error('Error fetching subcategories:', err);

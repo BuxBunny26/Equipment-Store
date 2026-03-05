@@ -128,11 +128,26 @@ function Calibration() {
   };
 
   const handleViewCertificate = (recordId) => {
-    window.open(calibrationApi.getCertificateUrl(recordId), '_blank');
+    // Look up URL from history records first, then from equipment list
+    const record = calibrationHistory.find(r => r.id === recordId) || 
+                   equipment.find(r => r.id === recordId || r.calibration_record_id === recordId);
+    const url = record?.certificate_file_url || record?.certificate_file_path;
+    if (url) {
+      window.open(url, '_blank');
+    } else {
+      alert('Certificate file not available');
+    }
   };
 
   const handleDownloadCertificate = (recordId) => {
-    window.open(calibrationApi.getDownloadUrl(recordId), '_blank');
+    const record = calibrationHistory.find(r => r.id === recordId) || 
+                   equipment.find(r => r.id === recordId || r.calibration_record_id === recordId);
+    const url = record?.certificate_file_url || record?.certificate_file_path;
+    if (url) {
+      window.open(url, '_blank');
+    } else {
+      alert('Certificate file not available');
+    }
   };
 
   const getStatusBadge = (status) => {
@@ -244,10 +259,7 @@ function Calibration() {
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => window.open(exportsApi.getCalibrationUrl({
-                status: filters.status,
-                category: filters.category
-              }), '_blank')}
+              onClick={() => alert('Excel export coming soon. Use browser print to save as PDF for now.')}
               style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px' }}
             >
               <Icons.Download size={16} /> Export to Excel

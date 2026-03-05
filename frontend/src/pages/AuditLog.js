@@ -29,8 +29,8 @@ function AuditLog() {
     try {
       setLoading(true);
       const response = await auditApi.getAll(filters);
-      setLogs(response?.data?.items || []);
-      setTotal(response?.data?.total || 0);
+      setLogs(response.data.items || []);
+      setTotal(response.data.total || 0);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -42,7 +42,7 @@ function AuditLog() {
   const fetchSummary = async () => {
     try {
       const response = await auditApi.getSummary(30);
-      setSummary(response?.data || null);
+      setSummary(response.data);
     } catch (err) {
       console.error('Error fetching summary:', err);
     }
@@ -77,12 +77,7 @@ function AuditLog() {
   };
 
   const handleExport = () => {
-    const params = {};
-    if (filters.from_date) params.from_date = filters.from_date;
-    if (filters.to_date) params.to_date = filters.to_date;
-    if (filters.table_name) params.table_name = filters.table_name;
-    
-    window.open(exportsApi.getAuditUrl(params), '_blank');
+    alert('Excel export coming soon. Use browser print to save as PDF for now.');
   };
 
   const handleNextPage = () => {
