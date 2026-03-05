@@ -537,7 +537,7 @@ function CheckOut() {
                 type="submit"
                 className="btn btn-primary btn-lg"
                 disabled={
-                  !formData.equipment_id || 
+                  selectedEquipmentIds.length === 0 || 
                   !formData.personnel_id || 
                   (formData.destination_type === 'internal' ? !formData.location_id : !formData.customer_id) ||
                   submitting
