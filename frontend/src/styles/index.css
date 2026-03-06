@@ -81,9 +81,32 @@
 [data-theme="dark"] input,
 [data-theme="dark"] select,
 [data-theme="dark"] textarea {
-  background: #2a2a2a;
-  border-color: #444;
-  color: var(--text-primary);
+  background: #232323;
+  border-color: #666;
+  color: #e0e0e0;
+  box-shadow: 0 0 0 2px rgba(66,165,245,0.08);
+}
+
+[data-theme="dark"] .search-bar,
+[data-theme="dark"] .filter-row {
+  background: #181818;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+[data-theme="dark"] .form-label {
+  color: #b0b0b0;
+}
+
+[data-theme="dark"] .form-input::placeholder {
+  color: #888;
+}
+
+[data-theme="dark"] .data-table th,
+[data-theme="dark"] .data-table td {
+  background: #1e1e1e;
+  color: #e0e0e0;
+}
 }
 
 [data-theme="dark"] input:focus,
