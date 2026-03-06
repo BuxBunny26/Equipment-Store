@@ -134,7 +134,6 @@ router.get('/', async (req, res, next) => {
 // POST create movement (Check Out / Check In / Issue / Restock)
 router.post('/', photoUpload.single('photo'), async (req, res, next) => {
     const client = await pool.connect();
-    
     try {
         const {
             equipment_id,  // This is the primary key ID
@@ -144,45 +143,31 @@ router.post('/', photoUpload.single('photo'), async (req, res, next) => {
             customer_id,
             personnel_id,
             notes,
-            created_by
+            created_by,
+            destination_type,
+            calibration_provider
         } = req.body;
-        
-        // Validations
-        if (!equipment_id) {
-            return res.status(400).json({ error: { message: 'Equipment ID is required' } });
-        }
-        
-        if (!action) {
-            return res.status(400).json({ error: { message: 'Action is required' } });
-        }
-        
-        const validActions = ['OUT', 'IN', 'ISSUE', 'RESTOCK'];
-        if (!validActions.includes(action.toUpperCase())) {
-            return res.status(400).json({ 
-                error: { message: `Invalid action. Must be one of: ${validActions.join(', ')}` } 
-            });
-        }
-        
-        // For OUT and ISSUE, either location_id or customer_id is required, plus personnel
-        if (['OUT', 'ISSUE'].includes(action.toUpperCase())) {
-            if (!location_id && !customer_id) {
-                return res.status(400).json({ error: { message: 'Location or Customer Site is required for check-out' } });
+
+        // For OUT and ISSUE, either location_id or customer_id or calibration_provider is required, plus personnel
+        if (["OUT", "ISSUE"].includes(action.toUpperCase())) {
+            if (!location_id && !customer_id && !(destination_type === 'calibration' && calibration_provider)) {
+                return res.status(400).json({ error: { message: 'Location, Customer Site, or Calibration Provider is required for check-out' } });
             }
             if (!personnel_id) {
                 return res.status(400).json({ error: { message: 'Personnel is required for check-out' } });
             }
         }
-        
-        // For IN, location is required (where it's being returned to)
-        if (action.toUpperCase() === 'IN' && !location_id) {
-            return res.status(400).json({ error: { message: 'Return location is required' } });
+
+        // Compose notes for calibration
+        let movementNotes = notes;
+        let movementLocationId = location_id || null;
+        let movementCustomerId = customer_id || null;
+        if (destination_type === 'calibration') {
+            movementNotes = `Calibration Provider: ${calibration_provider}${notes ? ' | ' + notes : ''}`;
+            movementLocationId = null;
+            movementCustomerId = null;
         }
-        
-        // Quantity validation for ISSUE and RESTOCK
-        if (['ISSUE', 'RESTOCK'].includes(action.toUpperCase()) && quantity < 1) {
-            return res.status(400).json({ error: { message: 'Quantity must be at least 1' } });
-        }
-        
+
         await client.query('BEGIN');
         
         // Get equipment details to check state
@@ -302,12 +287,12 @@ router.post('/', photoUpload.single('photo'), async (req, res, next) => {
             RETURNING *
         `, [
             equipment_id,
-            upperAction,
+            action.toUpperCase(),
             quantity,
-            location_id || null,
-            customer_id || null,
+            movementLocationId,
+            movementCustomerId,
             personnel_id,
-            notes,
+            movementNotes,
             created_by,
             photoFilePath,
             photoFileName,

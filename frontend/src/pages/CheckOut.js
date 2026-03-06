@@ -389,7 +389,7 @@ function CheckOut() {
                     name="destination_type"
                     value="internal"
                     checked={formData.destination_type === 'internal'}
-                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '' }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '' }))}
                   />
                   <span>Internal Location (Branch)</span>
                 </label>
@@ -399,9 +399,19 @@ function CheckOut() {
                     name="destination_type"
                     value="customer"
                     checked={formData.destination_type === 'customer'}
-                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '' }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '' }))}
                   />
                   <span>Customer Site</span>
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name="destination_type"
+                    value="calibration"
+                    checked={formData.destination_type === 'calibration'}
+                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '' }))}
+                  />
+                  <span>Calibration</span>
                 </label>
               </div>
             </div>
@@ -426,7 +436,7 @@ function CheckOut() {
                     ))}
                 </select>
               </div>
-            ) : (
+            ) : formData.destination_type === 'customer' ? (
               <div className="form-group">
                 <label className="form-label">Customer Site *</label>
                 <select
@@ -444,7 +454,20 @@ function CheckOut() {
                   ))}
                 </select>
               </div>
-            )}
+            ) : formData.destination_type === 'calibration' ? (
+              <div className="form-group">
+                <label className="form-label">Calibration Provider *</label>
+                <input
+                  type="text"
+                  name="calibration_provider"
+                  className="form-input"
+                  value={formData.calibration_provider || ''}
+                  onChange={handleChange}
+                  required
+                  placeholder="Enter calibration provider or location"
+                />
+              </div>
+            ) : null}
 
             {selectedEquipmentList.some(eq => eq.is_quantity_tracked) && (
               <div className="form-group">
