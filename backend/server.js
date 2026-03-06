@@ -26,6 +26,7 @@ app.use('/api/movements', require('./routes/movements'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/customers', require('./routes/customers'));
 app.use('/api/calibration', require('./routes/calibration'));
+app.use('/api/consumables', require('./consumables'));
 
 // New feature routes
 app.use('/api/reservations', require('./routes/reservations'));
