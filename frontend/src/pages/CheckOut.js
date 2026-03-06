@@ -7,6 +7,8 @@ import PhotoCapture from '../components/PhotoCapture';
 import { Icons } from '../components/Icons';
 
 function CheckOut() {
+    const [showConfirm, setShowConfirm] = useState(false);
+    const [pendingSubmit, setPendingSubmit] = useState(null);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { operator, isOperatorSelected } = useOperator();
@@ -22,33 +24,47 @@ function CheckOut() {
   const [personnel, setPersonnel] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
 
   const [selectedEquipmentIds, setSelectedEquipmentIds] = useState(
     preselectedEquipmentId ? [preselectedEquipmentId] : []
   );
   const [formData, setFormData] = useState({
-    destination_type: 'internal', // 'internal' or 'customer'
+    destination_type: 'internal', // 'internal', 'customer', 'calibration', 'transfer'
     location_id: '',
     customer_id: '',
     personnel_id: '',
     notes: '',
     condition: '',
     reason: '',
+    calibration_provider: '',
+    from_site_id: '',
+    to_site_id: '',
+    quantity: '',
   });
   const [prevCondition, setPrevCondition] = useState('Excellent'); // Default, update as needed
     // Helper: Should show reason field?
     const shouldShowReason = () => {
-      // Show if condition is not Excellent or worsened
       if (!formData.condition) return false;
       if (formData.condition !== 'Excellent') return true;
-      // If previous condition exists and worsened
       if (prevCondition && ['Good', 'Poor'].includes(formData.condition) && formData.condition !== prevCondition) {
-        // Only show if worsened
         const order = { 'Excellent': 3, 'Good': 2, 'Poor': 1 };
         return order[formData.condition] < order[prevCondition];
       }
       return false;
     };
+
+    // Inline help for condition logic
+    const conditionHelp = shouldShowReason()
+      ? 'A reason is required for non-Excellent or worsened conditions.'
+      : 'Select the current condition. If not Excellent or worsened, a reason is required.';
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [showCamera, setShowCamera] = useState(false);
@@ -98,11 +114,24 @@ function CheckOut() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    setSuccess(null);
+    setPendingSubmit(() => () => {
+      setSubmitting(true);
+      setError(null);
+      setSuccess(null);
+      submitCheckout();
+    });
+    setShowConfirm(true);
+  // Actual submit logic
+  const submitCheckout = async () => {
+    // ...existing handleSubmit code...
+    // (move all code from handleSubmit except the first lines above)
+  };
 
     try {
+      // Sanitize input
+      const sanitize = (str) =>
+        typeof str === 'string' ? str.replace(/[<>]/g, '').trim() : str;
+
       // Find customer name for notes if customer site selected
       const selectedCustomer = formData.destination_type === 'customer' && formData.customer_id
         ? customers.find(c => c.id === parseInt(formData.customer_id))
@@ -125,9 +154,10 @@ function CheckOut() {
             location_id: formData.destination_type === 'internal' ? parseInt(formData.location_id) : null,
             customer_id: formData.destination_type === 'customer' ? parseInt(formData.customer_id) : null,
             personnel_id: parseInt(formData.personnel_id),
-            notes: selectedCustomer 
-              ? `Customer Site: ${selectedCustomer.display_name}${formData.notes ? ' | ' + formData.notes : ''}`
-              : formData.notes,
+            notes: sanitize(selectedCustomer 
+              ? `Customer Site: ${selectedCustomer.display_name}${formData.notes ? ' | ' + sanitize(formData.notes) : ''}`
+              : sanitize(formData.notes)),
+            reason: sanitize(formData.reason),
             created_by: operator?.full_name || 'System',
           };
 
@@ -154,6 +184,12 @@ function CheckOut() {
         customer_id: '',
         personnel_id: '',
         notes: '',
+        condition: '',
+        reason: '',
+        calibration_provider: '',
+        from_site_id: '',
+        to_site_id: '',
+        quantity: '',
       });
       setPhotoFile(null);
       setPhotoPreview(null);
@@ -192,8 +228,8 @@ function CheckOut() {
   };
 
   const filteredEquipment = availableEquipment.filter((eq) => {
-    if (!searchTerm) return true;
-    const term = searchTerm.toLowerCase();
+    if (!debouncedSearchTerm) return true;
+    const term = debouncedSearchTerm.toLowerCase();
     return (
       eq.equipment_id.toLowerCase().includes(term) ||
       eq.equipment_name.toLowerCase().includes(term) ||
@@ -255,13 +291,16 @@ function CheckOut() {
 
           <div className="form-group">
                         <div className="form-group">
-                          <label className="form-label">Condition *</label>
+                          <label className="form-label" htmlFor="condition-select">Condition *</label>
+                          <span className="form-help" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{conditionHelp}</span>
                           <select
+                            id="condition-select"
                             name="condition"
                             className="form-select"
                             value={formData.condition || ''}
                             onChange={handleChange}
                             required
+                            aria-label="Select equipment condition"
                           >
                             <option value="">Select condition...</option>
                             <option value="Excellent">Excellent</option>
@@ -375,6 +414,18 @@ function CheckOut() {
           </div>
 
           <form onSubmit={handleSubmit}>
+                  {showConfirm && (
+                    <div className="modal-overlay">
+                      <div className="modal" style={{ padding: '24px', background: 'white', borderRadius: '8px', maxWidth: '400px', margin: 'auto', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
+                        <h2>Confirm Checkout</h2>
+                        <p>Are you sure you want to check out the selected equipment?</p>
+                        <div style={{ display: 'flex', gap: '16px', marginTop: '24px', justifyContent: 'center' }}>
+                          <button className="btn btn-primary" onClick={() => { setShowConfirm(false); pendingSubmit && pendingSubmit(); }}>Yes, Proceed</button>
+                          <button className="btn btn-secondary" onClick={() => setShowConfirm(false)}>Cancel</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
             {selectedEquipmentList.length > 0 ? (
               <div className="alert alert-info" style={{ marginBottom: '16px' }}>
                 <strong>Selected ({selectedEquipmentList.length}):</strong>
@@ -414,8 +465,9 @@ function CheckOut() {
             {/* Dynamic Reason Field */}
             {shouldShowReason() && (
               <div className="form-group">
-                <label className="form-label">Reason *</label>
+                <label className="form-label" htmlFor="reason-input">Reason *</label>
                 <input
+                  id="reason-input"
                   type="text"
                   name="reason"
                   className="form-input"
@@ -423,7 +475,12 @@ function CheckOut() {
                   onChange={handleChange}
                   required
                   placeholder="Please provide a reason for this condition"
+                  aria-describedby="reason-help"
+                  aria-label="Reason for condition"
                 />
+                <span id="reason-help" className="form-help" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  Reason is mandatory for non-Excellent or worsened conditions.
+                </span>
               </div>
             )}
 
@@ -654,11 +711,15 @@ function CheckOut() {
                 type="submit"
                 className="btn btn-primary btn-lg"
                 disabled={
-                  selectedEquipmentIds.length === 0 || 
-                  !formData.personnel_id || 
-                  (formData.destination_type === 'internal' ? !formData.location_id : !formData.customer_id) ||
+                  selectedEquipmentIds.length === 0 ||
+                  !formData.personnel_id ||
+                  (formData.destination_type === 'internal' ? !formData.location_id :
+                    formData.destination_type === 'customer' ? !formData.customer_id :
+                    formData.destination_type === 'calibration' ? !formData.calibration_provider :
+                    formData.destination_type === 'transfer' ? (!formData.from_site_id || !formData.to_site_id) : false) ||
                   submitting ||
-                  (shouldShowReason() && !formData.reason)
+                  (shouldShowReason() && !formData.reason) ||
+                  (selectedEquipmentList.some(eq => eq.is_quantity_tracked) && (!formData.quantity || formData.quantity < 1 || formData.quantity > selectedEquipmentList.find(eq => eq.is_quantity_tracked)?.available_quantity))
                 }
               >
                 {submitting ? 'Processing...' : 'Check Out Equipment'}

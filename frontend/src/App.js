@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ErrorBoundary from './components/ErrorBoundary';
 import { BrowserRouter as Router, Routes, Route, NavLink, useLocation } from 'react-router-dom';
 
 // Context
@@ -299,9 +300,11 @@ function App() {
   return (
     <ThemeProvider>
       <OperatorProvider>
-        <Router>
-          <AppContent />
-        </Router>
+        <ErrorBoundary>
+          <Router>
+            <AppContent />
+          </Router>
+        </ErrorBoundary>
       </OperatorProvider>
     </ThemeProvider>
   );

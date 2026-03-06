@@ -23,6 +23,58 @@ function AuditLog() {
     limit: 50,
     offset: 0,
   });
+    // UI: Filter controls
+    const renderFilters = () => (
+      <div className="audit-filters" style={{ display: 'flex', gap: '16px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        <select
+          name="table_name"
+          value={filters.table_name}
+          onChange={e => setFilters(f => ({ ...f, table_name: e.target.value }))}
+          aria-label="Filter by table"
+        >
+          <option value="">All Tables</option>
+          <option value="equipment">Equipment</option>
+          <option value="equipment_movements">Movements</option>
+          <option value="calibration_records">Calibration</option>
+          <option value="maintenance_log">Maintenance</option>
+          <option value="reservations">Reservations</option>
+          <option value="categories">Categories</option>
+          <option value="subcategories">Subcategories</option>
+          <option value="locations">Locations</option>
+          <option value="personnel">Personnel</option>
+          <option value="customers">Customers</option>
+          <option value="users">Users</option>
+        </select>
+        <select
+          name="action"
+          value={filters.action}
+          onChange={e => setFilters(f => ({ ...f, action: e.target.value }))}
+          aria-label="Filter by action"
+        >
+          <option value="">All Actions</option>
+          <option value="INSERT">Insert</option>
+          <option value="UPDATE">Update</option>
+          <option value="DELETE">Delete</option>
+        </select>
+        <input
+          type="date"
+          name="from_date"
+          value={filters.from_date}
+          onChange={e => setFilters(f => ({ ...f, from_date: e.target.value }))}
+          aria-label="From date"
+        />
+        <input
+          type="date"
+          name="to_date"
+          value={filters.to_date}
+          onChange={e => setFilters(f => ({ ...f, to_date: e.target.value }))}
+          aria-label="To date"
+        />
+        <button className="btn btn-secondary" onClick={() => setFilters(f => ({ ...f, offset: 0 }))}>
+          Apply Filters
+        </button>
+      </div>
+    );
   
   const [selectedLog, setSelectedLog] = useState(null);
 
@@ -271,16 +323,17 @@ function AuditLog() {
 
         <table className="table">
           <thead>
-            <tr>
-              <th>Date/Time</th>
-              <th>User</th>
-              <th>Action</th>
-              <th>Table</th>
-              <th>Record ID</th>
-              <th>Changed Fields</th>
-              <th>Details</th>
-            </tr>
-          </thead>
+            <div>
+              <div className="page-header">
+                <h1 className="page-title">Audit Log</h1>
+                <button className="btn btn-secondary" onClick={() => handleExport('excel')}>
+                  <Icons.Download size={16} /> Export
+                </button>
+              </div>
+              {renderFilters()}
+              {error && <div className="alert alert-error">{error}</div>}
+              {/* ...existing code... */}
+            </div>
           <tbody>
             {logs.length === 0 ? (
               <tr>
