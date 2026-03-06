@@ -32,7 +32,23 @@ function CheckOut() {
     customer_id: '',
     personnel_id: '',
     notes: '',
+    condition: '',
+    reason: '',
   });
+  const [prevCondition, setPrevCondition] = useState('Excellent'); // Default, update as needed
+    // Helper: Should show reason field?
+    const shouldShowReason = () => {
+      // Show if condition is not Excellent or worsened
+      if (!formData.condition) return false;
+      if (formData.condition !== 'Excellent') return true;
+      // If previous condition exists and worsened
+      if (prevCondition && ['Good', 'Poor'].includes(formData.condition) && formData.condition !== prevCondition) {
+        // Only show if worsened
+        const order = { 'Excellent': 3, 'Good': 2, 'Poor': 1 };
+        return order[formData.condition] < order[prevCondition];
+      }
+      return false;
+    };
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [showCamera, setShowCamera] = useState(false);
@@ -395,6 +411,22 @@ function CheckOut() {
               </select>
             </div>
 
+            {/* Dynamic Reason Field */}
+            {shouldShowReason() && (
+              <div className="form-group">
+                <label className="form-label">Reason *</label>
+                <input
+                  type="text"
+                  name="reason"
+                  className="form-input"
+                  value={formData.reason}
+                  onChange={handleChange}
+                  required
+                  placeholder="Please provide a reason for this condition"
+                />
+              </div>
+            )}
+
             <div className="form-group">
               <label className="form-label">Destination Type *</label>
               <div className="radio-group">
@@ -625,7 +657,8 @@ function CheckOut() {
                   selectedEquipmentIds.length === 0 || 
                   !formData.personnel_id || 
                   (formData.destination_type === 'internal' ? !formData.location_id : !formData.customer_id) ||
-                  submitting
+                  submitting ||
+                  (shouldShowReason() && !formData.reason)
                 }
               >
                 {submitting ? 'Processing...' : 'Check Out Equipment'}
