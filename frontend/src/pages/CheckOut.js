@@ -238,6 +238,21 @@ function CheckOut() {
           </div>
 
           <div className="form-group">
+                        <div className="form-group">
+                          <label className="form-label">Condition *</label>
+                          <select
+                            name="condition"
+                            className="form-select"
+                            value={formData.condition || ''}
+                            onChange={handleChange}
+                            required
+                          >
+                            <option value="">Select condition...</option>
+                            <option value="Excellent">Excellent</option>
+                            <option value="Good">Good</option>
+                            <option value="Poor">Poor</option>
+                          </select>
+                        </div>
             <input
               type="text"
               className="form-input"

@@ -158,15 +158,14 @@ router.post('/', photoUpload.single('photo'), async (req, res, next) => {
             }
         }
 
-        // Compose notes for calibration
-        let movementNotes = notes;
-        let movementLocationId = location_id || null;
-        let movementCustomerId = customer_id || null;
-        if (destination_type === 'calibration') {
-            movementNotes = `Calibration Provider: ${calibration_provider}${notes ? ' | ' + notes : ''}`;
-            movementLocationId = null;
-            movementCustomerId = null;
+        // Condition check (required)
+        const { condition } = req.body;
+        if (!condition || !['Excellent', 'Good', 'Poor'].includes(condition)) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: { message: 'Condition is required and must be Excellent, Good, or Poor.' } });
         }
+        // Add condition to movement notes
+        notes = `[Condition: ${condition}]${notes ? ' | ' + notes : ''}`;
 
         // Handle TRANSFER action
         if (action.toUpperCase() === 'TRANSFER') {
@@ -177,7 +176,7 @@ router.post('/', photoUpload.single('photo'), async (req, res, next) => {
                 return res.status(400).json({ error: { message: 'Both From Site and To Site are required for transfer.' } });
             }
             // Compose transfer notes
-            movementNotes = `Transfer from Site ID: ${from_site_id} to Site ID: ${to_site_id}${notes ? ' | ' + notes : ''}`;
+            notes = `Transfer from Site ID: ${from_site_id} to Site ID: ${to_site_id}${notes ? ' | ' + notes : ''}`;
             movementLocationId = null;
             movementCustomerId = to_site_id;
         }
