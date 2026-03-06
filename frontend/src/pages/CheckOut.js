@@ -389,7 +389,7 @@ function CheckOut() {
                     name="destination_type"
                     value="internal"
                     checked={formData.destination_type === 'internal'}
-                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '' }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '' }))}
                   />
                   <span>Internal Location (Branch)</span>
                 </label>
@@ -399,7 +399,7 @@ function CheckOut() {
                     name="destination_type"
                     value="customer"
                     checked={formData.destination_type === 'customer'}
-                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '' }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '' }))}
                   />
                   <span>Customer Site</span>
                 </label>
@@ -409,9 +409,19 @@ function CheckOut() {
                     name="destination_type"
                     value="calibration"
                     checked={formData.destination_type === 'calibration'}
-                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '' }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '' }))}
                   />
                   <span>Calibration</span>
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name="destination_type"
+                    value="transfer"
+                    checked={formData.destination_type === 'transfer'}
+                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '' }))}
+                  />
+                  <span>Transfer (Site-to-Site)</span>
                 </label>
               </div>
             </div>
@@ -467,6 +477,43 @@ function CheckOut() {
                   placeholder="Enter calibration provider or location"
                 />
               </div>
+            ) : formData.destination_type === 'transfer' ? (
+              <>
+                <div className="form-group">
+                  <label className="form-label">From Site *</label>
+                  <select
+                    name="from_site_id"
+                    className="form-select"
+                    value={formData.from_site_id || ''}
+                    onChange={handleChange}
+                    required
+                  >
+                    <option value="">Select source site...</option>
+                    {customers.map((cust) => (
+                      <option key={cust.id} value={cust.id}>
+                        {cust.display_name} {cust.billing_city ? `(${cust.billing_city})` : ''} {cust.billing_state ? `- ${cust.billing_state}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">To Site *</label>
+                  <select
+                    name="to_site_id"
+                    className="form-select"
+                    value={formData.to_site_id || ''}
+                    onChange={handleChange}
+                    required
+                  >
+                    <option value="">Select destination site...</option>
+                    {customers.map((cust) => (
+                      <option key={cust.id} value={cust.id}>
+                        {cust.display_name} {cust.billing_city ? `(${cust.billing_city})` : ''} {cust.billing_state ? `- ${cust.billing_state}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
             ) : null}
 
             {selectedEquipmentList.some(eq => eq.is_quantity_tracked) && (

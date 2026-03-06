@@ -168,6 +168,20 @@ router.post('/', photoUpload.single('photo'), async (req, res, next) => {
             movementCustomerId = null;
         }
 
+        // Handle TRANSFER action
+        if (action.toUpperCase() === 'TRANSFER') {
+            // Validate both sites
+            const { from_site_id, to_site_id } = req.body;
+            if (!from_site_id || !to_site_id) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ error: { message: 'Both From Site and To Site are required for transfer.' } });
+            }
+            // Compose transfer notes
+            movementNotes = `Transfer from Site ID: ${from_site_id} to Site ID: ${to_site_id}${notes ? ' | ' + notes : ''}`;
+            movementLocationId = null;
+            movementCustomerId = to_site_id;
+        }
+
         await client.query('BEGIN');
         
         // Get equipment details to check state
@@ -287,7 +301,7 @@ router.post('/', photoUpload.single('photo'), async (req, res, next) => {
             RETURNING *
         `, [
             equipment_id,
-            action.toUpperCase(),
+            upperAction,
             quantity,
             movementLocationId,
             movementCustomerId,
