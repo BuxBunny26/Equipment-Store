@@ -1,168 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { auditApi } from '../services/api';
-import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
-import { Icons } from '../components/Icons';
-
 function AuditLog() {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [logs, setLogs] = useState([]);
-  const [total, setTotal] = useState(0);
-  const [summary, setSummary] = useState({
-    by_action: [],
-    by_table: [],
-    by_user: [],
-    daily_activity: []
-  });
-  
-  const [filters, setFilters] = useState({
-    table_name: '',
-    action: '',
-    from_date: '',
-    to_date: '',
-    limit: 50,
-    offset: 0,
-  });
-    // UI: Filter controls
-    const renderFilters = () => (
-      <div className="audit-filters" style={{ display: 'flex', gap: '16px', marginBottom: '16px', flexWrap: 'wrap' }}>
-        <select
-          name="table_name"
-          value={filters.table_name}
-          onChange={e => setFilters(f => ({ ...f, table_name: e.target.value }))}
-          aria-label="Filter by table"
-        >
-          <option value="">All Tables</option>
-          <option value="equipment">Equipment</option>
-          <option value="equipment_movements">Movements</option>
-          <option value="calibration_records">Calibration</option>
-          <option value="maintenance_log">Maintenance</option>
-          <option value="reservations">Reservations</option>
-          <option value="categories">Categories</option>
-          <option value="subcategories">Subcategories</option>
-          <option value="locations">Locations</option>
-          <option value="personnel">Personnel</option>
-          <option value="customers">Customers</option>
-          <option value="users">Users</option>
-        </select>
-        <select
-          name="action"
-          value={filters.action}
-          onChange={e => setFilters(f => ({ ...f, action: e.target.value }))}
-          aria-label="Filter by action"
-        >
-          <option value="">All Actions</option>
-          <option value="INSERT">Insert</option>
-          <option value="UPDATE">Update</option>
-          <option value="DELETE">Delete</option>
-        </select>
-        <input
-          type="date"
-          name="from_date"
-          value={filters.from_date}
-          onChange={e => setFilters(f => ({ ...f, from_date: e.target.value }))}
-          aria-label="From date"
-        />
-        <input
-          type="date"
-          name="to_date"
-          value={filters.to_date}
-          onChange={e => setFilters(f => ({ ...f, to_date: e.target.value }))}
-          aria-label="To date"
-        />
-        <button className="btn btn-secondary" onClick={() => setFilters(f => ({ ...f, offset: 0 }))}>
-          Apply Filters
-        </button>
-      </div>
-    );
-  
-  const [selectedLog, setSelectedLog] = useState(null);
-
-  const fetchLogs = useCallback(async () => {
-    try {
-      setLoading(true);
-      const response = await auditApi.getAll(filters);
-      setLogs(response.data.items || []);
-      setTotal(response.data.total || 0);
-      setError(null);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [filters]);
-
-  const fetchSummary = async () => {
-    try {
-      const response = await auditApi.getSummary(30);
-      setSummary(response.data);
-    } catch (err) {
-      console.error('Error fetching summary:', err);
-    }
-  };
-
-  useEffect(() => {
-    fetchSummary();
-  }, []);
-
-  useEffect(() => {
-    fetchLogs();
-  }, [fetchLogs]);
-
-  const formatDate = (dateString) => {
-    if (!dateString) return '-';
-    return new Date(dateString).toLocaleString('en-AU', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const getActionBadge = (action) => {
-    const badges = {
-      INSERT: 'badge-available',
-      UPDATE: 'badge-consumable',
-      DELETE: 'badge-danger',
-    };
-    return badges[action] || 'badge';
-  };
-
-  const handleExport = (format = 'excel') => {
-    exportData(format, logs, EXPORT_COLUMNS.auditLog, 'audit_log', 'Audit Log');
-  };
-
-  const handleNextPage = () => {
-    setFilters(prev => ({ ...prev, offset: prev.offset + prev.limit }));
-  };
-
-  const handlePrevPage = () => {
-    setFilters(prev => ({ ...prev, offset: Math.max(0, prev.offset - prev.limit) }));
-  };
-
-  const formatChanges = (oldValues, newValues, changedFields) => {
-    if (!changedFields || !changedFields.length) return null;
-    
-    return changedFields.map(field => {
-      const oldVal = oldValues?.[field];
-      const newVal = newValues?.[field];
-      return (
-        <div key={field} style={{ marginBottom: '0.5rem' }}>
-          <strong>{field}:</strong>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <span style={{ color: 'var(--danger)', textDecoration: 'line-through' }}>
-              {oldVal !== undefined ? JSON.stringify(oldVal) : '(empty)'}
-            </span>
-            <span>→</span>
-            <span style={{ color: 'var(--success)' }}>
-              {newVal !== undefined ? JSON.stringify(newVal) : '(empty)'}
-            </span>
-          </div>
-        </div>
-      );
-    });
-  };
+  // ...existing hooks and helper functions...
 
   if (loading && logs.length === 0) {
     return (
@@ -172,44 +9,8 @@ function AuditLog() {
       </div>
     );
   }
-
   return (
-    <div className="page">
-      <div className="page-header">
-        <div>
-          <h1>Audit Log</h1>
-          <p className="subtitle">Track all changes made to the system</p>
-        </div>
-        <div style={{ display: 'flex', gap: '6px' }}>
-          <button className="btn btn-secondary" onClick={() => handleExport('csv')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Icons.Download size={16} /> CSV
-          </button>
-          <button className="btn btn-secondary" onClick={() => handleExport('excel')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Icons.Download size={16} /> Excel
-          </button>
-          <button className="btn btn-secondary" onClick={() => handleExport('pdf')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Icons.Download size={16} /> PDF
-          </button>
-        </div>
-      </div>
-
-      {error && (
-        <div className="alert alert-error" style={{ marginBottom: '1rem' }}>
-          {error}
-          <button className="btn btn-sm" onClick={() => setError(null)}>×</button>
-        </div>
-      )}
-
-      {/* Summary Cards */}
-      <div className="dashboard-grid" style={{ marginBottom: '1.5rem' }}>
-        {summary.by_action.map(item => (
-          <div className="stat-card" key={item.action}>
-            <div className="stat-value">{item.count}</div>
-            <div className="stat-label">{item.action} (30 days)</div>
-          </div>
-        ))}
-      </div>
-
+    <>
       {/* Activity Summary */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
         <div className="card">
@@ -323,17 +124,16 @@ function AuditLog() {
 
         <table className="table">
           <thead>
-            <div>
-              <div className="page-header">
-                <h1 className="page-title">Audit Log</h1>
-                <button className="btn btn-secondary" onClick={() => handleExport('excel')}>
-                  <Icons.Download size={16} /> Export
-                </button>
-              </div>
-              {renderFilters()}
-              {error && <div className="alert alert-error">{error}</div>}
-              {/* ...existing code... */}
-            </div>
+            <tr>
+              <th>Date/Time</th>
+              <th>User</th>
+              <th>Action</th>
+              <th>Table</th>
+              <th>Record ID</th>
+              <th>Changed Fields</th>
+              <th>Details</th>
+            </tr>
+          </thead>
           <tbody>
             {logs.length === 0 ? (
               <tr>
@@ -355,10 +155,10 @@ function AuditLog() {
                   <td>{log.record_id}</td>
                   <td>
                     {log.changed_fields && log.changed_fields.length > 0 ? (
-                      <div style={{ fontSize: '0.85rem' }}>
+                      <span style={{ fontSize: '0.85rem' }}>
                         {log.changed_fields.slice(0, 3).join(', ')}
                         {log.changed_fields.length > 3 && ` +${log.changed_fields.length - 3} more`}
-                      </div>
+                      </span>
                     ) : (
                       <span style={{ color: 'var(--text-secondary)' }}>-</span>
                     )}
@@ -470,8 +270,7 @@ function AuditLog() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
-
 export default AuditLog;
