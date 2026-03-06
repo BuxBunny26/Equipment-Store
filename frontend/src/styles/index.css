@@ -115,7 +115,21 @@
 }
 
 [data-theme="dark"] .modal-content {
-  background: #1e1e1e;
+  background: #232323;
+  color: #e0e0e0;
+}
+
+[data-theme="dark"] .modal-header {
+  background: #232323;
+  color: #e0e0e0;
+}
+
+[data-theme="dark"] .equipment-info {
+  background: #181818 !important;
+  color: #e0e0e0 !important;
+  border-radius: 6px;
+  border: 1px solid #333;
+}
 }
 
 [data-theme="dark"] .modal-header {
