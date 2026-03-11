@@ -25,6 +25,7 @@ function CheckOut() {
   const [customers, setCustomers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -227,7 +228,12 @@ function CheckOut() {
     setPhotoPreview(null);
   };
 
+  // Get unique categories from available equipment
+  const categories = [...new Set(availableEquipment.map(eq => eq.category).filter(Boolean))].sort();
+
   const filteredEquipment = availableEquipment.filter((eq) => {
+    // Filter by selected category/technology first
+    if (selectedCategory && eq.category !== selectedCategory) return false;
     if (!debouncedSearchTerm) return true;
     const term = debouncedSearchTerm.toLowerCase();
     return (
@@ -287,6 +293,20 @@ function CheckOut() {
             <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
               {filteredEquipment.length} available
             </span>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Technology *</label>
+            <select
+              className="form-select"
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+            >
+              <option value="">All Technologies</option>
+              {categories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
           </div>
 
           <div className="form-group">
