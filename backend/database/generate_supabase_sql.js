@@ -48,7 +48,7 @@ function parseTSV(content) {
 function parseCSV(content, delimiter = ';') {
     const lines = content.split('\n').filter(line => line.trim());
     if (lines.length === 0) return [];
-    let headerLine = lines[0];
+    let headerLine = lines[0].replace(/^\uFEFF/, '');
     if (headerLine.startsWith('v')) headerLine = headerLine.substring(1);
     const headers = headerLine.split(delimiter).map(h => h.trim());
     const rows = [];
@@ -530,7 +530,7 @@ for (const row of calibration) {
 
     sql += `    INSERT INTO equipment (equipment_id, equipment_name, manufacturer, serial_number, category_id, subcategory_id, status)\n`;
     sql += `    VALUES (${escSql(equipmentId)}, ${escSql(equipmentName)}, ${escSql(manufacturer)}, ${escSql(serialNumber)}, v_category_id, v_subcategory_id, 'Available')\n`;
-    sql += `    ON CONFLICT (equipment_id) DO UPDATE SET equipment_name = EXCLUDED.equipment_name, manufacturer = EXCLUDED.manufacturer, serial_number = EXCLUDED.serial_number\n`;
+    sql += `    ON CONFLICT (equipment_id) DO UPDATE SET equipment_name = EXCLUDED.equipment_name, manufacturer = EXCLUDED.manufacturer, serial_number = EXCLUDED.serial_number, category_id = EXCLUDED.category_id, subcategory_id = EXCLUDED.subcategory_id\n`;
     sql += `    RETURNING id INTO v_equipment_db_id;\n\n`;
 
     sql += `    INSERT INTO calibration_records (equipment_id, serial_number, calibration_date, expiry_date, certificate_number, calibration_status, calibration_provider, notes)\n`;

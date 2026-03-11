@@ -77,7 +77,7 @@ function parseCSV(content, delimiter = ';') {
     if (lines.length === 0) return [];
     
     // Remove 'v' prefix from first header if present
-    let headerLine = lines[0];
+    let headerLine = lines[0].replace(/^\uFEFF/, '');
     if (headerLine.startsWith('v')) {
         headerLine = headerLine.substring(1);
     }
@@ -316,10 +316,10 @@ async function importCalibration() {
             await pool.query(`
                 INSERT INTO calibration_records (
                     equipment_id, serial_number, calibration_date, expiry_date,
-                    certificate_number, notes
+                    certificate_number, calibration_status, notes
                 )
-                VALUES ($1, $2, $3, $4, $5, $6)
-            `, [equipmentDbId, serialNumber, calibrationDate, expiryDate, certificate, notes]);
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+            `, [equipmentDbId, serialNumber, calibrationDate, expiryDate, certificate, calibrationStatus, notes]);
             
             calibrationImported++;
         } catch (err) {
