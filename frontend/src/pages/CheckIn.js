@@ -20,6 +20,15 @@ function CheckIn() {
   const [checkedOutEquipment, setCheckedOutEquipment] = useState([]);
   const [locations, setLocations] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
 
   const [formData, setFormData] = useState({
     equipment_id: preselectedEquipmentId || '',
@@ -126,9 +135,13 @@ function CheckIn() {
     setPhotoPreview(null);
   };
 
+  // Get unique categories from checked out equipment
+  const categories = [...new Set((Array.isArray(checkedOutEquipment) ? checkedOutEquipment : []).map(eq => eq.category).filter(Boolean))].sort();
+
   const filteredEquipment = Array.isArray(checkedOutEquipment) ? checkedOutEquipment.filter((eq) => {
-    if (!searchTerm) return true;
-    const term = searchTerm.toLowerCase();
+    if (selectedCategory && eq.category !== selectedCategory) return false;
+    if (!debouncedSearchTerm) return true;
+    const term = debouncedSearchTerm.toLowerCase();
     return (
       eq.equipment_id.toLowerCase().includes(term) ||
       eq.equipment_name.toLowerCase().includes(term) ||
@@ -201,6 +214,20 @@ function CheckIn() {
           </div>
 
           <div className="form-group">
+            <label className="form-label">Technology</label>
+            <select
+              className="form-select"
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+            >
+              <option value="">All Technologies</option>
+              {categories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group">
             <input
               type="text"
               className="form-input"
@@ -248,6 +275,20 @@ function CheckIn() {
                       ) : (
                         <span className="badge badge-checked-out">Checked Out</span>
                       )}
+                      <span 
+                        className={`badge ${
+                          eq.calibration_status === 'Valid' ? 'badge-available' :
+                          eq.calibration_status === 'Due Soon' ? 'badge-consumable' :
+                          eq.calibration_status === 'Expired' ? 'badge-overdue' :
+                          'badge-checked-out'
+                        }`}
+                        style={{ display: 'block', marginTop: '4px' }}
+                      >
+                        {eq.calibration_status === 'Valid' ? <><Icons.Check size={12} /> Calibrated</> :
+                         eq.calibration_status === 'Due Soon' ? <><Icons.Clock size={12} /> Cal Due Soon</> :
+                         eq.calibration_status === 'Expired' ? <><Icons.Warning size={12} /> Cal Expired</> :
+                         <><Icons.Minus size={12} /> Not Calibrated</>}
+                      </span>
                       <p style={{ fontSize: '0.75rem', marginTop: '4px' }}>
                         {eq.days_out} days out
                       </p>

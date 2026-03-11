@@ -80,6 +80,16 @@ function CheckOut() {
     }
   }, [preselectedEquipmentId]);
 
+  // Default personnel to current operator
+  useEffect(() => {
+    if (operator && personnel.length > 0 && !formData.personnel_id) {
+      const match = personnel.find(p => p.employee_id === operator.employee_id);
+      if (match) {
+        setFormData(prev => ({ ...prev, personnel_id: match.id.toString() }));
+      }
+    }
+  }, [operator, personnel]);
+
   const toggleEquipmentSelection = (equipmentId) => {
     const idStr = equipmentId.toString();
     setSelectedEquipmentIds(prev => {
