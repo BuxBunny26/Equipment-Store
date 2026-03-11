@@ -290,24 +290,6 @@ function CheckOut() {
           </div>
 
           <div className="form-group">
-                        <div className="form-group">
-                          <label className="form-label" htmlFor="condition-select">Condition *</label>
-                          <span className="form-help" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{conditionHelp}</span>
-                          <select
-                            id="condition-select"
-                            name="condition"
-                            className="form-select"
-                            value={formData.condition || ''}
-                            onChange={handleChange}
-                            required
-                            aria-label="Select equipment condition"
-                          >
-                            <option value="">Select condition...</option>
-                            <option value="Excellent">Excellent</option>
-                            <option value="Good">Good</option>
-                            <option value="Poor">Poor</option>
-                          </select>
-                        </div>
             <input
               type="text"
               className="form-input"
@@ -462,28 +444,6 @@ function CheckOut() {
               </select>
             </div>
 
-            {/* Dynamic Reason Field */}
-            {shouldShowReason() && (
-              <div className="form-group">
-                <label className="form-label" htmlFor="reason-input">Reason *</label>
-                <input
-                  id="reason-input"
-                  type="text"
-                  name="reason"
-                  className="form-input"
-                  value={formData.reason}
-                  onChange={handleChange}
-                  required
-                  placeholder="Please provide a reason for this condition"
-                  aria-describedby="reason-help"
-                  aria-label="Reason for condition"
-                />
-                <span id="reason-help" className="form-help" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  Reason is mandatory for non-Excellent or worsened conditions.
-                </span>
-              </div>
-            )}
-
             <div className="form-group">
               <label className="form-label">Destination Type *</label>
               <div className="radio-group">
@@ -634,6 +594,42 @@ function CheckOut() {
                   min="1"
                   max={selectedEquipmentList.find(eq => eq.is_quantity_tracked)?.available_quantity}
                   required
+                />
+              </div>
+            )}
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="condition-select">Condition *</label>
+              <span className="form-help" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{conditionHelp}</span>
+              <select
+                id="condition-select"
+                name="condition"
+                className="form-select"
+                value={formData.condition || ''}
+                onChange={handleChange}
+                required
+                aria-label="Select equipment condition"
+              >
+                <option value="">Select condition...</option>
+                <option value="Excellent">Excellent</option>
+                <option value="Good">Good</option>
+                <option value="Poor">Poor</option>
+              </select>
+            </div>
+
+            {shouldShowReason() && (
+              <div className="form-group">
+                <label className="form-label" htmlFor="reason-input">Reason *</label>
+                <input
+                  id="reason-input"
+                  type="text"
+                  name="reason"
+                  className="form-input"
+                  value={formData.reason}
+                  onChange={handleChange}
+                  required
+                  placeholder="Please provide a reason for this condition"
+                  aria-label="Reason for condition"
                 />
               </div>
             )}
