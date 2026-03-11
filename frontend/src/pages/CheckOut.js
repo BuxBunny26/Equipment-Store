@@ -379,22 +379,20 @@ function CheckOut() {
                       ) : (
                         <span className="badge badge-available">Available</span>
                       )}
-                      {eq.requires_calibration && eq.calibration_status && (
-                        <span 
-                          className={`badge ${
-                            eq.calibration_status === 'Valid' ? 'badge-available' :
-                            eq.calibration_status === 'Due Soon' ? 'badge-consumable' :
-                            eq.calibration_status === 'Expired' ? 'badge-overdue' :
-                            'badge-checked-out'
-                          }`}
-                          style={{ marginLeft: '4px', display: 'block', marginTop: '4px' }}
-                        >
-                          {eq.calibration_status === 'Valid' ? <><Icons.Check size={12} /> Calibrated</> :
-                           eq.calibration_status === 'Due Soon' ? <><Icons.Clock size={12} /> Cal Due Soon</> :
-                           eq.calibration_status === 'Expired' ? <><Icons.Warning size={12} /> Cal Expired</> :
-                           <><Icons.Minus size={12} /> Not Calibrated</>}
-                        </span>
-                      )}
+                      <span 
+                        className={`badge ${
+                          eq.calibration_status === 'Valid' ? 'badge-available' :
+                          eq.calibration_status === 'Due Soon' ? 'badge-consumable' :
+                          eq.calibration_status === 'Expired' ? 'badge-overdue' :
+                          'badge-checked-out'
+                        }`}
+                        style={{ display: 'block', marginTop: '4px' }}
+                      >
+                        {eq.calibration_status === 'Valid' ? <><Icons.Check size={12} /> Calibrated</> :
+                         eq.calibration_status === 'Due Soon' ? <><Icons.Clock size={12} /> Cal Due Soon</> :
+                         eq.calibration_status === 'Expired' ? <><Icons.Warning size={12} /> Cal Expired</> :
+                         <><Icons.Minus size={12} /> Not Calibrated</>}
+                      </span>
                       {!eq.is_checkout_allowed && (
                         <span className="badge badge-overdue" style={{ marginLeft: '4px' }}>
                           No Checkout
