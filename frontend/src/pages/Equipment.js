@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { equipmentApi, categoriesApi, locationsApi, subcategoriesApi } from '../services/api';
+import { equipmentApi, categoriesApi, calibrationApi, locationsApi, subcategoriesApi } from '../services/api';
 import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
 import { Icons } from '../components/Icons';
 
@@ -43,10 +43,35 @@ function Equipment() {
       if (filters.category_id) params.category_id = filters.category_id;
       if (filters.is_consumable !== '') params.is_consumable = filters.is_consumable;
       if (filters.search) params.search = filters.search;
-      if (filters.calibration_status) params.calibration_status = filters.calibration_status;
 
-      const response = await equipmentApi.getAll(params);
-      setEquipment(response.data);
+      const [eqRes, calRes] = await Promise.all([
+        equipmentApi.getAll(params),
+        calibrationApi.getStatus()
+      ]);
+
+      // Build a map of equipment_id -> latest calibration_status
+      const calMap = {};
+      (calRes.data || []).forEach(r => {
+        calMap[r.equipment_id] = r.calibration_status;
+      });
+
+      let items = eqRes.data.map(e => ({
+        ...e,
+        calibration_status: calMap[e.id] || 'N/A',
+      }));
+
+      // Apply calibration filter client-side
+      if (filters.calibration_status) {
+        if (filters.calibration_status === 'Not Calibrated') {
+          items = items.filter(e => e.calibration_status === 'N/A');
+        } else if (filters.calibration_status === 'Calibrated') {
+          items = items.filter(e => e.calibration_status === 'Valid');
+        } else {
+          items = items.filter(e => e.calibration_status === filters.calibration_status);
+        }
+      }
+
+      setEquipment(items);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -84,7 +109,7 @@ function Equipment() {
     if (item.calibration_status === 'Due Soon') {
       return <span className="badge" style={{ background: '#f59e0b' }}>Due Soon</span>;
     }
-    return <span className="badge" style={{ background: '#10b981' }}>Valid</span>;
+    return <span className="badge" style={{ background: '#10b981' }}>Calibrated</span>;
   };
 
   return (
