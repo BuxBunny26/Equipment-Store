@@ -41,7 +41,7 @@ function UserManagement() {
       if (filters.search) params.search = filters.search;
       
       const response = await usersApi.getAll(params);
-      setUsers(Array.isArray(response?.data) ? response.data : []);
+      setUsers(response.data);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -56,8 +56,8 @@ function UserManagement() {
         usersApi.getRoles(),
         personnelApi.getAll(true),
       ]);
-      setRoles(Array.isArray(rolesRes?.data) ? rolesRes.data : []);
-      setPersonnel(Array.isArray(personnelRes?.data) ? personnelRes.data : []);
+      setRoles(rolesRes.data);
+      setPersonnel(personnelRes.data);
     } catch (err) {
       console.error('Error fetching data:', err);
     }
@@ -168,7 +168,6 @@ function UserManagement() {
   };
 
   const selectAllPersonnel = () => {
-    if (!Array.isArray(personnel) || !Array.isArray(users)) return;
     const unlinkedPersonnel = personnel.filter(p => 
       !users.some(u => u.personnel_id === p.id)
     );
@@ -231,8 +230,8 @@ function UserManagement() {
 
       {/* Role Summary */}
       <div className="dashboard-grid" style={{ marginBottom: '1.5rem' }}>
-        {Array.isArray(roles) && roles.map(role => {
-          const count = Array.isArray(users) ? users.filter(u => u.role_id === role.id).length : 0;
+        {roles.map(role => {
+          const count = users.filter(u => u.role_id === role.id).length;
           return (
             <div className="stat-card" key={role.id}>
               <div className="stat-value">{count}</div>
@@ -296,7 +295,7 @@ function UserManagement() {
             <tr>
               <th>User</th>
               <th>Role</th>
-              <th>Department</th>
+              <th>Site</th>
               <th>Personnel Link</th>
               <th>Last Login</th>
               <th>Status</th>
@@ -334,9 +333,14 @@ function UserManagement() {
                   </td>
                   <td style={{ fontSize: '0.85rem' }}>{formatDate(user.last_login)}</td>
                   <td>
-                    <span className={`badge ${user.is_active ? 'badge-available' : 'badge'}`}>
+                    <button
+                      className={`badge ${user.is_active ? 'badge-available' : 'badge'}`}
+                      onClick={() => handleToggleActive(user.id, user.is_active)}
+                      style={{ cursor: 'pointer', border: 'none', padding: '4px 10px' }}
+                      title={user.is_active ? 'Click to deactivate' : 'Click to activate'}
+                    >
                       {user.is_active ? 'Active' : 'Inactive'}
-                    </span>
+                    </button>
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -459,7 +463,7 @@ function UserManagement() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Department</label>
+                    <label className="form-label">Site</label>
                     <input
                       type="text"
                       className="form-input"
@@ -519,7 +523,7 @@ function UserManagement() {
               
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                 <span style={{ fontWeight: 500 }}>
-                  {selectedPersonnel.length} of {Array.isArray(personnel) && Array.isArray(users) ? personnel.filter(p => !users.some(u => u.personnel_id === p.id)).length : 0} personnel selected
+                  {selectedPersonnel.length} of {personnel.filter(p => !users.some(u => u.personnel_id === p.id)).length} personnel selected
                 </span>
                 <button className="btn btn-sm btn-secondary" onClick={selectAllPersonnel}>
                   Select All Unlinked
