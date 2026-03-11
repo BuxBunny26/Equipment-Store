@@ -8,6 +8,7 @@ import { ThemeProvider } from './context/ThemeContext';
 
 // Components
 import OperatorSelector from './components/OperatorSelector';
+import OperatorModal from './components/OperatorModal';
 
 // Pages
 import Dashboard from './pages/Dashboard';
@@ -139,6 +140,7 @@ const Icons = {
 // Wrapper component to handle mobile menu with location
 function AppContent() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showOperatorModal, setShowOperatorModal] = useState(true);
   const location = useLocation();
 
   // Close mobile menu on route change
@@ -171,6 +173,11 @@ function AppContent() {
 
   return (
     <div className="app-container">
+      {/* Operator Selection Modal */}
+      {showOperatorModal && (
+        <OperatorModal onClose={() => setShowOperatorModal(false)} />
+      )}
+
       {/* Mobile Header */}
       <header className="mobile-header">
         <button 

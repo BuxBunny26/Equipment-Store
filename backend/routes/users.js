@@ -72,19 +72,26 @@ router.get('/', async (req, res) => {
 });
 
 // Get single user
-router.get('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const result = await pool.query(`
-      SELECT 
-        u.*,
-        r.name AS role_name,
-        r.permissions,
-        p.employee_id,
-        p.full_name AS personnel_name
-      FROM users u
-      JOIN roles r ON u.role_id = r.id
+const { param } = require('express-validator');
+router.delete(
+  '/:id',
+  auth,
+  [param('id').isInt().withMessage('User ID must be integer')],
+  validate,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING *', [id]);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      res.json({ message: 'User deleted', user: result.rows[0] });
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
       LEFT JOIN personnel p ON u.personnel_id = p.id
       WHERE u.id = $1
     `, [id]);
@@ -150,27 +157,62 @@ router.put('/:id', async (req, res) => {
       UPDATE users 
       SET username = $1, email = $2, full_name = $3, role_id = $4, 
           personnel_id = $5, is_active = $6, phone = $7, department = $8,
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = $9
-      RETURNING *
-    `, [username, email, full_name, role_id, personnel_id || null, is_active, phone || null, department || null, id]);
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Error updating user:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+    const { body } = require('express-validator');
+    const validate = require('../middleware/validate');
+    const auth = require('../middleware/auth');
 
-// Update user role
+    router.post(
+      '/',
+      auth,
+      [
+        body('username').isString().notEmpty().withMessage('Username required'),
+        body('email').isEmail().withMessage('Valid email required'),
+        body('full_name').isString().notEmpty().withMessage('Full name required'),
+        body('role_id').optional().isInt(),
+        body('personnel_id').optional().isInt(),
+        body('is_active').optional().isBoolean(),
+        body('phone').optional().isString(),
+        body('department').optional().isString()
+      ],
+      validate,
+      async (req, res) => {
+        try {
+          const { username, email, full_name, role_id, personnel_id, is_active, phone, department } = req.body;
+        const existing = await pool.query(`
+          SELECT id FROM users WHERE (username = $1 OR email = $2) AND id != $3
+        `, [username, email, id]);
+        if (existing.rows.length > 0) {
+          return res.status(400).json({ error: 'Username or email already exists' });
+        }
+        const result = await pool.query(`
+          UPDATE users 
+          SET username = $1, email = $2, full_name = $3, role_id = $4, 
+              personnel_id = $5, is_active = $6, phone = $7, department = $8,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = $9
+          RETURNING *
+        `, [username, email, full_name, role_id, personnel_id || null, is_active, phone || null, department || null, id]);
+        if (result.rows.length === 0) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+        res.json(result.rows[0]);
+    );
 router.patch('/:id/role', async (req, res) => {
   try {
     const { id } = req.params;
     const { role_id } = req.body;
+      auth,
+      [
+        body('username').isString().notEmpty().withMessage('Username required'),
+        body('email').isEmail().withMessage('Valid email required'),
+        body('full_name').isString().notEmpty().withMessage('Full name required'),
+        body('role_id').optional().isInt(),
+        body('personnel_id').optional().isInt(),
+        body('is_active').optional().isBoolean(),
+        body('phone').optional().isString(),
+        body('department').optional().isString()
+      ],
+      validate,
     
     const result = await pool.query(`
       UPDATE users 
@@ -233,68 +275,75 @@ router.delete('/:id', async (req, res) => {
 });
 
 // Bulk create users from personnel
-router.post('/bulk-import', async (req, res) => {
-  try {
-    const { personnel_ids, role_id } = req.body;
-    
-    if (!personnel_ids || !Array.isArray(personnel_ids) || personnel_ids.length === 0) {
-      return res.status(400).json({ error: 'No personnel selected' });
-    }
-    
-    // Get personnel details
-    const personnelResult = await pool.query(`
-      SELECT id, full_name, email, employee_id
-      FROM personnel
-      WHERE id = ANY($1)
-    `, [personnel_ids]);
-    
-    // Get existing users linked to these personnel
-    const existingResult = await pool.query(`
-      SELECT personnel_id FROM users WHERE personnel_id = ANY($1)
-    `, [personnel_ids]);
-    
-    const existingPersonnelIds = new Set(existingResult.rows.map(r => r.personnel_id));
-    
-    const created = [];
-    const skipped = [];
-    
-    for (const person of personnelResult.rows) {
-      if (existingPersonnelIds.has(person.id)) {
-        skipped.push({ id: person.id, name: person.full_name, reason: 'Already linked to a user' });
-        continue;
+const { body } = require('express-validator');
+const auth = require('../middleware/auth');
+const validate = require('../middleware/validate');
+
+router.post(
+  '/bulk-import',
+  auth,
+  [
+    body('personnel_ids').isArray({ min: 1 }).withMessage('Personnel IDs must be a non-empty array'),
+    body('role_id').optional().isInt().withMessage('Role ID must be integer')
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const { personnel_ids, role_id } = req.body;
+
+      // Get personnel details
+      const personnelResult = await pool.query(
+        `SELECT id, full_name, email, employee_id FROM personnel WHERE id = ANY($1)`,
+        [personnel_ids]
+      );
+
+      // Get existing users linked to these personnel
+      const existingResult = await pool.query(
+        `SELECT personnel_id FROM users WHERE personnel_id = ANY($1)`,
+        [personnel_ids]
+      );
+
+      const existingPersonnelIds = new Set(existingResult.rows.map(r => r.personnel_id));
+      const created = [];
+      const skipped = [];
+
+      for (const person of personnelResult.rows) {
+        if (existingPersonnelIds.has(person.id)) {
+          skipped.push({ id: person.id, name: person.full_name, reason: 'Already linked to a user' });
+          continue;
+        }
+
+        // Generate username from employee_id or name
+        const username = person.employee_id || person.full_name.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z.]/g, '');
+
+        // Check if username already exists
+        const usernameCheck = await pool.query('SELECT id FROM users WHERE username = $1', [username]);
+        if (usernameCheck.rows.length > 0) {
+          skipped.push({ id: person.id, name: person.full_name, reason: 'Username already exists' });
+          continue;
+        }
+
+        // Create user
+        const result = await pool.query(
+          `INSERT INTO users (username, email, full_name, role_id, personnel_id, is_active)
+           VALUES ($1, $2, $3, $4, $5, true)
+           RETURNING *`,
+          [username, person.email, person.full_name, role_id || 3, person.id]
+        );
+        created.push(result.rows[0]);
       }
-      
-      // Generate username from employee_id or name
-      const username = person.employee_id || 
-        person.full_name.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z.]/g, '');
-      
-      // Check if username already exists
-      const usernameCheck = await pool.query('SELECT id FROM users WHERE username = $1', [username]);
-      if (usernameCheck.rows.length > 0) {
-        skipped.push({ id: person.id, name: person.full_name, reason: 'Username already exists' });
-        continue;
-      }
-      
-      // Create user
-      const result = await pool.query(`
-        INSERT INTO users (username, email, full_name, role_id, personnel_id, is_active)
-        VALUES ($1, $2, $3, $4, $5, true)
-        RETURNING *
-      `, [username, person.email, person.full_name, role_id || 3, person.id]);
-      
-      created.push(result.rows[0]);
+
+      res.status(201).json({
+        message: `Created ${created.length} users, skipped ${skipped.length}`,
+        created,
+        skipped
+      });
+    } catch (error) {
+      console.error('Error bulk importing users:', error);
+      res.status(500).json({ error: error.message });
     }
-    
-    res.status(201).json({ 
-      message: `Created ${created.length} users, skipped ${skipped.length}`,
-      created,
-      skipped
-    });
-  } catch (error) {
-    console.error('Error bulk importing users:', error);
-    res.status(500).json({ error: error.message });
   }
-});
+);
 
 // Check permissions
 router.get('/:id/permissions', async (req, res) => {

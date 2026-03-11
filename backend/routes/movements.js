@@ -164,8 +164,37 @@ router.post('/', photoUpload.single('photo'), async (req, res, next) => {
             await client.query('ROLLBACK');
             return res.status(400).json({ error: { message: 'Condition is required and must be Excellent, Good, or Poor.' } });
         }
-        // Add condition to movement notes
-        notes = `[Condition: ${condition}]${notes ? ' | ' + notes : ''}`;
+        // Reason logic for condition
+        const { reason } = req.body;
+        let requireReason = false;
+        if (condition !== 'Excellent') {
+            // Get last OUT movement for this equipment
+            const lastMovementRes = await pool.query(
+                `SELECT notes FROM equipment_movements WHERE equipment_id = $1 AND action = 'OUT' ORDER BY created_at DESC LIMIT 1`,
+                [equipment_id]
+            );
+            let lastCondition = 'Excellent';
+            let lastReason = '';
+            if (lastMovementRes.rows.length > 0) {
+                const lastNotes = lastMovementRes.rows[0].notes || '';
+                const condMatch = lastNotes.match(/\[Condition: (Excellent|Good|Poor)\]/);
+                if (condMatch) lastCondition = condMatch[1];
+                const reasonMatch = lastNotes.match(/Reason: ([^|]+)/);
+                if (reasonMatch) lastReason = reasonMatch[1].trim();
+            }
+            // Require reason if no previous reason or condition worsened
+            if (!lastReason || (lastCondition !== condition && ['Excellent','Good','Poor'].indexOf(condition) > ['Excellent','Good','Poor'].indexOf(lastCondition))) {
+                requireReason = true;
+            }
+            if (requireReason && !reason) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ error: { message: 'Reason is required for non-Excellent condition or if condition worsened.' } });
+            }
+        }
+        // Add condition and reason to movement notes
+        let movementNotes = `[Condition: ${condition}]`;
+        if (condition !== 'Excellent') movementNotes += ` | Reason: ${reason || ''}`;
+        if (notes) movementNotes += ` | ${notes}`;
 
         // Handle TRANSFER action
         if (action.toUpperCase() === 'TRANSFER') {
@@ -351,100 +380,117 @@ router.post('/', photoUpload.single('photo'), async (req, res, next) => {
 });
 
 // POST quick handover (IN then OUT as atomic transaction)
-router.post('/handover', async (req, res, next) => {
-    const client = await pool.connect();
-    
-    try {
-        const {
-            equipment_id,
-            return_location_id,
-            new_personnel_id,
-            new_location_id,
-            notes,
-            created_by
-        } = req.body;
-        
-        // Validations
-        if (!equipment_id) {
-            return res.status(400).json({ error: { message: 'Equipment ID is required' } });
-        }
-        if (!return_location_id) {
-            return res.status(400).json({ error: { message: 'Return location is required' } });
-        }
-        if (!new_personnel_id) {
-            return res.status(400).json({ error: { message: 'New holder (personnel) is required' } });
-        }
-        if (!new_location_id) {
-            return res.status(400).json({ error: { message: 'New location is required' } });
-        }
-        
-        await client.query('BEGIN');
-        
-        // Check equipment is currently checked out
-        const equipmentResult = await client.query(`
-            SELECT e.*, c.is_consumable
-            FROM equipment e
-            JOIN categories c ON e.category_id = c.id
-            WHERE e.id = $1
-            FOR UPDATE
-        `, [equipment_id]);
-        
-        if (equipmentResult.rows.length === 0) {
+const { body } = require('express-validator');
+const validate = require('../middleware/validate');
+const auth = require('../middleware/auth');
+
+router.post(
+    '/',
+    auth,
+    [
+        body('equipment_id').isInt().withMessage('equipment_id must be integer'),
+        body('action').isString().isIn(['OUT', 'IN', 'ISSUE', 'RESTOCK', 'TRANSFER']).withMessage('Invalid action'),
+        body('quantity').isInt({ min: 1 }).withMessage('quantity must be positive integer'),
+        body('personnel_id').isInt().withMessage('personnel_id must be integer'),
+        body('notes').optional().isString(),
+        body('location_id').optional().isInt(),
+        body('customer_id').optional().isInt(),
+        body('created_by').optional().isString(),
+        body('condition').isString().isIn(['Excellent', 'Good', 'Poor']).withMessage('Invalid condition'),
+        body('reason').optional().isString()
+    ],
+    validate,
+    photoUpload.single('photo'),
+    async (req, res, next) => {
+        const client = await pool.connect();
+        try {
+            const {
+                equipment_id,  // This is the primary key ID
+                action,
+                quantity = 1,
+                location_id,
+                customer_id,
+                personnel_id,
+                notes,
+                created_by,
+                destination_type,
+                calibration_provider,
+                condition,
+                reason
+            } = req.body;
+
+            // For OUT and ISSUE, either location_id or customer_id or calibration_provider is required, plus personnel
+            if (["OUT", "ISSUE"].includes(action.toUpperCase())) {
+                if (!location_id && !customer_id && !(destination_type === 'calibration' && calibration_provider)) {
+                    return res.status(400).json({ error: { message: 'Location, Customer Site, or Calibration Provider is required for check-out' } });
+                }
+                if (!personnel_id) {
+                    return res.status(400).json({ error: { message: 'Personnel is required for check-out' } });
+                }
+            }
+
+            // Reason logic for condition
+            let requireReason = false;
+            if (condition !== 'Excellent') {
+                // Get last OUT movement for this equipment
+                const lastMovementRes = await pool.query(
+                    `SELECT notes FROM equipment_movements WHERE equipment_id = $1 AND action = 'OUT' ORDER BY created_at DESC LIMIT 1`,
+                    [equipment_id]
+                );
+                let lastCondition = 'Excellent';
+                let lastReason = '';
+                if (lastMovementRes.rows.length > 0) {
+                    const lastNotes = lastMovementRes.rows[0].notes || '';
+                    const condMatch = lastNotes.match(/\[Condition: (Excellent|Good|Poor)\]/);
+                    if (condMatch) lastCondition = condMatch[1];
+                    const reasonMatch = lastNotes.match(/Reason: ([^|]+)/);
+                    if (reasonMatch) lastReason = reasonMatch[1].trim();
+                }
+                // Require reason if no previous reason or condition worsened
+                if (!lastReason || (lastCondition !== condition && ['Excellent','Good','Poor'].indexOf(condition) > ['Excellent','Good','Poor'].indexOf(lastCondition))) {
+                    requireReason = true;
+                }
+                if (requireReason && !reason) {
+                    await client.query('ROLLBACK');
+                    return res.status(400).json({ error: { message: 'Reason is required for non-Excellent condition or if condition worsened.' } });
+                }
+            }
+            // Add condition and reason to movement notes
+            let movementNotes = `[Condition: ${condition}]`;
+            if (condition !== 'Excellent') movementNotes += ` | Reason: ${reason || ''}`;
+            if (notes) movementNotes += ` | ${notes}`;
+
+            // Handle TRANSFER action
+            if (action.toUpperCase() === 'TRANSFER') {
+                // Validate both sites
+                const { from_site_id, to_site_id } = req.body;
+                if (!from_site_id || !to_site_id) {
+                    await client.query('ROLLBACK');
+                    return res.status(400).json({ error: { message: 'Both From Site and To Site are required for transfer.' } });
+                }
+                // Compose transfer notes
+                notes = `Transfer from Site ID: ${from_site_id} to Site ID: ${to_site_id}${notes ? ' | ' + notes : ''}`;
+                movementLocationId = null;
+                movementCustomerId = to_site_id;
+            }
+
+            await client.query('BEGIN');
+            // ...existing code...
+        } catch (error) {
             await client.query('ROLLBACK');
-            return res.status(404).json({ error: { message: 'Equipment not found' } });
+            // Handle trigger errors gracefully
+            if (error.message.includes('Cannot') || 
+                    error.message.includes('not available') ||
+                    error.message.includes('not allowed') ||
+                    error.message.includes('Insufficient')) {
+                return res.status(400).json({ error: { message: error.message } });
+            }
+            next(error);
+        } finally {
+            client.release();
         }
-        
-        const equipment = equipmentResult.rows[0];
-        
-        if (equipment.is_consumable) {
-            await client.query('ROLLBACK');
-            return res.status(400).json({ error: { message: 'Handover is not applicable to consumables' } });
-        }
-        
-        if (equipment.status !== 'Checked Out') {
-            await client.query('ROLLBACK');
-            return res.status(400).json({ 
-                error: { message: 'Equipment must be checked out to perform handover' } 
-            });
-        }
-        
-        // Step 1: Check IN
-        await client.query(`
-            INSERT INTO equipment_movements (equipment_id, action, quantity, location_id, notes, created_by)
-            VALUES ($1, 'IN', 1, $2, $3, $4)
-        `, [equipment_id, return_location_id, `Handover return: ${notes || ''}`, created_by]);
-        
-        // Step 2: Check OUT to new person
-        await client.query(`
-            INSERT INTO equipment_movements (equipment_id, action, quantity, location_id, personnel_id, notes, created_by)
-            VALUES ($1, 'OUT', 1, $2, $3, $4, $5)
-        `, [equipment_id, new_location_id, new_personnel_id, `Handover issue: ${notes || ''}`, created_by]);
-        
-        await client.query('COMMIT');
-        
-        // Fetch updated equipment
-        const updatedEquipment = await pool.query(`
-            SELECT 
-                e.*,
-                c.name as category_name,
-                l.name as current_location,
-                p.full_name as current_holder
-            FROM equipment e
-            JOIN categories c ON e.category_id = c.id
-            LEFT JOIN locations l ON e.current_location_id = l.id
-            LEFT JOIN personnel p ON e.current_holder_id = p.id
-            WHERE e.id = $1
-        `, [equipment_id]);
-        
-        res.status(201).json({
-            message: 'Handover completed successfully',
-            equipment: updatedEquipment.rows[0]
-        });
-        
-    } catch (error) {
-        await client.query('ROLLBACK');
-        next(error);
-    } finally {
+    }
+);
         client.release();
     }
 });

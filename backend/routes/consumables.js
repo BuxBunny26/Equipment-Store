@@ -1,9 +1,22 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../database/db');
+const { body } = require('express-validator');
+const validate = require('../middleware/validate');
+const auth = require('../middleware/auth');
 
 // POST add consumable with verification
-router.post('/add', async (req, res) => {
+router.post(
+  '/add',
+  auth,
+  [
+    body('name').isString().notEmpty().withMessage('Name is required'),
+    body('category_id').isInt().withMessage('Category ID must be integer'),
+    body('unit').isString().notEmpty().withMessage('Unit is required'),
+    body('description').optional().isString()
+  ],
+  validate,
+  async (req, res) => {
     const { name, category_id, unit, description } = req.body;
     if (!name || !category_id || !unit) {
         return res.status(400).json({ error: 'Name, category, and unit are required.' });

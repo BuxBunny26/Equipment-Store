@@ -42,6 +42,15 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Centralized error handling middleware
+app.use((err, req, res, next) => {
+    console.error('Error:', err);
+    res.status(err.status || 500).json({
+        error: err.message || 'Internal Server Error',
+        details: err.details || undefined
+    });
+});
+
 // Root route - API info
 app.get('/', (req, res) => {
     res.json({
