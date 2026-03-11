@@ -687,7 +687,17 @@ export const auditApi = {
         return query.then(({ data, error, count }) => {
             if (error) throw new Error(error.message);
             return { data: {
-                items: (data || []).map(a => ({ ...a, user_full_name: a.changed_by_name || 'System' })),
+                items: (data || []).map(a => {
+                    const changed = [];
+                    if (a.action === 'UPDATE' && a.old_values && a.new_values) {
+                        for (const key of Object.keys(a.new_values)) {
+                            if (JSON.stringify(a.old_values[key]) !== JSON.stringify(a.new_values[key])) {
+                                changed.push(key);
+                            }
+                        }
+                    }
+                    return { ...a, user_full_name: a.changed_by_name || a.changed_by || 'System', changed_fields: changed };
+                }),
                 total: count || 0, limit: parseInt(limit), offset: parseInt(offset),
             }};
         });

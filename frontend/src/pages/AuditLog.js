@@ -1,5 +1,89 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { auditApi } from '../services/api';
+
 function AuditLog() {
-  // ...existing hooks and helper functions...
+  const [loading, setLoading] = useState(true);
+  const [logs, setLogs] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [summary, setSummary] = useState({ by_table: [], by_user: [], by_action: [], by_day: [] });
+  const [selectedLog, setSelectedLog] = useState(null);
+  const [filters, setFilters] = useState({
+    table_name: '',
+    action: '',
+    from_date: '',
+    to_date: '',
+    limit: 50,
+    offset: 0,
+  });
+
+  const fetchLogs = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await auditApi.getAll(filters);
+      setLogs(response.data.items || []);
+      setTotal(response.data.total || 0);
+    } catch (err) {
+      console.error('Error fetching audit logs:', err);
+      setLogs([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters]);
+
+  const fetchSummary = async () => {
+    try {
+      const response = await auditApi.getSummary(30);
+      setSummary(response.data || { by_table: [], by_user: [], by_action: [], by_day: [] });
+    } catch (err) {
+      console.error('Error fetching audit summary:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchSummary();
+  }, []);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
+
+  const handlePrevPage = () => {
+    setFilters(prev => ({ ...prev, offset: Math.max(0, prev.offset - prev.limit) }));
+  };
+
+  const handleNextPage = () => {
+    setFilters(prev => ({ ...prev, offset: prev.offset + prev.limit }));
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-';
+    return new Date(dateStr).toLocaleString('en-ZA', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  };
+
+  const getActionBadge = (action) => {
+    if (action === 'INSERT') return 'badge-available';
+    if (action === 'UPDATE') return 'badge-consumable';
+    if (action === 'DELETE') return 'badge-overdue';
+    return 'badge-secondary';
+  };
+
+  const formatChanges = (oldValues, newValues, changedFields) => {
+    if (!changedFields || !oldValues || !newValues) return null;
+    return changedFields.map(field => (
+      <div key={field} style={{ marginBottom: '0.5rem' }}>
+        <strong>{field}:</strong>{' '}
+        <span style={{ color: '#dc3545', textDecoration: 'line-through' }}>
+          {JSON.stringify(oldValues[field])}
+        </span>{' → '}
+        <span style={{ color: '#28a745' }}>
+          {JSON.stringify(newValues[field])}
+        </span>
+      </div>
+    ));
+  };
 
   if (loading && logs.length === 0) {
     return (
