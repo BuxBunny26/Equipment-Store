@@ -1,9 +1,11 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { personnelApi } from '../services/api';
 
 const OperatorContext = createContext();
 
 const STORAGE_KEY = 'equipment_store_operator';
+const ACTIVITY_KEY = 'equipment_store_last_activity';
+const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes
 
 export function OperatorProvider({ children }) {
   const [operator, setOperator] = useState(null);
@@ -15,16 +17,58 @@ export function OperatorProvider({ children }) {
     loadPersonnel();
   }, []);
 
-  // Note: Operator is NOT auto-loaded from localStorage on page load
-  // Users must manually select an operator each session for security
+  // Load saved operator from localStorage (check inactivity)
+  useEffect(() => {
+    const savedOperator = localStorage.getItem(STORAGE_KEY);
+    const lastActivity = localStorage.getItem(ACTIVITY_KEY);
+    if (savedOperator) {
+      try {
+        const parsed = JSON.parse(savedOperator);
+        // Check if session has expired due to inactivity
+        if (lastActivity && (Date.now() - parseInt(lastActivity, 10)) > INACTIVITY_TIMEOUT) {
+          localStorage.removeItem(STORAGE_KEY);
+          localStorage.removeItem(ACTIVITY_KEY);
+        } else {
+          setOperator(parsed);
+          localStorage.setItem(ACTIVITY_KEY, Date.now().toString());
+        }
+      } catch (e) {
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(ACTIVITY_KEY);
+      }
+    }
+  }, []);
+
+  // Track user activity to reset inactivity timer
+  const updateActivity = useCallback(() => {
+    if (localStorage.getItem(STORAGE_KEY)) {
+      localStorage.setItem(ACTIVITY_KEY, Date.now().toString());
+    }
+  }, []);
+
+  useEffect(() => {
+    const events = ['mousedown', 'keydown', 'touchstart', 'scroll'];
+    events.forEach(e => window.addEventListener(e, updateActivity, { passive: true }));
+    return () => events.forEach(e => window.removeEventListener(e, updateActivity));
+  }, [updateActivity]);
+
+  // Periodically check for inactivity while app is open
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const lastActivity = localStorage.getItem(ACTIVITY_KEY);
+      if (operator && lastActivity && (Date.now() - parseInt(lastActivity, 10)) > INACTIVITY_TIMEOUT) {
+        clearOperator();
+      }
+    }, 60 * 1000); // check every minute
+    return () => clearInterval(interval);
+  }, [operator]);
 
   const loadPersonnel = async () => {
     try {
       const response = await personnelApi.getAll(true);
-      setPersonnel(Array.isArray(response?.data) ? response.data : []);
+      setPersonnel(response.data);
     } catch (error) {
       console.error('Failed to load personnel:', error);
-      setPersonnel([]);
     } finally {
       setLoading(false);
     }
@@ -34,14 +78,17 @@ export function OperatorProvider({ children }) {
     setOperator(person);
     if (person) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(person));
+      localStorage.setItem(ACTIVITY_KEY, Date.now().toString());
     } else {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(ACTIVITY_KEY);
     }
   };
 
   const clearOperator = () => {
     setOperator(null);
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(ACTIVITY_KEY);
   };
 
   const value = {
