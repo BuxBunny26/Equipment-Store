@@ -8,15 +8,15 @@ CREATE OR REPLACE FUNCTION audit_trigger_fn()
 RETURNS TRIGGER AS $$
 BEGIN
     IF TG_OP = 'INSERT' THEN
-        INSERT INTO audit_log (table_name, record_id, action, new_values, changed_by, changed_at)
+        INSERT INTO audit_log (table_name, record_id, action, new_values, changed_by, created_at)
         VALUES (TG_TABLE_NAME, NEW.id, 'INSERT', to_jsonb(NEW), current_setting('request.jwt.claims', true)::json->>'email', NOW());
         RETURN NEW;
     ELSIF TG_OP = 'UPDATE' THEN
-        INSERT INTO audit_log (table_name, record_id, action, old_values, new_values, changed_by, changed_at)
+        INSERT INTO audit_log (table_name, record_id, action, old_values, new_values, changed_by, created_at)
         VALUES (TG_TABLE_NAME, NEW.id, 'UPDATE', to_jsonb(OLD), to_jsonb(NEW), current_setting('request.jwt.claims', true)::json->>'email', NOW());
         RETURN NEW;
     ELSIF TG_OP = 'DELETE' THEN
-        INSERT INTO audit_log (table_name, record_id, action, old_values, changed_by, changed_at)
+        INSERT INTO audit_log (table_name, record_id, action, old_values, changed_by, created_at)
         VALUES (TG_TABLE_NAME, OLD.id, 'DELETE', to_jsonb(OLD), current_setting('request.jwt.claims', true)::json->>'email', NOW());
         RETURN OLD;
     END IF;
