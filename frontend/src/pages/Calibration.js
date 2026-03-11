@@ -342,15 +342,15 @@ function Calibration() {
                         ) : '-'}
                       </td>
                       <td>{getStatusBadge(item.calibration_status)}</td>
-                      <td>
-                        {item.calibration_record_id ? (
+                      <td style={{ textAlign: 'center' }}>
+                        {item.certificate_file_url ? (
                           <button
-                            className="btn btn-small btn-secondary"
-                            onClick={() => handleViewCertificate(item.calibration_record_id)}
-                            title="View Certificate"
-                            style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+                            className="btn btn-small"
+                            onClick={() => window.open(item.certificate_file_url, '_blank')}
+                            title="View Certificate PDF"
+                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px' }}
                           >
-                            <Icons.FileText size={14} /> View
+                            <Icons.FileText size={22} style={{ color: '#dc3545' }} />
                           </button>
                         ) : (
                           <span style={{ color: '#6c757d' }}>-</span>

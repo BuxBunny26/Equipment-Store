@@ -411,11 +411,20 @@ export const calibrationApi = {
         if (status) query = query.eq('calibration_status', status);
         if (search) query = query.or(`serial_number.ilike.%${search}%,certificate_number.ilike.%${search}%`);
         return wrap(query).then(res => ({
-            data: (res.data || []).map(r => ({ ...r,
-                equipment_code: r.equipment?.equipment_id, equipment_name: r.equipment?.equipment_name,
-                manufacturer: r.equipment?.manufacturer, category: r.equipment?.categories?.name,
-                equipment: undefined,
-            }))
+            data: (res.data || []).map(r => {
+                const daysLeft = r.expiry_date
+                    ? Math.ceil((new Date(r.expiry_date) - new Date()) / (1000 * 60 * 60 * 24))
+                    : null;
+                return { ...r,
+                    equipment_code: r.equipment?.equipment_id, equipment_name: r.equipment?.equipment_name,
+                    manufacturer: r.equipment?.manufacturer, category: r.equipment?.categories?.name,
+                    last_calibration_date: r.calibration_date,
+                    calibration_expiry_date: r.expiry_date,
+                    days_until_expiry: daysLeft,
+                    calibration_record_id: r.id,
+                    equipment: undefined,
+                };
+            })
         }));
     },
 
