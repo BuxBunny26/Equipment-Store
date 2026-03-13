@@ -432,8 +432,8 @@ function CheckOut() {
 
           <form onSubmit={handleSubmit}>
                   {showConfirm && (
-                    <div className="modal-overlay">
-                      <div className="modal" style={{ padding: '24px', background: 'var(--card-bg)', borderRadius: '8px', maxWidth: '400px', margin: 'auto', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
+                    <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.7)' }}>
+                      <div className="modal" style={{ padding: '24px', borderRadius: '8px', maxWidth: '400px', margin: 'auto' }}>
                         <h2>Confirm Checkout</h2>
                         <p>Are you sure you want to check out the selected equipment?</p>
                         <div style={{ display: 'flex', gap: '16px', marginTop: '24px', justifyContent: 'center' }}>
