@@ -200,8 +200,11 @@ function CheckOut() {
             action: 'OUT',
             quantity: 1,
             location_id: formData.destination_type === 'internal' ? parseInt(formData.location_id) : null,
-            customer_id: formData.destination_type === 'customer' ? parseInt(formData.customer_id) : null,
+            customer_id: formData.destination_type === 'customer' ? parseInt(formData.customer_id)
+              : formData.destination_type === 'transfer' ? parseInt(formData.to_site_id)
+              : null,
             personnel_id: parseInt(formData.personnel_id),
+            is_transfer: formData.destination_type === 'transfer',
             notes: sanitize([
               formData.condition ? `Condition: ${formData.condition}` : null,
               formData.reason ? `Reason: ${formData.reason}` : null,

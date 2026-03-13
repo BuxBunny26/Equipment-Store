@@ -263,6 +263,7 @@ export const movementsApi = {
                 p_personnel_id: data.personnel_id ? parseInt(data.personnel_id) : null,
                 p_notes: data.notes || null,
                 p_created_by: data.created_by || null,
+                p_is_transfer: data.is_transfer || false,
             })
         );
         if (photoFile) {

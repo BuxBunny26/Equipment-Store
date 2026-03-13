@@ -82,7 +82,8 @@ CREATE OR REPLACE FUNCTION create_movement(
     p_customer_id INTEGER DEFAULT NULL,
     p_personnel_id INTEGER DEFAULT NULL,
     p_notes TEXT DEFAULT NULL,
-    p_created_by VARCHAR(100) DEFAULT NULL
+    p_created_by VARCHAR(100) DEFAULT NULL,
+    p_is_transfer BOOLEAN DEFAULT FALSE
 )
 RETURNS JSONB AS $$
 DECLARE
@@ -110,8 +111,11 @@ BEGIN
         IF NOT v_equipment.is_checkout_allowed THEN
             RAISE EXCEPTION 'Checkout is not allowed for category: %', v_equipment.category_name;
         END IF;
-        IF v_equipment.status != 'Available' THEN
+        IF v_equipment.status != 'Available' AND NOT p_is_transfer THEN
             RAISE EXCEPTION 'Equipment is not available for checkout. Current status: %', v_equipment.status;
+        END IF;
+        IF p_is_transfer AND v_equipment.status != 'Checked Out' THEN
+            RAISE EXCEPTION 'Equipment must be checked out for a transfer. Current status: %', v_equipment.status;
         END IF;
         IF v_equipment.is_quantity_tracked AND p_quantity > v_equipment.available_quantity THEN
             RAISE EXCEPTION 'Insufficient quantity. Requested: %, Available: %', p_quantity, v_equipment.available_quantity;
