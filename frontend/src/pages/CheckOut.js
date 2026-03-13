@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { reportsApi, locationsApi, personnelApi, movementsApi, customersApi } from '../services/api';
 import { useOperator } from '../context/OperatorContext';
@@ -42,6 +42,7 @@ function CheckOut() {
     location_id: '',
     customer_id: '',
     personnel_id: '',
+    receiving_personnel_id: '',
     notes: '',
     condition: '',
     reason: '',
@@ -139,6 +140,10 @@ function CheckOut() {
         ? customers.find(c => c.id === parseInt(formData.customer_id))
         : null;
 
+      const receivingPerson = (formData.destination_type === 'customer' || formData.destination_type === 'transfer') && formData.receiving_personnel_id
+        ? personnel.find(p => p.id === parseInt(formData.receiving_personnel_id))
+        : null;
+
       const selectedItems = availableEquipment.filter(eq => 
         selectedEquipmentIds.includes(eq.id.toString())
       );
@@ -156,9 +161,11 @@ function CheckOut() {
             location_id: formData.destination_type === 'internal' ? parseInt(formData.location_id) : null,
             customer_id: formData.destination_type === 'customer' ? parseInt(formData.customer_id) : null,
             personnel_id: parseInt(formData.personnel_id),
-            notes: sanitize(selectedCustomer 
-              ? `Customer Site: ${selectedCustomer.display_name}${formData.notes ? ' | ' + sanitize(formData.notes) : ''}`
-              : sanitize(formData.notes)),
+            notes: sanitize([
+              selectedCustomer ? `Customer Site: ${selectedCustomer.display_name}` : null,
+              receivingPerson ? `Receiving: ${receivingPerson.full_name}` : null,
+              sanitize(formData.notes) || null,
+            ].filter(Boolean).join(' | ')),
             reason: sanitize(formData.reason),
             created_by: operator?.full_name || 'System',
           };
@@ -185,6 +192,7 @@ function CheckOut() {
         location_id: '',
         customer_id: '',
         personnel_id: '',
+        receiving_personnel_id: '',
         notes: '',
         condition: '',
         reason: '',
@@ -266,7 +274,7 @@ function CheckOut() {
           <p className="page-subtitle">Issue equipment to personnel</p>
         </div>
         <button className="btn btn-secondary" onClick={() => navigate(-1)}>
-          ← Back
+          â† Back
         </button>
       </div>
 
@@ -281,7 +289,7 @@ function CheckOut() {
             onClick={() => setSuccess(null)}
             style={{ marginLeft: 'auto' }}
           >
-            ×
+            Ã—
           </button>
         </div>
       )}
@@ -363,7 +371,7 @@ function CheckOut() {
                         <strong>{eq.equipment_id}</strong>
                         <p style={{ margin: '4px 0', fontSize: '0.875rem' }}>{eq.equipment_name}</p>
                         <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                          {eq.category} → {eq.subcategory}
+                          {eq.category} â†’ {eq.subcategory}
                         </p>
                         {eq.serial_number && (
                           <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -472,7 +480,7 @@ function CheckOut() {
                     name="destination_type"
                     value="internal"
                     checked={formData.destination_type === 'internal'}
-                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '' }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '', receiving_personnel_id: '' }))}
                   />
                   <span>Internal Location (Branch)</span>
                 </label>
@@ -482,7 +490,7 @@ function CheckOut() {
                     name="destination_type"
                     value="customer"
                     checked={formData.destination_type === 'customer'}
-                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '' }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '', receiving_personnel_id: '' }))}
                   />
                   <span>Customer Site</span>
                 </label>
@@ -492,7 +500,7 @@ function CheckOut() {
                     name="destination_type"
                     value="calibration"
                     checked={formData.destination_type === 'calibration'}
-                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '' }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '', receiving_personnel_id: '' }))}
                   />
                   <span>Calibration</span>
                 </label>
@@ -502,7 +510,7 @@ function CheckOut() {
                     name="destination_type"
                     value="transfer"
                     checked={formData.destination_type === 'transfer'}
-                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '' }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '', receiving_personnel_id: '' }))}
                   />
                   <span>Transfer (Site-to-Site)</span>
                 </label>
@@ -598,6 +606,31 @@ function CheckOut() {
                 </div>
               </>
             ) : null}
+
+            {(formData.destination_type === 'customer' || formData.destination_type === 'transfer') && (
+              <div className="form-group">
+                <label className="form-label">Receiving Employee *</label>
+                <select
+                  name="receiving_personnel_id"
+                  className="form-select"
+                  value={formData.receiving_personnel_id}
+                  onChange={handleChange}
+                  required
+                >
+                  <option value="">Select receiving employee...</option>
+                  {personnel
+                    .filter(p => p.id.toString() !== formData.personnel_id)
+                    .map((person) => (
+                      <option key={person.id} value={person.id}>
+                        {person.full_name} {person.employee_id ? `(${person.employee_id})` : ''}
+                      </option>
+                    ))}
+                </select>
+                <span className="form-help" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  The employee who will be taking over the equipment at the destination site
+                </span>
+              </div>
+            )}
 
             {selectedEquipmentList.some(eq => eq.is_quantity_tracked) && (
               <div className="form-group">
@@ -703,7 +736,7 @@ function CheckOut() {
                       lineHeight: '24px'
                     }}
                   >
-                    ×
+                    Ã—
                   </button>
                 </div>
               )}
@@ -728,6 +761,7 @@ function CheckOut() {
                 disabled={
                   selectedEquipmentIds.length === 0 ||
                   !formData.personnel_id ||
+                  ((formData.destination_type === 'customer' || formData.destination_type === 'transfer') && !formData.receiving_personnel_id) ||
                   (formData.destination_type === 'internal' ? !formData.location_id :
                     formData.destination_type === 'customer' ? !formData.customer_id :
                     formData.destination_type === 'calibration' ? !formData.calibration_provider :
