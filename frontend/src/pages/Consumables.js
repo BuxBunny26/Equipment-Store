@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { reportsApi, movementsApi, locationsApi, personnelApi } from '../services/api';
+import { useOperator } from '../context/OperatorContext';
 import { Icons } from '../components/Icons';
 
 function Consumables() {
@@ -25,9 +26,9 @@ function Consumables() {
         personnelApi.getAll(true),
       ]);
 
-      setConsumables(Array.isArray(consumablesRes?.data) ? consumablesRes.data : []);
-      setLocations(Array.isArray(locationsRes?.data) ? locationsRes.data : []);
-      setPersonnel(Array.isArray(personnelRes?.data) ? personnelRes.data : []);
+      setConsumables(consumablesRes.data);
+      setLocations(locationsRes.data);
+      setPersonnel(personnelRes.data);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -84,7 +85,7 @@ function Consumables() {
       )}
 
       {/* Low Stock Alert */}
-      {Array.isArray(consumables) && consumables.filter((c) => c.is_low_stock).length > 0 && (
+      {consumables.filter((c) => c.is_low_stock).length > 0 && (
         <div className="alert alert-warning" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Icons.Warning size={18} />
           <span><strong>Low Stock Alert:</strong> {consumables.filter((c) => c.is_low_stock).length} items need restocking</span>
@@ -221,6 +222,7 @@ function Consumables() {
 
 // Issue Modal Component
 function IssueModal({ item, locations, personnel, onClose, onSuccess }) {
+  const { operator } = useOperator();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [formData, setFormData] = useState({
@@ -243,7 +245,7 @@ function IssueModal({ item, locations, personnel, onClose, onSuccess }) {
         location_id: parseInt(formData.location_id),
         personnel_id: parseInt(formData.personnel_id),
         notes: formData.notes,
-        created_by: 'System',
+        created_by: operator?.full_name || 'System',
       });
 
       onSuccess();
@@ -346,6 +348,7 @@ function IssueModal({ item, locations, personnel, onClose, onSuccess }) {
 
 // Restock Modal Component
 function RestockModal({ item, onClose, onSuccess }) {
+  const { operator } = useOperator();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [formData, setFormData] = useState({
@@ -364,7 +367,7 @@ function RestockModal({ item, onClose, onSuccess }) {
         action: 'RESTOCK',
         quantity: parseInt(formData.quantity),
         notes: formData.notes,
-        created_by: 'System',
+        created_by: operator?.full_name || 'System',
       });
 
       onSuccess();

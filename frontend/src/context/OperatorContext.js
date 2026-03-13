@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { personnelApi, usersApi } from '../services/api';
+import { setOperatorName } from '../services/supabaseClient';
 
 const OperatorContext = createContext();
 
@@ -31,8 +32,10 @@ export function OperatorProvider({ children }) {
           localStorage.removeItem(STORAGE_KEY);
           localStorage.removeItem(ACTIVITY_KEY);
           localStorage.removeItem(ROLE_KEY);
+          setOperatorName('System');
         } else {
           setOperator(parsed);
+          setOperatorName(parsed.full_name || 'System');
           const savedRole = localStorage.getItem(ROLE_KEY);
           if (savedRole) {
             setOperatorRole(savedRole);
@@ -100,6 +103,7 @@ export function OperatorProvider({ children }) {
 
   const selectOperator = async (person) => {
     setOperator(person);
+    setOperatorName(person?.full_name || 'System');
     if (person) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(person));
       localStorage.setItem(ACTIVITY_KEY, Date.now().toString());
@@ -120,6 +124,7 @@ export function OperatorProvider({ children }) {
   const clearOperator = () => {
     setOperator(null);
     setOperatorRole(null);
+    setOperatorName('System');
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(ACTIVITY_KEY);
     localStorage.removeItem(ROLE_KEY);

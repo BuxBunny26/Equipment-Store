@@ -6,18 +6,28 @@
 -- Generic audit trigger function
 CREATE OR REPLACE FUNCTION audit_trigger_fn()
 RETURNS TRIGGER AS $$
+DECLARE
+    v_user_name TEXT;
 BEGIN
+    -- Try to get operator name from Supabase request header
+    BEGIN
+        v_user_name := (current_setting('request.headers', true)::json->>'x-operator-name');
+    EXCEPTION WHEN OTHERS THEN
+        v_user_name := NULL;
+    END;
+    v_user_name := COALESCE(NULLIF(v_user_name, ''), 'System');
+
     IF TG_OP = 'INSERT' THEN
-        INSERT INTO audit_log (table_name, record_id, action, new_values, changed_by, created_at)
-        VALUES (TG_TABLE_NAME, NEW.id, 'INSERT', to_jsonb(NEW), current_setting('request.jwt.claims', true)::json->>'email', NOW());
+        INSERT INTO audit_log (table_name, record_id, action, new_values, changed_by, changed_by_name, created_at)
+        VALUES (TG_TABLE_NAME, NEW.id, 'INSERT', to_jsonb(NEW), v_user_name, v_user_name, NOW());
         RETURN NEW;
     ELSIF TG_OP = 'UPDATE' THEN
-        INSERT INTO audit_log (table_name, record_id, action, old_values, new_values, changed_by, created_at)
-        VALUES (TG_TABLE_NAME, NEW.id, 'UPDATE', to_jsonb(OLD), to_jsonb(NEW), current_setting('request.jwt.claims', true)::json->>'email', NOW());
+        INSERT INTO audit_log (table_name, record_id, action, old_values, new_values, changed_by, changed_by_name, created_at)
+        VALUES (TG_TABLE_NAME, NEW.id, 'UPDATE', to_jsonb(OLD), to_jsonb(NEW), v_user_name, v_user_name, NOW());
         RETURN NEW;
     ELSIF TG_OP = 'DELETE' THEN
-        INSERT INTO audit_log (table_name, record_id, action, old_values, changed_by, created_at)
-        VALUES (TG_TABLE_NAME, OLD.id, 'DELETE', to_jsonb(OLD), current_setting('request.jwt.claims', true)::json->>'email', NOW());
+        INSERT INTO audit_log (table_name, record_id, action, old_values, changed_by, changed_by_name, created_at)
+        VALUES (TG_TABLE_NAME, OLD.id, 'DELETE', to_jsonb(OLD), v_user_name, v_user_name, NOW());
         RETURN OLD;
     END IF;
     RETURN NULL;
