@@ -104,7 +104,7 @@ function EquipmentImageGallery({ equipmentId, editable = false }) {
       <div 
         className="gallery-main"
         style={{
-          backgroundColor: '#f5f5f5',
+          backgroundColor: 'var(--bg-secondary)',
           borderRadius: '8px',
           overflow: 'hidden',
           aspectRatio: '4/3',
@@ -236,7 +236,7 @@ function EquipmentImageGallery({ equipmentId, editable = false }) {
           <div 
             onClick={e => e.stopPropagation()}
             style={{
-              backgroundColor: 'white',
+              backgroundColor: 'var(--bg-secondary)',
               borderRadius: '8px',
               maxWidth: '90vw',
               maxHeight: '90vh',
@@ -276,7 +276,7 @@ function EquipmentImageGallery({ equipmentId, editable = false }) {
               alignItems: 'center',
               justifyContent: 'center',
               padding: '1rem',
-              backgroundColor: '#f5f5f5',
+              backgroundColor: 'var(--bg-secondary)',
               maxHeight: '70vh',
             }}>
               <img

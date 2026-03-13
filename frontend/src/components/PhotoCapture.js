@@ -89,7 +89,7 @@ function PhotoCapture({ onPhotoCapture, onClose }) {
       padding: '20px'
     }}>
       <div style={{
-        background: 'white',
+        background: 'var(--bg-secondary)',
         borderRadius: 'var(--radius-lg)',
         padding: '24px',
         maxWidth: '90vw',

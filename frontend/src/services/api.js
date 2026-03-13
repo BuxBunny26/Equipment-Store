@@ -807,6 +807,13 @@ export const usersApi = {
         supabase.from('users').update({ last_login: new Date().toISOString() }).eq('personnel_id', personnelId).select().single()
     ),
     delete: (id) => wrap(supabase.from('users').delete().eq('id', id)),
+    getByPersonnelId: (personnelId) => wrap(
+        supabase.from('users').select('*, roles(name, permissions)').eq('personnel_id', personnelId).limit(1).maybeSingle()
+    ).then(res => {
+        if (!res.data) return { data: null };
+        const u = res.data;
+        return { data: { ...u, role_name: u.roles?.name, permissions: u.roles?.permissions, roles: undefined } };
+    }),
     getPermissions: (id) => wrap(
         supabase.from('users').select('roles(permissions)').eq('id', id).single()
     ).then(res => ({ data: res.data?.roles?.permissions || {} })),

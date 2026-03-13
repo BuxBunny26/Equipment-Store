@@ -87,9 +87,8 @@ export function OperatorProvider({ children }) {
 
   const fetchAndCacheRole = async (personnelId) => {
     try {
-      const res = await usersApi.getAll({ search: '' });
-      const user = (res.data || []).find(u => u.personnel_id === personnelId);
-      const role = user?.role_name || null;
+      const res = await usersApi.getByPersonnelId(personnelId);
+      const role = res.data?.role_name || null;
       setOperatorRole(role);
       localStorage.setItem(ROLE_KEY, role || '');
     } catch (err) {

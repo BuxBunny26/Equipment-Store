@@ -180,7 +180,7 @@ function Reservations() {
 
   const formatDate = (dateString) => {
     if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('en-AU', {
+    return new Date(dateString).toLocaleDateString('en-ZA', {
       day: '2-digit',
       month: 'short',
       year: 'numeric',

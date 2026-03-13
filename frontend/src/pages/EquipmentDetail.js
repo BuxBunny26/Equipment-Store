@@ -51,7 +51,7 @@ function EquipmentDetail() {
 
   const formatDate = (dateString) => {
     if (!dateString) return '-';
-    return new Date(dateString).toLocaleString('en-AU', {
+    return new Date(dateString).toLocaleString('en-ZA', {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
@@ -62,7 +62,7 @@ function EquipmentDetail() {
 
   const formatDateOnly = (dateString) => {
     if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('en-AU', {
+    return new Date(dateString).toLocaleDateString('en-ZA', {
       day: '2-digit',
       month: 'short',
       year: 'numeric',

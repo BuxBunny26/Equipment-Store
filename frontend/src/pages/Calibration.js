@@ -169,7 +169,7 @@ function Calibration() {
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '-';
-    return new Date(dateStr).toLocaleDateString('en-AU');
+    return new Date(dateStr).toLocaleDateString('en-ZA');
   };
 
   const getSummaryCount = (status) => {
