@@ -289,7 +289,7 @@ function CheckOut() {
             onClick={() => setSuccess(null)}
             style={{ marginLeft: 'auto' }}
           >
-            Ã—
+            &times;
           </button>
         </div>
       )}
@@ -371,7 +371,7 @@ function CheckOut() {
                         <strong>{eq.equipment_id}</strong>
                         <p style={{ margin: '4px 0', fontSize: '0.875rem' }}>{eq.equipment_name}</p>
                         <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                          {eq.category} â†’ {eq.subcategory}
+                          {eq.category} &rarr; {eq.subcategory}
                         </p>
                         {eq.serial_number && (
                           <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -736,7 +736,7 @@ function CheckOut() {
                       lineHeight: '24px'
                     }}
                   >
-                    Ã—
+                    &times;
                   </button>
                 </div>
               )}
