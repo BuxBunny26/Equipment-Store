@@ -22,6 +22,7 @@ function CheckOut() {
   const [success, setSuccess] = useState(null);
 
   const [availableEquipment, setAvailableEquipment] = useState([]);
+  const [checkedOutEquipment, setCheckedOutEquipment] = useState([]);
   const [locations, setLocations] = useState([]);
   const [personnel, setPersonnel] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -136,14 +137,16 @@ function CheckOut() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [equipmentRes, locationsRes, personnelRes, customersRes] = await Promise.all([
+      const [equipmentRes, checkedOutRes, locationsRes, personnelRes, customersRes] = await Promise.all([
         reportsApi.getAvailable(),
+        reportsApi.getCheckedOut(),
         locationsApi.getAll(true),
         personnelApi.getAll(true),
         customersApi.getAll(),
       ]);
 
       setAvailableEquipment(equipmentRes.data);
+      setCheckedOutEquipment(checkedOutRes.data || []);
       setLocations(locationsRes.data);
       setPersonnel(personnelRes.data);
       setCustomers(customersRes.data);
@@ -181,7 +184,8 @@ function CheckOut() {
         ? personnel.find(p => p.id === parseInt(formData.receiving_personnel_id))
         : null;
 
-      const selectedItems = availableEquipment.filter(eq => 
+      const sourceEquipment = formData.destination_type === 'transfer' ? checkedOutEquipment : availableEquipment;
+      const selectedItems = sourceEquipment.filter(eq => 
         selectedEquipmentIds.includes(eq.id.toString())
       );
 
@@ -260,9 +264,13 @@ function CheckOut() {
       setPhotoFile(null);
       setPhotoPreview(null);
 
-      // Refresh available equipment
-      const equipmentRes = await reportsApi.getAvailable();
+      // Refresh equipment lists
+      const [equipmentRes, checkedOutRes] = await Promise.all([
+        reportsApi.getAvailable(),
+        reportsApi.getCheckedOut(),
+      ]);
       setAvailableEquipment(equipmentRes.data);
+      setCheckedOutEquipment(checkedOutRes.data || []);
 
     } catch (err) {
       setError(err.message);
@@ -293,10 +301,13 @@ function CheckOut() {
     setPhotoPreview(null);
   };
 
-  // Get unique categories from available equipment
-  const categories = [...new Set(availableEquipment.map(eq => eq.category).filter(Boolean))].sort();
+  // Use checked-out equipment for transfers, available equipment for everything else
+  const displayEquipment = formData.destination_type === 'transfer' ? checkedOutEquipment : availableEquipment;
 
-  const filteredEquipment = availableEquipment.filter((eq) => {
+  // Get unique categories from displayed equipment
+  const categories = [...new Set(displayEquipment.map(eq => eq.category).filter(Boolean))].sort();
+
+  const filteredEquipment = displayEquipment.filter((eq) => {
     // Filter by selected category/technology first
     if (selectedCategory && eq.category !== selectedCategory) return false;
     if (!debouncedSearchTerm) return true;
@@ -309,7 +320,7 @@ function CheckOut() {
     );
   });
 
-  const selectedEquipmentList = availableEquipment.filter(
+  const selectedEquipmentList = displayEquipment.filter(
     (eq) => selectedEquipmentIds.includes(eq.id.toString())
   );
 
@@ -355,9 +366,9 @@ function CheckOut() {
         <div className="card">
           <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <h2 className="card-title">Select Equipment</h2>
+              <h2 className="card-title">{formData.destination_type === 'transfer' ? 'Select Checked Out Equipment' : 'Select Equipment'}</h2>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                {filteredEquipment.length} available
+                {filteredEquipment.length} {formData.destination_type === 'transfer' ? 'checked out' : 'available'}
               </span>
             </div>
             <button className="btn btn-sm btn-primary" onClick={() => setShowAddEquipment(true)}>
@@ -392,7 +403,7 @@ function CheckOut() {
           <div className="equipment-selection-list">
             {filteredEquipment.length === 0 ? (
               <div className="empty-state">
-                <p>No available equipment found</p>
+                <p>No {formData.destination_type === 'transfer' ? 'checked out' : 'available'} equipment found</p>
               </div>
             ) : (
               filteredEquipment.map((eq) => {
@@ -439,9 +450,30 @@ function CheckOut() {
                             S/N: {eq.serial_number}
                           </p>
                         )}
+                        {eq.current_location && (
+                          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                            📍 {eq.current_location}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
+                      {formData.destination_type === 'transfer' ? (
+                        <>
+                          <span className="badge badge-checked-out">Checked Out</span>
+                          {eq.checked_out_to && (
+                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                              {eq.checked_out_to}
+                            </p>
+                          )}
+                          {eq.days_out != null && (
+                            <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                              {eq.days_out} day{eq.days_out !== 1 ? 's' : ''} out
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <>
                       {eq.is_quantity_tracked ? (
                         <span style={{ fontSize: '0.8rem' }}>
                           {eq.available_quantity} {eq.unit} avail.
@@ -467,6 +499,8 @@ function CheckOut() {
                         <span className="badge badge-overdue" style={{ marginLeft: '4px' }}>
                           No Checkout
                         </span>
+                      )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -541,7 +575,7 @@ function CheckOut() {
                     name="destination_type"
                     value="internal"
                     checked={formData.destination_type === 'internal'}
-                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '', receiving_personnel_id: '' }))}
+                    onChange={(e) => { setSelectedEquipmentIds([]); setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '', receiving_personnel_id: '' })); }}
                   />
                   <span>Internal Location (Branch)</span>
                 </label>
@@ -551,7 +585,7 @@ function CheckOut() {
                     name="destination_type"
                     value="customer"
                     checked={formData.destination_type === 'customer'}
-                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '', receiving_personnel_id: '' }))}
+                    onChange={(e) => { setSelectedEquipmentIds([]); setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '', receiving_personnel_id: '' })); }}
                   />
                   <span>Customer Site</span>
                 </label>
@@ -561,7 +595,7 @@ function CheckOut() {
                     name="destination_type"
                     value="calibration"
                     checked={formData.destination_type === 'calibration'}
-                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '', receiving_personnel_id: '' }))}
+                    onChange={(e) => { setSelectedEquipmentIds([]); setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '', receiving_personnel_id: '' })); }}
                   />
                   <span>Calibration</span>
                 </label>
@@ -571,7 +605,7 @@ function CheckOut() {
                     name="destination_type"
                     value="transfer"
                     checked={formData.destination_type === 'transfer'}
-                    onChange={(e) => setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '', receiving_personnel_id: '' }))}
+                    onChange={(e) => { setSelectedEquipmentIds([]); setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '', receiving_personnel_id: '' })); }}
                   />
                   <span>Transfer (Site-to-Site)</span>
                 </label>
