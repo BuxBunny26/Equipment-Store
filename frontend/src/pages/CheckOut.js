@@ -181,7 +181,23 @@ function CheckOut() {
       }
 
       if (successNames.length > 0) {
-        setSuccess(`Successfully checked out ${successNames.length} item(s): ${successNames.join(', ')}${selectedCustomer ? ` to ${selectedCustomer.display_name}` : ''}`);
+        const itemText = `${successNames.length} item(s): ${successNames.join(', ')}`;
+        let actionText;
+        if (formData.destination_type === 'internal') {
+          const destLoc = locations.find(l => l.id === parseInt(formData.location_id));
+          actionText = `Successfully transferred ${itemText} to ${destLoc?.name || 'internal location'}`;
+        } else if (formData.destination_type === 'customer') {
+          actionText = `Successfully checked out ${itemText}${selectedCustomer ? ` to ${selectedCustomer.display_name}` : ''}`;
+        } else if (formData.destination_type === 'calibration') {
+          actionText = `Successfully sent ${itemText} for calibration${formData.calibration_provider ? ` (${formData.calibration_provider})` : ''}`;
+        } else if (formData.destination_type === 'transfer') {
+          const fromLoc = locations.find(l => l.id === parseInt(formData.from_site_id));
+          const toLoc = locations.find(l => l.id === parseInt(formData.to_site_id));
+          actionText = `Successfully transferred ${itemText}${fromLoc ? ` from ${fromLoc.name}` : ''}${toLoc ? ` to ${toLoc.name}` : ''}`;
+        } else {
+          actionText = `Successfully checked out ${itemText}`;
+        }
+        setSuccess(actionText);
         setTimeout(() => setSuccess(null), 5000);
       }
       if (errors.length > 0) {
