@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { reportsApi, locationsApi, personnelApi, movementsApi, customersApi } from '../services/api';
+import { reportsApi, locationsApi, personnelApi, movementsApi, customersApi, reservationsApi } from '../services/api';
 import { useOperator } from '../context/OperatorContext';
 import OperatorWarning from '../components/OperatorWarning';
 import PhotoCapture from '../components/PhotoCapture';
@@ -23,6 +23,7 @@ function CheckOut() {
 
   const [availableEquipment, setAvailableEquipment] = useState([]);
   const [checkedOutEquipment, setCheckedOutEquipment] = useState([]);
+  const [activeReservations, setActiveReservations] = useState([]);
   const [locations, setLocations] = useState([]);
   const [personnel, setPersonnel] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -137,16 +138,20 @@ function CheckOut() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [equipmentRes, checkedOutRes, locationsRes, personnelRes, customersRes] = await Promise.all([
+      const [equipmentRes, checkedOutRes, locationsRes, personnelRes, customersRes, reservationsRes] = await Promise.all([
         reportsApi.getAvailable(),
         reportsApi.getCheckedOut(),
         locationsApi.getAll(true),
         personnelApi.getAll(true),
         customersApi.getAll(),
+        reservationsApi.getAll(),
       ]);
 
       setAvailableEquipment(equipmentRes.data);
       setCheckedOutEquipment(checkedOutRes.data || []);
+      setActiveReservations((reservationsRes.data || []).filter(r =>
+        ['pending', 'approved', 'active'].includes(r.status?.toLowerCase())
+      ));
       setLocations(locationsRes.data);
       setPersonnel(personnelRes.data);
       setCustomers(customersRes.data);
@@ -458,6 +463,25 @@ function CheckOut() {
                             📍 {eq.current_location}
                           </p>
                         )}
+                        {(() => {
+                          const reservation = activeReservations.find(r => r.equipment_id === eq.id);
+                          if (!reservation) return null;
+                          return (
+                            <div style={{
+                              marginTop: '6px',
+                              padding: '4px 8px',
+                              background: 'rgba(255, 152, 0, 0.15)',
+                              border: '1px solid rgba(255, 152, 0, 0.4)',
+                              borderRadius: '4px',
+                              fontSize: '0.7rem',
+                              color: 'var(--text-primary)',
+                            }}>
+                              <strong style={{ color: '#ff9800' }}>⚠ Reserved</strong>
+                              <div>{new Date(reservation.start_date).toLocaleDateString('en-GB')} – {new Date(reservation.end_date).toLocaleDateString('en-GB')}</div>
+                              <div>By: {reservation.personnel_name}</div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
