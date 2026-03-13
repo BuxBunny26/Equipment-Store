@@ -180,6 +180,20 @@ export const equipmentApi = {
         }};
     }),
 
+    checkSerial: (serialNumber) => wrap(
+        supabase.from('equipment')
+            .select('id, equipment_id, equipment_name, serial_number, categories(name), subcategories(name), status')
+            .ilike('serial_number', serialNumber)
+            .limit(1)
+    ).then(res => ({
+        data: (res.data || []).map(e => ({
+            ...e,
+            category_name: e.categories?.name,
+            subcategory_name: e.subcategories?.name,
+            categories: undefined, subcategories: undefined,
+        }))
+    })),
+
     create: (data) => wrap(
         supabase.from('equipment').insert({
             ...data, status: 'Available', available_quantity: data.total_quantity || 1,

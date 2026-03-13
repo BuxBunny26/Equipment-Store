@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { equipmentApi, categoriesApi, calibrationApi, locationsApi, subcategoriesApi } from '../services/api';
 import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
@@ -307,12 +307,16 @@ function AddEquipmentModal({ categories, onClose, onSuccess }) {
   const [error, setError] = useState(null);
   const [subcategories, setSubcategories] = useState([]);
   const [locations, setLocations] = useState([]);
+  const [duplicateMatch, setDuplicateMatch] = useState(null);
+  const [checkingSerial, setCheckingSerial] = useState(false);
   const [formData, setFormData] = useState({
     equipment_id: '',
     equipment_name: '',
     description: '',
     category_id: '',
     subcategory_id: '',
+    manufacturer: '',
+    model: '',
     is_serialised: true,
     serial_number: '',
     is_quantity_tracked: false,
@@ -353,8 +357,36 @@ function AddEquipmentModal({ categories, onClose, onSuccess }) {
     }
   };
 
+  // Debounced serial number duplicate check
+  const checkSerialNumber = useCallback(
+    (() => {
+      let timer;
+      return (serial) => {
+        clearTimeout(timer);
+        if (!serial || serial.trim().length < 2) {
+          setDuplicateMatch(null);
+          setCheckingSerial(false);
+          return;
+        }
+        setCheckingSerial(true);
+        timer = setTimeout(async () => {
+          try {
+            const { data } = await equipmentApi.checkSerial(serial.trim());
+            setDuplicateMatch(data.length > 0 ? data[0] : null);
+          } catch {
+            setDuplicateMatch(null);
+          } finally {
+            setCheckingSerial(false);
+          }
+        }, 500);
+      };
+    })(),
+    []
+  );
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (duplicateMatch) return; // Block submit when duplicate found
     setLoading(true);
     setError(null);
 
@@ -370,25 +402,53 @@ function AddEquipmentModal({ categories, onClose, onSuccess }) {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    const newVal = type === 'checkbox' ? checked : value;
     setFormData((prev) => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value,
+      [name]: newVal,
     }));
+    if (name === 'serial_number') {
+      checkSerialNumber(value);
+    }
   };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-large" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">Add Equipment</h2>
           <button className="modal-close" onClick={onClose}>
-            ×
+            &times;
           </button>
         </div>
 
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
             {error && <div className="alert alert-error">{error}</div>}
+
+            {/* Duplicate Serial Warning */}
+            {duplicateMatch && (
+              <div className="alert alert-warning" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <Icons.Warning size={20} />
+                <div style={{ flex: 1 }}>
+                  <strong>Duplicate Serial Number Found!</strong>
+                  <br />
+                  <span style={{ fontSize: '0.9rem' }}>
+                    Serial <code>{duplicateMatch.serial_number}</code> already belongs to{' '}
+                    <strong>{duplicateMatch.equipment_id}</strong> &mdash; {duplicateMatch.equipment_name}
+                    {duplicateMatch.category_name && ` (${duplicateMatch.category_name})`}
+                    {' '}&mdash; Status: {duplicateMatch.status}
+                  </span>
+                </div>
+                <Link
+                  to={`/equipment/${duplicateMatch.id}`}
+                  className="btn btn-primary btn-sm"
+                  onClick={onClose}
+                >
+                  Go to Equipment &rarr;
+                </Link>
+              </div>
+            )}
 
             <div className="form-row">
               <div className="form-group">
@@ -470,6 +530,34 @@ function AddEquipmentModal({ categories, onClose, onSuccess }) {
 
             <div className="form-row">
               <div className="form-group">
+                <label className="form-label">Manufacturer *</label>
+                <input
+                  type="text"
+                  name="manufacturer"
+                  className="form-input"
+                  value={formData.manufacturer}
+                  onChange={handleChange}
+                  required
+                  placeholder="e.g., SKF, Fluke, Emerson"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Model *</label>
+                <input
+                  type="text"
+                  name="model"
+                  className="form-input"
+                  value={formData.model}
+                  onChange={handleChange}
+                  required
+                  placeholder="e.g., CMXA 80, Ti480"
+                />
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
                 <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <input
                     type="checkbox"
@@ -482,7 +570,10 @@ function AddEquipmentModal({ categories, onClose, onSuccess }) {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Serial Number {formData.is_serialised && '*'}</label>
+                <label className="form-label">
+                  Serial Number {formData.is_serialised && '*'}
+                  {checkingSerial && <span style={{ marginLeft: '8px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Checking...</span>}
+                </label>
                 <input
                   type="text"
                   name="serial_number"
@@ -491,6 +582,7 @@ function AddEquipmentModal({ categories, onClose, onSuccess }) {
                   onChange={handleChange}
                   required={formData.is_serialised}
                   disabled={!formData.is_serialised}
+                  style={duplicateMatch ? { borderColor: 'var(--warning-color)' } : {}}
                 />
               </div>
             </div>
@@ -538,12 +630,13 @@ function AddEquipmentModal({ categories, onClose, onSuccess }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Current Location</label>
+              <label className="form-label">Current Location *</label>
               <select
                 name="current_location_id"
                 className="form-select"
                 value={formData.current_location_id}
                 onChange={handleChange}
+                required
               >
                 <option value="">Select location...</option>
                 {locations.map((loc) => (
@@ -570,7 +663,7 @@ function AddEquipmentModal({ categories, onClose, onSuccess }) {
             <button type="button" className="btn btn-secondary" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
+            <button type="submit" className="btn btn-primary" disabled={loading || !!duplicateMatch}>
               {loading ? 'Creating...' : 'Create Equipment'}
             </button>
           </div>
