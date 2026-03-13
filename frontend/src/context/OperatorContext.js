@@ -33,7 +33,13 @@ export function OperatorProvider({ children }) {
           localStorage.removeItem(ROLE_KEY);
         } else {
           setOperator(parsed);
-          setOperatorRole(localStorage.getItem(ROLE_KEY));
+          const savedRole = localStorage.getItem(ROLE_KEY);
+          if (savedRole) {
+            setOperatorRole(savedRole);
+          } else {
+            // Fetch role if not cached (e.g. session from before role feature)
+            fetchAndCacheRole(parsed.id);
+          }
           localStorage.setItem(ACTIVITY_KEY, Date.now().toString());
         }
       } catch (e) {
@@ -79,23 +85,27 @@ export function OperatorProvider({ children }) {
     }
   };
 
+  const fetchAndCacheRole = async (personnelId) => {
+    try {
+      const res = await usersApi.getAll({ search: '' });
+      const user = (res.data || []).find(u => u.personnel_id === personnelId);
+      const role = user?.role_name || null;
+      setOperatorRole(role);
+      localStorage.setItem(ROLE_KEY, role || '');
+    } catch (err) {
+      console.error('Failed to fetch operator role:', err);
+      setOperatorRole(null);
+      localStorage.removeItem(ROLE_KEY);
+    }
+  };
+
   const selectOperator = async (person) => {
     setOperator(person);
     if (person) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(person));
       localStorage.setItem(ACTIVITY_KEY, Date.now().toString());
       // Fetch user role by personnel_id
-      try {
-        const res = await usersApi.getAll({ search: '' });
-        const user = (res.data || []).find(u => u.personnel_id === person.id);
-        const role = user?.role_name || null;
-        setOperatorRole(role);
-        localStorage.setItem(ROLE_KEY, role || '');
-      } catch (err) {
-        console.error('Failed to fetch operator role:', err);
-        setOperatorRole(null);
-        localStorage.removeItem(ROLE_KEY);
-      }
+      await fetchAndCacheRole(person.id);
       // Update last_login in users table
       usersApi.recordLogin(person.id).catch(err =>
         console.error('Failed to record login:', err)
