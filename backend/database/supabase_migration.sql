@@ -658,6 +658,109 @@ $$ LANGUAGE plpgsql;
 
 
 -- ============================================
+-- 12B. CALIBRATION MANAGEMENT REPORT
+-- ============================================
+
+CREATE OR REPLACE FUNCTION get_calibration_management(
+    p_status TEXT DEFAULT NULL,
+    p_category TEXT DEFAULT NULL,
+    p_search TEXT DEFAULT NULL
+)
+RETURNS JSONB AS $$
+BEGIN
+    RETURN COALESCE((
+        SELECT jsonb_agg(row_to_json(t)::jsonb)
+        FROM (
+            SELECT 
+                e.id AS equipment_id,
+                e.equipment_id AS equipment_code,
+                e.equipment_name,
+                e.serial_number,
+                e.manufacturer,
+                c.name AS category,
+                cr.calibration_date AS last_calibration_date,
+                cr.expiry_date AS calibration_expiry_date,
+                cr.certificate_number,
+                cr.calibration_provider,
+                cr.certificate_file_url,
+                cr.id AS calibration_record_id,
+                CASE 
+                    WHEN cr.id IS NULL THEN 'Not Calibrated'
+                    WHEN cr.expiry_date IS NULL THEN 'N/A'
+                    WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
+                    WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                    ELSE 'Valid'
+                END AS calibration_status,
+                CASE 
+                    WHEN cr.expiry_date IS NOT NULL THEN 
+                        EXTRACT(DAY FROM (cr.expiry_date::timestamp - CURRENT_DATE::timestamp))::INTEGER
+                    ELSE NULL
+                END AS days_until_expiry
+            FROM equipment e
+            JOIN categories c ON e.category_id = c.id
+            LEFT JOIN LATERAL (
+                SELECT * FROM calibration_records
+                WHERE equipment_id = e.id
+                ORDER BY calibration_date DESC LIMIT 1
+            ) cr ON true
+            WHERE c.is_consumable = FALSE
+                AND (p_status IS NULL 
+                    OR (p_status = 'Not Calibrated' AND cr.id IS NULL)
+                    OR (p_status = 'Expired' AND cr.expiry_date < CURRENT_DATE)
+                    OR (p_status = 'Due Soon' AND cr.expiry_date >= CURRENT_DATE AND cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days')
+                    OR (p_status = 'Valid' AND cr.expiry_date > CURRENT_DATE + INTERVAL '30 days')
+                )
+                AND (p_category IS NULL OR c.name = p_category)
+                AND (p_search IS NULL 
+                    OR e.equipment_name ILIKE '%' || p_search || '%'
+                    OR e.serial_number ILIKE '%' || p_search || '%'
+                    OR e.manufacturer ILIKE '%' || p_search || '%'
+                )
+            ORDER BY 
+                CASE WHEN cr.id IS NULL THEN 1 ELSE 0 END,
+                cr.expiry_date ASC NULLS LAST
+        ) t
+    ), '[]'::jsonb);
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION get_calibration_summary()
+RETURNS JSONB AS $$
+BEGIN
+    RETURN jsonb_build_object(
+        'summary', COALESCE((
+            SELECT jsonb_agg(row_to_json(t)::jsonb)
+            FROM (
+                SELECT calibration_status, COUNT(*) as count
+                FROM (
+                    SELECT 
+                        CASE 
+                            WHEN cr.id IS NULL THEN 'Not Calibrated'
+                            WHEN cr.expiry_date IS NULL THEN 'N/A'
+                            WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
+                            WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                            ELSE 'Valid'
+                        END AS calibration_status
+                    FROM equipment e
+                    JOIN categories c ON e.category_id = c.id
+                    LEFT JOIN LATERAL (
+                        SELECT * FROM calibration_records
+                        WHERE equipment_id = e.id
+                        ORDER BY calibration_date DESC LIMIT 1
+                    ) cr ON true
+                    WHERE c.is_consumable = FALSE
+                ) sub
+                GROUP BY calibration_status
+            ) t
+        ), '[]'::jsonb),
+        'total', (SELECT COUNT(*) FROM equipment e JOIN categories c ON e.category_id = c.id WHERE c.is_consumable = FALSE)
+    );
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- ============================================
 -- 13. RESERVATION SUMMARY
 -- ============================================
 

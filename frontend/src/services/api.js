@@ -434,31 +434,14 @@ export const customersApi = {
 // Calibration
 export const calibrationApi = {
     getStatus: (params = {}) => {
-        const { status, search } = params;
-        let query = supabase.from('calibration_records')
-            .select(`id, equipment_id, serial_number, calibration_date, expiry_date,
-                certificate_number, calibration_status, calibration_provider,
-                certificate_file_url, notes, created_at,
-                equipment(equipment_id, equipment_name, manufacturer, categories(name))`)
-            .order('expiry_date', { ascending: true, nullsFirst: true });
-        if (status) query = query.eq('calibration_status', status);
-        if (search) query = query.or(`serial_number.ilike.%${search}%,certificate_number.ilike.%${search}%`);
-        return wrap(query).then(res => ({
-            data: (res.data || []).map(r => {
-                const daysLeft = r.expiry_date
-                    ? Math.ceil((new Date(r.expiry_date) - new Date()) / (1000 * 60 * 60 * 24))
-                    : null;
-                return { ...r,
-                    equipment_code: r.equipment?.equipment_id, equipment_name: r.equipment?.equipment_name,
-                    manufacturer: r.equipment?.manufacturer, category: r.equipment?.categories?.name,
-                    last_calibration_date: r.calibration_date,
-                    calibration_expiry_date: r.expiry_date,
-                    days_until_expiry: daysLeft,
-                    calibration_record_id: r.id,
-                    equipment: undefined,
-                };
+        const { status, category, search } = params;
+        return wrapRpc(
+            supabase.rpc('get_calibration_management', {
+                p_status: status || null,
+                p_category: category || null,
+                p_search: search || null,
             })
-        }));
+        ).then(res => ({ data: res.data || [] }));
     },
 
     getDue: () => wrap(
@@ -475,16 +458,9 @@ export const calibrationApi = {
         }))
     })),
 
-    getSummary: () => wrap(
-        supabase.from('calibration_records').select('calibration_status')
-    ).then(res => {
-        const counts = {};
-        (res.data || []).forEach(r => { counts[r.calibration_status] = (counts[r.calibration_status] || 0) + 1; });
-        return { data: {
-            summary: Object.entries(counts).map(([calibration_status, count]) => ({ calibration_status, count })),
-            total: res.data?.length || 0,
-        }};
-    }),
+    getSummary: () => wrapRpc(
+        supabase.rpc('get_calibration_summary')
+    ),
 
     getHistory: (equipmentId) => wrap(
         supabase.from('calibration_records')
