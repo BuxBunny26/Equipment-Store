@@ -4,11 +4,13 @@ import { reportsApi, locationsApi, personnelApi, movementsApi, customersApi } fr
 import { useOperator } from '../context/OperatorContext';
 import OperatorWarning from '../components/OperatorWarning';
 import PhotoCapture from '../components/PhotoCapture';
+import AddEquipmentModal from '../components/AddEquipmentModal';
 import { Icons } from '../components/Icons';
 
 function CheckOut() {
     const [showConfirm, setShowConfirm] = useState(false);
     const [pendingSubmit, setPendingSubmit] = useState(null);
+    const [showAddEquipment, setShowAddEquipment] = useState(false);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { operator, isOperatorSelected } = useOperator();
@@ -298,11 +300,16 @@ function CheckOut() {
       <div className="two-column-grid">
         {/* Equipment Selection */}
         <div className="card">
-          <div className="card-header">
-            <h2 className="card-title">Select Equipment</h2>
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-              {filteredEquipment.length} available
-            </span>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h2 className="card-title">Select Equipment</h2>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                {filteredEquipment.length} available
+              </span>
+            </div>
+            <button className="btn btn-sm btn-primary" onClick={() => setShowAddEquipment(true)}>
+              + Add New
+            </button>
           </div>
 
           <div className="form-group">
@@ -786,6 +793,16 @@ function CheckOut() {
             setPhotoPreview(preview);
           }}
           onClose={() => setShowCamera(false)}
+        />
+      )}
+
+      {showAddEquipment && (
+        <AddEquipmentModal
+          onClose={() => setShowAddEquipment(false)}
+          onSuccess={() => {
+            setShowAddEquipment(false);
+            fetchData();
+          }}
         />
       )}
     </div>
