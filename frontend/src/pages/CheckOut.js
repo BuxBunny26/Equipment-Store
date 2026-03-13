@@ -63,6 +63,7 @@ function CheckOut() {
     const conditionHelp = shouldShowReason()
       ? 'A reason is required for non-Excellent or worsened conditions.'
       : 'Select the current condition. If not Excellent or worsened, a reason is required.';
+  const [lastConditions, setLastConditions] = useState({});
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [showCamera, setShowCamera] = useState(false);
@@ -86,6 +87,40 @@ function CheckOut() {
       }
     }
   }, [operator, personnel]);
+
+  // Fetch last condition for selected equipment
+  useEffect(() => {
+    const fetchLastConditions = async () => {
+      const conditions = {};
+      for (const idStr of selectedEquipmentIds) {
+        try {
+          const res = await movementsApi.getAll({ equipment_id: parseInt(idStr), action: 'OUT', limit: 1 });
+          if (res.data && res.data.length > 0) {
+            const movement = res.data[0];
+            const conditionMatch = movement.notes?.match(/Condition:\s*(Excellent|Good|Poor)/i);
+            if (conditionMatch) {
+              conditions[idStr] = {
+                condition: conditionMatch[1],
+                date: new Date(movement.created_at).toLocaleDateString('en-GB'),
+              };
+            } else {
+              conditions[idStr] = null;
+            }
+          } else {
+            conditions[idStr] = null;
+          }
+        } catch {
+          conditions[idStr] = null;
+        }
+      }
+      setLastConditions(conditions);
+    };
+    if (selectedEquipmentIds.length > 0) {
+      fetchLastConditions();
+    } else {
+      setLastConditions({});
+    }
+  }, [selectedEquipmentIds]);
 
   const toggleEquipmentSelection = (equipmentId) => {
     const idStr = equipmentId.toString();
@@ -164,6 +199,8 @@ function CheckOut() {
             customer_id: formData.destination_type === 'customer' ? parseInt(formData.customer_id) : null,
             personnel_id: parseInt(formData.personnel_id),
             notes: sanitize([
+              formData.condition ? `Condition: ${formData.condition}` : null,
+              formData.reason ? `Reason: ${formData.reason}` : null,
               selectedCustomer ? `Customer Site: ${selectedCustomer.display_name}` : null,
               receivingPerson ? `Receiving: ${receivingPerson.full_name}` : null,
               sanitize(formData.notes) || null,
@@ -191,9 +228,9 @@ function CheckOut() {
         } else if (formData.destination_type === 'calibration') {
           actionText = `Successfully sent ${itemText} for calibration${formData.calibration_provider ? ` (${formData.calibration_provider})` : ''}`;
         } else if (formData.destination_type === 'transfer') {
-          const fromLoc = locations.find(l => l.id === parseInt(formData.from_site_id));
-          const toLoc = locations.find(l => l.id === parseInt(formData.to_site_id));
-          actionText = `Successfully transferred ${itemText}${fromLoc ? ` from ${fromLoc.name}` : ''}${toLoc ? ` to ${toLoc.name}` : ''}`;
+          const fromSites = [...new Set(selectedItems.map(eq => eq.current_location).filter(Boolean))];
+          const toSite = customers.find(c => c.id === parseInt(formData.to_site_id));
+          actionText = `Successfully transferred ${itemText}${fromSites.length > 0 ? ` from ${fromSites.join(', ')}` : ''}${toSite ? ` to ${toSite.display_name}` : ''}`;
         } else {
           actionText = `Successfully checked out ${itemText}`;
         }
@@ -595,21 +632,19 @@ function CheckOut() {
             ) : formData.destination_type === 'transfer' ? (
               <>
                 <div className="form-group">
-                  <label className="form-label">From Site *</label>
-                  <select
-                    name="from_site_id"
-                    className="form-select"
-                    value={formData.from_site_id || ''}
-                    onChange={handleChange}
-                    required
-                  >
-                    <option value="">Select source site...</option>
-                    {customers.map((cust) => (
-                      <option key={cust.id} value={cust.id}>
-                        {cust.display_name} {cust.billing_city ? `(${cust.billing_city})` : ''} {cust.billing_state ? `- ${cust.billing_state}` : ''}
-                      </option>
-                    ))}
-                  </select>
+                  <label className="form-label">From Site</label>
+                  <div style={{
+                    padding: '10px 12px',
+                    background: 'var(--bg-secondary)',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-primary)',
+                    fontSize: '0.9rem'
+                  }}>
+                    {selectedEquipmentList.length > 0
+                      ? [...new Set(selectedEquipmentList.map(eq => eq.current_location).filter(Boolean))].join(', ') || 'Unknown location'
+                      : <span style={{ color: 'var(--text-secondary)' }}>Select equipment to see current location</span>}
+                  </div>
                 </div>
                 <div className="form-group">
                   <label className="form-label">To Site *</label>
@@ -671,6 +706,28 @@ function CheckOut() {
                   max={selectedEquipmentList.find(eq => eq.is_quantity_tracked)?.available_quantity}
                   required
                 />
+              </div>
+            )}
+
+            {selectedEquipmentList.length > 0 && (
+              <div style={{
+                padding: '12px',
+                background: 'var(--bg-secondary)',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--border-color)',
+                marginBottom: '16px',
+                fontSize: '0.875rem'
+              }}>
+                <strong style={{ display: 'block', marginBottom: '4px' }}>Previous Condition:</strong>
+                {selectedEquipmentList.map(eq => {
+                  const lc = lastConditions[eq.id.toString()];
+                  return (
+                    <div key={eq.id} style={{ padding: '2px 0' }}>
+                      <span style={{ fontWeight: 500 }}>{eq.equipment_name}:</span>{' '}
+                      {lc ? `${lc.condition} on ${lc.date}` : 'Previous condition not available'}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -789,7 +846,7 @@ function CheckOut() {
                   (formData.destination_type === 'internal' ? !formData.location_id :
                     formData.destination_type === 'customer' ? !formData.customer_id :
                     formData.destination_type === 'calibration' ? !formData.calibration_provider :
-                    formData.destination_type === 'transfer' ? (!formData.from_site_id || !formData.to_site_id) : false) ||
+                    formData.destination_type === 'transfer' ? !formData.to_site_id : false) ||
                   submitting ||
                   (shouldShowReason() && !formData.reason) ||
                   (selectedEquipmentList.some(eq => eq.is_quantity_tracked) && (!formData.quantity || formData.quantity < 1 || formData.quantity > selectedEquipmentList.find(eq => eq.is_quantity_tracked)?.available_quantity))
