@@ -84,7 +84,7 @@ function CustomerSites() {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return c.display_name?.toLowerCase().includes(term) ||
-           c.city?.toLowerCase().includes(term) ||
+           c.billing_city?.toLowerCase().includes(term) ||
            c.customer_number?.toLowerCase().includes(term);
   });
 
@@ -164,6 +164,9 @@ function CustomerSites() {
             {filteredCustomers.map(customer => (
               <div key={customer.id}>
                 <div 
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCustomerClick(customer); } }}
                   style={{ 
                     display: 'flex', 
                     justifyContent: 'space-between', 
@@ -181,13 +184,13 @@ function CustomerSites() {
                       {customer.display_name}
                     </div>
                     <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                      {customer.city && <span>{customer.city}</span>}
+                      {customer.billing_city && <span>{customer.billing_city}</span>}
                       {customer.customer_number && <span> • #{customer.customer_number}</span>}
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <span className="badge badge-checked-out">
-                      {customer.equipment_count || 0} items
+                      {customerEquipment.length > 0 && selectedCustomer?.id === customer.id ? customerEquipment.length : '...'} items
                     </span>
                     <span style={{ color: 'var(--text-secondary)' }}>
                       {selectedCustomer?.id === customer.id ? <Icons.ChevronDown size={16} /> : <Icons.ChevronRight size={16} />}
@@ -243,15 +246,20 @@ function CustomerSites() {
                               </td>
                               <td>{eq.serial_number || '-'}</td>
                               <td>{eq.category}</td>
-                              <td>{formatDate(eq.last_action_timestamp)}</td>
-                              <td>{eq.holder_name || '-'}</td>
+                              <td>{formatDate(eq.checked_out_at)}</td>
+                              <td>{eq.checked_out_to || '-'}</td>
                               <td>
-                                <span style={{ 
-                                  color: eq.days_out > 30 ? 'var(--danger)' : 
-                                         eq.days_out > 14 ? 'var(--warning)' : 'inherit'
-                                }}>
-                                  {eq.days_out || 0}
-                                </span>
+                                {(() => {
+                                  const days = eq.checked_out_at ? Math.floor((new Date() - new Date(eq.checked_out_at)) / (1000 * 60 * 60 * 24)) : 0;
+                                  return (
+                                    <span style={{ 
+                                      color: days > 30 ? 'var(--error-color)' : 
+                                             days > 14 ? 'var(--warning-color)' : 'inherit'
+                                    }}>
+                                      {days}
+                                    </span>
+                                  );
+                                })()}
                               </td>
                             </tr>
                           ))}

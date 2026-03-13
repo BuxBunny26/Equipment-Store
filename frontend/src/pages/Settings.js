@@ -80,7 +80,7 @@ function CategoriesSettings() {
     try {
       setLoading(true);
       const response = await categoriesApi.getAll();
-      setCategories(Array.isArray(response?.data) ? response.data : []);
+      setCategories(response.data);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -223,8 +223,8 @@ function SubcategoriesSettings() {
         subcategoriesApi.getAll(),
         categoriesApi.getAll(),
       ]);
-      setSubcategories(Array.isArray(subRes?.data) ? subRes.data : []);
-      setCategories(Array.isArray(catRes?.data) ? catRes.data : []);
+      setSubcategories(subRes.data);
+      setCategories(catRes.data);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -344,11 +344,10 @@ function LocationsSettings() {
     try {
       setLoading(true);
       const response = await locationsApi.getAll(false);
-      const locData = Array.isArray(response?.data) ? response.data : [];
-      setLocations(locData);
+      setLocations(response.data);
       // Expand all regions by default
       const regions = {};
-      locData.forEach(loc => {
+      response.data.forEach(loc => {
         const key = `${loc.country || 'Other'}-${loc.region || 'Unassigned'}`;
         regions[key] = true;
       });
@@ -595,7 +594,7 @@ function PersonnelSettings() {
     try {
       setLoading(true);
       const response = await personnelApi.getAll(false);
-      setPersonnel(Array.isArray(response?.data) ? response.data : []);
+      setPersonnel(response.data);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -617,17 +616,17 @@ function PersonnelSettings() {
   };
 
   // Get unique departments for filter dropdown
-  const departments = Array.isArray(personnel) ? [...new Set(personnel.map(p => p.department).filter(Boolean))].sort() : [];
+  const departments = [...new Set(personnel.map(p => p.department).filter(Boolean))].sort();
 
   // Filter personnel based on search and department
-  const filteredPersonnel = Array.isArray(personnel) ? personnel.filter(p => {
+  const filteredPersonnel = personnel.filter(p => {
     const matchesSearch = !searchTerm || 
       p.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.employee_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.email?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDepartment = !departmentFilter || p.department === departmentFilter;
     return matchesSearch && matchesDepartment;
-  }) : [];
+  });
 
   if (loading) {
     return <div className="loading"><div className="spinner"></div> Loading...</div>;
@@ -848,7 +847,7 @@ function AppearanceSettings() {
               left: 0,
               right: 0,
               bottom: 0,
-              background: darkMode ? 'var(--primary-color)' : '#ccc',
+              background: darkMode ? 'var(--primary-color)' : 'var(--border-color)',
               transition: '0.3s',
               borderRadius: '28px'
             }}>

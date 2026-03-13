@@ -57,7 +57,7 @@ function AuditLog() {
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '-';
-    return new Date(dateStr).toLocaleString('en-ZA', {
+    return new Date(dateStr).toLocaleString('en-AU', {
       day: '2-digit', month: 'short', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
     });
@@ -75,10 +75,10 @@ function AuditLog() {
     return changedFields.map(field => (
       <div key={field} style={{ marginBottom: '0.5rem' }}>
         <strong>{field}:</strong>{' '}
-        <span style={{ color: '#dc3545', textDecoration: 'line-through' }}>
+        <span style={{ color: 'var(--error-color)', textDecoration: 'line-through' }}>
           {JSON.stringify(oldValues[field])}
         </span>{' → '}
-        <span style={{ color: '#28a745' }}>
+        <span style={{ color: 'var(--success-color)' }}>
           {JSON.stringify(newValues[field])}
         </span>
       </div>

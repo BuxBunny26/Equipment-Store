@@ -196,7 +196,7 @@ function Maintenance() {
 
   const formatCurrency = (amount) => {
     if (!amount) return '-';
-    return new Intl.NumberFormat('en-ZA', {
+    return new Intl.NumberFormat('en-AU', {
       style: 'currency',
       currency: 'ZAR',
     }).format(amount);
@@ -593,6 +593,7 @@ function Maintenance() {
                     <input
                       type="number"
                       step="0.01"
+                      min="0"
                       className="form-input"
                       value={formData.cost}
                       onChange={(e) => setFormData(prev => ({ ...prev, cost: e.target.value }))}
@@ -604,6 +605,7 @@ function Maintenance() {
                     <label className="form-label">Downtime (Days)</label>
                     <input
                       type="number"
+                      min="0"
                       className="form-input"
                       value={formData.downtime_days}
                       onChange={(e) => setFormData(prev => ({ ...prev, downtime_days: e.target.value }))}

@@ -92,17 +92,22 @@ function exportPDF(data, columns, filename, title) {
 // ============================================
 export function exportData(format, data, columns, filename, title) {
     if (!data || data.length === 0) {
-        alert('No data to export.');
-        return;
+        return { success: false, error: 'No data to export.' };
     }
     const ts = new Date().toISOString().slice(0, 10);
     const fn = `${filename}_${ts}`;
 
-    switch (format) {
-        case 'csv': return exportCSV(data, columns, fn);
-        case 'excel': return exportExcel(data, columns, fn, title || filename);
-        case 'pdf': return exportPDF(data, columns, fn, title || filename);
-        default: return exportExcel(data, columns, fn, title || filename);
+    try {
+        switch (format) {
+            case 'csv': exportCSV(data, columns, fn); break;
+            case 'excel': exportExcel(data, columns, fn, title || filename); break;
+            case 'pdf': exportPDF(data, columns, fn, title || filename); break;
+            default: exportExcel(data, columns, fn, title || filename); break;
+        }
+        return { success: true };
+    } catch (err) {
+        console.error('Export failed:', err);
+        return { success: false, error: 'Export failed: ' + err.message };
     }
 }
 

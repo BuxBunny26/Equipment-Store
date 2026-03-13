@@ -104,12 +104,12 @@ function Equipment() {
       return <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>N/A</span>;
     }
     if (item.calibration_status === 'Expired') {
-      return <span className="badge" style={{ background: '#ef4444' }}>Expired</span>;
+      return <span className="badge" style={{ background: 'var(--error-color)' }}>Expired</span>;
     }
     if (item.calibration_status === 'Due Soon') {
-      return <span className="badge" style={{ background: '#f59e0b' }}>Due Soon</span>;
+      return <span className="badge" style={{ background: 'var(--warning-color)' }}>Due Soon</span>;
     }
-    return <span className="badge" style={{ background: '#10b981' }}>Calibrated</span>;
+    return <span className="badge" style={{ background: 'var(--success-color)' }}>Calibrated</span>;
   };
 
   return (

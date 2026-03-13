@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { personnelApi } from '../services/api';
+import { personnelApi, usersApi } from '../services/api';
 
 const OperatorContext = createContext();
 
@@ -79,6 +79,10 @@ export function OperatorProvider({ children }) {
     if (person) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(person));
       localStorage.setItem(ACTIVITY_KEY, Date.now().toString());
+      // Update last_login in users table
+      usersApi.recordLogin(person.id).catch(err =>
+        console.error('Failed to record login:', err)
+      );
     } else {
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(ACTIVITY_KEY);

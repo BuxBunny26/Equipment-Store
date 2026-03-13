@@ -7,6 +7,7 @@ import { Icons } from '../components/Icons';
 function Calibration() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
   const [equipment, setEquipment] = useState([]);
   const [categories, setCategories] = useState([]);
   const [summary, setSummary] = useState({ summary: [], total: 0 });
@@ -120,9 +121,11 @@ function Calibration() {
       setShowAddModal(false);
       fetchCalibrationStatus();
       fetchSummary();
-      alert('Calibration record added successfully!');
+      setSuccess('Calibration record added successfully!');
+      setTimeout(() => setSuccess(null), 5000);
     } catch (err) {
-      alert('Error adding calibration: ' + err.message);
+      setError('Error adding calibration: ' + err.message);
+      setTimeout(() => setError(null), 5000);
     } finally {
       setFormSubmitting(false);
     }
@@ -136,7 +139,8 @@ function Calibration() {
     if (url) {
       window.open(url, '_blank');
     } else {
-      alert('Certificate file not available');
+      setError('Certificate file not available');
+      setTimeout(() => setError(null), 3000);
     }
   };
 
@@ -147,7 +151,8 @@ function Calibration() {
     if (url) {
       window.open(url, '_blank');
     } else {
-      alert('Certificate file not available');
+      setError('Certificate file not available');
+      setTimeout(() => setError(null), 3000);
     }
   };
 
@@ -164,7 +169,7 @@ function Calibration() {
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '-';
-    return new Date(dateStr).toLocaleDateString('en-ZA');
+    return new Date(dateStr).toLocaleDateString('en-AU');
   };
 
   const getSummaryCount = (status) => {
@@ -181,29 +186,32 @@ function Calibration() {
         </div>
       </div>
 
+      {error && <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{error}</div>}
+      {success && <div className="alert alert-success" style={{ marginBottom: '1rem' }}>{success}</div>}
+
       {/* Summary Cards */}
       <div className="dashboard-grid" style={{ marginBottom: '1.5rem' }}>
-        <div className="stat-card" style={{ borderLeft: '4px solid #dc3545' }}>
+        <div className="stat-card" style={{ borderLeft: '4px solid var(--error-color)' }}>
           <div className="stat-content">
-            <div className="stat-value" style={{ color: '#dc3545' }}>{getSummaryCount('Expired')}</div>
+            <div className="stat-value" style={{ color: 'var(--error-color)' }}>{getSummaryCount('Expired')}</div>
             <div className="stat-label">Expired</div>
           </div>
         </div>
-        <div className="stat-card" style={{ borderLeft: '4px solid #ffc107' }}>
+        <div className="stat-card" style={{ borderLeft: '4px solid var(--warning-color)' }}>
           <div className="stat-content">
-            <div className="stat-value" style={{ color: '#ffc107' }}>{getSummaryCount('Due Soon')}</div>
+            <div className="stat-value" style={{ color: 'var(--warning-color)' }}>{getSummaryCount('Due Soon')}</div>
             <div className="stat-label">Due Soon (30 days)</div>
           </div>
         </div>
-        <div className="stat-card" style={{ borderLeft: '4px solid #28a745' }}>
+        <div className="stat-card" style={{ borderLeft: '4px solid var(--success-color)' }}>
           <div className="stat-content">
-            <div className="stat-value" style={{ color: '#28a745' }}>{getSummaryCount('Valid')}</div>
+            <div className="stat-value" style={{ color: 'var(--success-color)' }}>{getSummaryCount('Valid')}</div>
             <div className="stat-label">Valid</div>
           </div>
         </div>
-        <div className="stat-card" style={{ borderLeft: '4px solid #6c757d' }}>
+        <div className="stat-card" style={{ borderLeft: '4px solid var(--text-secondary)' }}>
           <div className="stat-content">
-            <div className="stat-value" style={{ color: '#6c757d' }}>{getSummaryCount('Not Calibrated')}</div>
+            <div className="stat-value" style={{ color: 'var(--text-secondary)' }}>{getSummaryCount('Not Calibrated')}</div>
             <div className="stat-label">Not Calibrated</div>
           </div>
         </div>
@@ -333,8 +341,8 @@ function Calibration() {
                       <td>
                         {item.days_until_expiry !== null ? (
                           <span style={{ 
-                            color: item.days_until_expiry < 0 ? '#dc3545' : 
-                                   item.days_until_expiry <= 30 ? '#ffc107' : '#28a745',
+                            color: item.days_until_expiry < 0 ? 'var(--error-color)' : 
+                                   item.days_until_expiry <= 30 ? 'var(--warning-color)' : 'var(--success-color)',
                             fontWeight: 600
                           }}>
                             {item.days_until_expiry}
@@ -350,10 +358,10 @@ function Calibration() {
                             title="View Certificate PDF"
                             style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px' }}
                           >
-                            <Icons.FileText size={22} style={{ color: '#dc3545' }} />
+                            <Icons.FileText size={22} style={{ color: 'var(--error-color)' }} />
                           </button>
                         ) : (
-                          <span style={{ color: '#6c757d' }}>-</span>
+                          <span style={{ color: 'var(--text-secondary)' }}>-</span>
                         )}
                       </td>
                       <td>
@@ -393,10 +401,10 @@ function Calibration() {
             </div>
             <div className="modal-body">
               {selectedEquipment && (
-                <div className="equipment-info" style={{ marginBottom: '1rem', padding: '1rem', background: '#f8f9fa', borderRadius: '4px' }}>
+                <div className="equipment-info" style={{ marginBottom: '1rem', padding: '1rem', background: 'var(--bg-primary)', borderRadius: '4px' }}>
                   <strong>{selectedEquipment.equipment_name}</strong>
                   <br />
-                  <span style={{ color: '#6c757d' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>
                     Serial: {selectedEquipment.serial_number} | {selectedEquipment.category}
                   </span>
                 </div>
@@ -457,7 +465,7 @@ function Calibration() {
                     accept=".pdf,.jpg,.jpeg,.png,.tiff,.doc,.docx"
                     onChange={(e) => setCertificateFile(e.target.files[0])}
                   />
-                  <small style={{ color: '#6c757d' }}>Max 10MB. Accepted: PDF, JPEG, PNG, TIFF, DOC, DOCX</small>
+                  <small style={{ color: 'var(--text-secondary)' }}>Max 10MB. Accepted: PDF, JPEG, PNG, TIFF, DOC, DOCX</small>
                 </div>
 
                 <div className="form-group">
@@ -495,10 +503,10 @@ function Calibration() {
             </div>
             <div className="modal-body">
               {selectedEquipment && (
-                <div className="equipment-info" style={{ marginBottom: '1rem', padding: '1rem', background: '#f8f9fa', borderRadius: '4px' }}>
+                <div className="equipment-info" style={{ marginBottom: '1rem', padding: '1rem', background: 'var(--bg-primary)', borderRadius: '4px' }}>
                   <strong>{selectedEquipment.equipment_name}</strong>
                   <br />
-                  <span style={{ color: '#6c757d' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>
                     Serial: {selectedEquipment.serial_number} | {selectedEquipment.manufacturer || 'Unknown manufacturer'}
                   </span>
                 </div>
@@ -507,7 +515,7 @@ function Calibration() {
               {historyLoading ? (
                 <div className="loading-spinner">Loading history...</div>
               ) : calibrationHistory.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#6c757d', padding: '2rem' }}>
+                <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>
                   No calibration history found for this equipment.
                 </p>
               ) : (
@@ -526,7 +534,7 @@ function Calibration() {
                     </thead>
                     <tbody>
                       {calibrationHistory.map((record, index) => (
-                        <tr key={record.id} style={index === 0 ? { background: '#e8f5e9' } : {}}>
+                        <tr key={record.id} style={index === 0 ? { background: 'var(--bg-primary)' } : {}}>
                           <td>{formatDate(record.calibration_date)}</td>
                           <td>{formatDate(record.expiry_date)}</td>
                           <td>{record.validity_days}</td>
@@ -552,7 +560,7 @@ function Calibration() {
                                 </button>
                               </div>
                             ) : (
-                              <span style={{ color: '#6c757d' }}>-</span>
+                              <span style={{ color: 'var(--text-secondary)' }}>-</span>
                             )}
                           </td>
                         </tr>

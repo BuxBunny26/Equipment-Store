@@ -50,16 +50,10 @@ function CheckOut() {
     to_site_id: '',
     quantity: '',
   });
-  const [prevCondition, setPrevCondition] = useState('Excellent'); // Default, update as needed
     // Helper: Should show reason field?
     const shouldShowReason = () => {
       if (!formData.condition) return false;
-      if (formData.condition !== 'Excellent') return true;
-      if (prevCondition && ['Good', 'Poor'].includes(formData.condition) && formData.condition !== prevCondition) {
-        const order = { 'Excellent': 3, 'Good': 2, 'Poor': 1 };
-        return order[formData.condition] < order[prevCondition];
-      }
-      return false;
+      return formData.condition !== 'Excellent';
     };
 
     // Inline help for condition logic
@@ -132,12 +126,9 @@ function CheckOut() {
       submitCheckout();
     });
     setShowConfirm(true);
-  // Actual submit logic
-  const submitCheckout = async () => {
-    // ...existing handleSubmit code...
-    // (move all code from handleSubmit except the first lines above)
   };
 
+  const submitCheckout = async () => {
     try {
       // Sanitize input
       const sanitize = (str) =>
@@ -347,7 +338,7 @@ function CheckOut() {
                     marginBottom: '8px',
                     cursor: 'pointer',
                     border: `2px solid ${isSelected ? 'var(--primary-color)' : 'var(--border-color)'}`,
-                    background: isSelected ? 'rgba(25, 118, 210, 0.05)' : 'transparent',
+                    background: isSelected ? 'rgba(var(--primary-rgb, 25, 118, 210), 0.05)' : 'transparent',
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -426,7 +417,7 @@ function CheckOut() {
           <form onSubmit={handleSubmit}>
                   {showConfirm && (
                     <div className="modal-overlay">
-                      <div className="modal" style={{ padding: '24px', background: 'white', borderRadius: '8px', maxWidth: '400px', margin: 'auto', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
+                      <div className="modal" style={{ padding: '24px', background: 'var(--card-bg)', borderRadius: '8px', maxWidth: '400px', margin: 'auto', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
                         <h2>Confirm Checkout</h2>
                         <p>Are you sure you want to check out the selected equipment?</p>
                         <div style={{ display: 'flex', gap: '16px', marginTop: '24px', justifyContent: 'center' }}>

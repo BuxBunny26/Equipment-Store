@@ -4,6 +4,7 @@ import { Icons } from './Icons';
 function PhotoCapture({ onPhotoCapture, onClose }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+  const streamRef = useRef(null);
   const [stream, setStream] = useState(null);
   const [error, setError] = useState(null);
   const [capturedImage, setCapturedImage] = useState(null);
@@ -13,6 +14,7 @@ function PhotoCapture({ onPhotoCapture, onClose }) {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
       });
+      streamRef.current = mediaStream;
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
@@ -27,11 +29,11 @@ function PhotoCapture({ onPhotoCapture, onClose }) {
   React.useEffect(() => {
     startCamera();
     return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
-  }, []);
+  }, [startCamera]);
 
   const capturePhoto = () => {
     if (!videoRef.current || !canvasRef.current) return;

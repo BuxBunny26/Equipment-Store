@@ -54,12 +54,10 @@ function Dashboard() {
         maintenanceApi.getDue(),
         maintenanceApi.getOverdue(),
       ]);
-      const dueData = Array.isArray(dueRes?.data) ? dueRes.data : [];
-      const overdueData = Array.isArray(overdueRes?.data) ? overdueRes.data : [];
       setMaintenanceStats({
-        due_count: dueData.length,
-        overdue_count: overdueData.length,
-        upcoming: dueData.slice(0, 5),
+        due_count: dueRes.data.length,
+        overdue_count: overdueRes.data.length,
+        upcoming: dueRes.data.slice(0, 5),
       });
     } catch (err) {
       console.error('Error fetching maintenance stats:', err);
@@ -73,17 +71,14 @@ function Dashboard() {
         reservationsApi.getAll({ status: 'approved' }),
       ]);
       
-      const pendingData = Array.isArray(pendingRes?.data) ? pendingRes.data : [];
-      const approvedData = Array.isArray(approvedRes?.data) ? approvedRes.data : [];
-      
       const today = new Date().toISOString().split('T')[0];
-      const todayReservations = approvedData.filter(r => 
+      const todayReservations = approvedRes.data.filter(r => 
         r.start_date <= today && r.end_date >= today
       );
       
       setReservationStats({
-        pending: pendingData.length,
-        approved: approvedData.length,
+        pending: pendingRes.data.length,
+        approved: approvedRes.data.length,
         today: todayReservations.slice(0, 5),
       });
     } catch (err) {
@@ -94,8 +89,7 @@ function Dashboard() {
   const fetchNotifications = async () => {
     try {
       const response = await notificationsApi.getAlerts();
-      const notifData = Array.isArray(response?.data) ? response.data : [];
-      setNotifications(notifData.slice(0, 5));
+      setNotifications(response.data.slice(0, 5));
     } catch (err) {
       console.error('Error fetching notifications:', err);
     }
@@ -104,8 +98,7 @@ function Dashboard() {
   const fetchCalibrationSummary = async () => {
     try {
       const response = await calibrationApi.getSummary();
-      const summaryData = response?.data?.summary;
-      const total = response?.data?.total || 0;
+      const { summary, total } = response.data;
       
       // Convert array to object for easier access
       const counts = {
@@ -113,17 +106,15 @@ function Dashboard() {
         due_soon: 0,
         expired: 0,
         not_calibrated: 0,
-        total: total,
+        total: total || 0,
       };
       
-      if (Array.isArray(summaryData)) {
-        summaryData.forEach(item => {
-          if (item.calibration_status === 'Valid') counts.valid = parseInt(item.count);
-          else if (item.calibration_status === 'Due Soon') counts.due_soon = parseInt(item.count);
-          else if (item.calibration_status === 'Expired') counts.expired = parseInt(item.count);
-          else if (item.calibration_status === 'Not Calibrated') counts.not_calibrated = parseInt(item.count);
-        });
-      }
+      summary.forEach(item => {
+        if (item.calibration_status === 'Valid') counts.valid = parseInt(item.count);
+        else if (item.calibration_status === 'Due Soon') counts.due_soon = parseInt(item.count);
+        else if (item.calibration_status === 'Expired') counts.expired = parseInt(item.count);
+        else if (item.calibration_status === 'Not Calibrated') counts.not_calibrated = parseInt(item.count);
+      });
       
       setCalibrationSummary(counts);
     } catch (err) {
@@ -135,19 +126,7 @@ function Dashboard() {
     try {
       setLoading(true);
       const response = await reportsApi.getDashboard();
-      const responseData = response?.data || {};
-      setData({
-        summary: responseData.summary || {
-          total_equipment: 0,
-          available_equipment: 0,
-          checked_out_equipment: 0,
-          overdue_equipment: 0,
-          total_consumables: 0,
-          low_stock_consumables: 0,
-          overdue_threshold_days: 14,
-        },
-        recent_movements: Array.isArray(responseData.recent_movements) ? responseData.recent_movements : [],
-      });
+      setData(response.data);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -273,10 +252,11 @@ function Dashboard() {
             Calibration Status
             <button
               onClick={() => setShowCalibrationInfo(!showCalibrationInfo)}
+              aria-label={showCalibrationInfo ? 'Close calibration info' : 'What is Calibration?'}
               style={{
-                background: showCalibrationInfo ? '#dc3545' : '#0d6efd',
+                background: showCalibrationInfo ? 'var(--error-color, #dc3545)' : 'var(--primary-color, #0d6efd)',
                 border: '2px solid',
-                borderColor: showCalibrationInfo ? '#dc3545' : '#0d6efd',
+                borderColor: showCalibrationInfo ? 'var(--error-color, #dc3545)' : 'var(--primary-color, #0d6efd)',
                 borderRadius: '50%',
                 width: '22px',
                 height: '22px',
@@ -439,10 +419,11 @@ function Dashboard() {
               <Icons.Wrench size={20} /> Maintenance
               <button
                 onClick={() => setShowMaintenanceInfo(!showMaintenanceInfo)}
+                aria-label={showMaintenanceInfo ? 'Close maintenance info' : 'What is Maintenance?'}
                 style={{
-                  background: showMaintenanceInfo ? '#dc3545' : '#0d6efd',
+                  background: showMaintenanceInfo ? 'var(--error-color, #dc3545)' : 'var(--primary-color, #0d6efd)',
                   border: '2px solid',
-                  borderColor: showMaintenanceInfo ? '#dc3545' : '#0d6efd',
+                  borderColor: showMaintenanceInfo ? 'var(--error-color, #dc3545)' : 'var(--primary-color, #0d6efd)',
                   borderRadius: '50%',
                   width: '22px',
                   height: '22px',
@@ -528,10 +509,11 @@ function Dashboard() {
               <Icons.Calendar size={20} /> Reservations
               <button
                 onClick={() => setShowReservationsInfo(!showReservationsInfo)}
+                aria-label={showReservationsInfo ? 'Close reservations info' : 'What are Reservations?'}
                 style={{
-                  background: showReservationsInfo ? '#dc3545' : '#0d6efd',
+                  background: showReservationsInfo ? 'var(--error-color, #dc3545)' : 'var(--primary-color, #0d6efd)',
                   border: '2px solid',
-                  borderColor: showReservationsInfo ? '#dc3545' : '#0d6efd',
+                  borderColor: showReservationsInfo ? 'var(--error-color, #dc3545)' : 'var(--primary-color, #0d6efd)',
                   borderRadius: '50%',
                   width: '22px',
                   height: '22px',

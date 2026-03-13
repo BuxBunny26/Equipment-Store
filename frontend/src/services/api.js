@@ -191,13 +191,13 @@ export const equipmentApi = {
 
     getHistory: (id, limit = 50) => wrap(
         supabase.from('equipment_movements')
-            .select(`id, action, quantity, notes, created_at, created_by, locations(name), personnel(full_name, employee_id)`)
+            .select(`id, action, quantity, notes, photo_url, created_at, created_by, locations(name), personnel(full_name, employee_id)`)
             .eq('equipment_id', id)
             .order('created_at', { ascending: false })
             .limit(limit)
     ).then(res => ({
         data: (res.data || []).map(m => ({
-            ...m, location: m.locations?.name, personnel_name: m.personnel?.full_name,
+            ...m, location: m.locations?.name, personnel: m.personnel?.full_name,
             personnel_employee_id: m.personnel?.employee_id, locations: undefined,
         }))
     })),
@@ -210,7 +210,7 @@ export const movementsApi = {
         let query = supabase.from('equipment_movements')
             .select(`
                 id, equipment_id, action, quantity, location_id, customer_id,
-                personnel_id, notes, created_at, created_by,
+                personnel_id, photo_url, notes, created_at, created_by,
                 equipment(equipment_id, equipment_name),
                 locations(name), customers(display_name),
                 personnel(full_name, employee_id)
@@ -255,9 +255,17 @@ export const movementsApi = {
             return rpcCall.then(async (result) => {
                 const movementId = result.data?.movement?.id || result.data?.id;
                 if (movementId) {
-                    const fileName = `movement_${movementId}_${Date.now()}.jpg`;
-                    await supabase.storage.from('movement-photos')
-                        .upload(fileName, photoFile, { contentType: photoFile.type });
+                    const fileName = `movement_${movementId}.jpg`;
+                    const { error: uploadError } = await supabase.storage.from('movement-photos')
+                        .upload(fileName, photoFile, { contentType: photoFile.type, upsert: true });
+                    if (!uploadError) {
+                        const { data: urlData } = supabase.storage.from('movement-photos').getPublicUrl(fileName);
+                        if (urlData?.publicUrl) {
+                            await supabase.from('equipment_movements')
+                                .update({ photo_url: urlData.publicUrl })
+                                .eq('id', movementId);
+                        }
+                    }
                 }
                 return result;
             });
@@ -277,7 +285,8 @@ export const movementsApi = {
     ),
 
     getPhotoUrl: (movementId) => {
-        return supabase.storage.from('movement-photos').getPublicUrl(`movement_${movementId}`).data?.publicUrl || '';
+        const { data } = supabase.storage.from('movement-photos').getPublicUrl(`movement_${movementId}.jpg`);
+        return data?.publicUrl || '';
     },
 };
 
@@ -362,15 +371,24 @@ export const reportsApi = {
 
 // Customers
 export const customersApi = {
-    getAll: (params = {}) => {
-        const { country, search, active_only } = params;
+    getAll: async (params = {}) => {
+        const { country, search, active_only, has_equipment } = params;
         let query = supabase.from('customers')
             .select('id, customer_number, display_name, currency_code, billing_city, billing_state, billing_country, shipping_city, shipping_state, shipping_country, tax_registration_number, vat_treatment, email, is_active, created_at')
             .order('display_name');
         if (active_only !== 'false') query = query.eq('is_active', true);
         if (country) query = query.eq('billing_country', country);
         if (search) query = query.or(`display_name.ilike.%${search}%,customer_number.ilike.%${search}%`);
-        return wrap(query);
+        const result = await wrap(query);
+        if (has_equipment) {
+            const { data: movements } = await supabase.from('equipment_movements')
+                .select('customer_id, equipment!inner(status)')
+                .eq('action', 'OUT')
+                .eq('equipment.status', 'Checked Out');
+            const idsWithEquipment = new Set((movements || []).map(m => m.customer_id));
+            return { data: (result.data || []).filter(c => idsWithEquipment.has(c.id)) };
+        }
+        return result;
     },
     getById: (id) => wrap(supabase.from('customers').select('*').eq('id', id).single()),
     create: (data) => wrap(supabase.from('customers').insert({ ...data, currency_code: data.currency_code || 'ZAR' }).select().single()),
@@ -508,8 +526,6 @@ export const calibrationApi = {
     },
 
     delete: (id) => wrap(supabase.from('calibration_records').delete().eq('id', id)),
-    getCertificateUrl: (recordId) => '',
-    getDownloadUrl: (recordId) => '',
 };
 
 // Reservations
@@ -742,16 +758,6 @@ export const notificationsApi = {
     updateSettings: (userId, data) => Promise.resolve({ data: {} }),
 };
 
-// Exports (client-side - URLs are placeholders, actual export handled in components)
-export const exportsApi = {
-    getEquipmentUrl: (params = {}) => '#export-equipment',
-    getMovementsUrl: (params = {}) => '#export-movements',
-    getCalibrationUrl: (params = {}) => '#export-calibration',
-    getCheckedOutUrl: () => '#export-checked-out',
-    getMaintenanceUrl: (params = {}) => '#export-maintenance',
-    getAuditUrl: (params = {}) => '#export-audit',
-    getCustomerEquipmentUrl: (customerId) => '#export-customer-equipment',
-};
 
 // Users & Roles
 export const usersApi = {
@@ -797,6 +803,9 @@ export const usersApi = {
     }).eq('id', id).select().single()),
     updateRole: (id, roleId) => wrap(supabase.from('users').update({ role_id: roleId }).eq('id', id).select().single()),
     updateStatus: (id, isActive) => wrap(supabase.from('users').update({ is_active: isActive }).eq('id', id).select().single()),
+    recordLogin: (personnelId) => wrap(
+        supabase.from('users').update({ last_login: new Date().toISOString() }).eq('personnel_id', personnelId).select().single()
+    ),
     delete: (id) => wrap(supabase.from('users').delete().eq('id', id)),
     getPermissions: (id) => wrap(
         supabase.from('users').select('roles(permissions)').eq('id', id).single()

@@ -70,17 +70,17 @@ function EquipmentDetail() {
   };
 
   const getCalibrationStatusBadge = (expiryDate) => {
-    if (!expiryDate) return <span className="badge" style={{ background: '#6b7280' }}>Not Calibrated</span>;
+    if (!expiryDate) return <span className="badge" style={{ background: 'var(--text-secondary)' }}>Not Calibrated</span>;
     const expiry = new Date(expiryDate);
     const today = new Date();
     const daysUntilExpiry = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
     
     if (daysUntilExpiry < 0) {
-      return <span className="badge badge-expired" style={{ background: '#ef4444' }}>Expired</span>;
+      return <span className="badge badge-expired" style={{ background: 'var(--error-color)' }}>Expired</span>;
     } else if (daysUntilExpiry <= 30) {
-      return <span className="badge badge-due-soon" style={{ background: '#f59e0b' }}>Due Soon ({daysUntilExpiry} days)</span>;
+      return <span className="badge badge-due-soon" style={{ background: 'var(--warning-color)' }}>Due Soon ({daysUntilExpiry} days)</span>;
     }
-    return <span className="badge badge-valid" style={{ background: '#10b981' }}>Valid</span>;
+    return <span className="badge badge-valid" style={{ background: 'var(--success-color)' }}>Valid</span>;
   };
 
   const openCertificate = (record) => {
@@ -382,6 +382,7 @@ function EquipmentDetail() {
                     <th>Quantity</th>
                     <th>Location</th>
                     <th>Personnel</th>
+                    <th>Photo</th>
                     <th>Notes</th>
                     <th>Recorded By</th>
                   </tr>
@@ -410,6 +411,17 @@ function EquipmentDetail() {
                           </>
                         )}
                         {!movement.personnel && '-'}
+                      </td>
+                      <td>
+                        {movement.photo_url ? (
+                          <a href={movement.photo_url} target="_blank" rel="noopener noreferrer">
+                            <img
+                              src={movement.photo_url}
+                              alt="Movement photo"
+                              style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                            />
+                          </a>
+                        ) : '-'}
                       </td>
                       <td style={{ fontSize: '0.8rem' }}>{movement.notes || '-'}</td>
                       <td style={{ fontSize: '0.8rem' }}>{movement.created_by || '-'}</td>
