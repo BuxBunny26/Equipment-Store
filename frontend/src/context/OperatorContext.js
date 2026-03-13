@@ -5,10 +5,12 @@ const OperatorContext = createContext();
 
 const STORAGE_KEY = 'equipment_store_operator';
 const ACTIVITY_KEY = 'equipment_store_last_activity';
+const ROLE_KEY = 'equipment_store_operator_role';
 const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes
 
 export function OperatorProvider({ children }) {
   const [operator, setOperator] = useState(null);
+  const [operatorRole, setOperatorRole] = useState(null);
   const [personnel, setPersonnel] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -28,13 +30,16 @@ export function OperatorProvider({ children }) {
         if (lastActivity && (Date.now() - parseInt(lastActivity, 10)) > INACTIVITY_TIMEOUT) {
           localStorage.removeItem(STORAGE_KEY);
           localStorage.removeItem(ACTIVITY_KEY);
+          localStorage.removeItem(ROLE_KEY);
         } else {
           setOperator(parsed);
+          setOperatorRole(localStorage.getItem(ROLE_KEY));
           localStorage.setItem(ACTIVITY_KEY, Date.now().toString());
         }
       } catch (e) {
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem(ACTIVITY_KEY);
+        localStorage.removeItem(ROLE_KEY);
       }
     }
   }, []);
@@ -74,11 +79,23 @@ export function OperatorProvider({ children }) {
     }
   };
 
-  const selectOperator = (person) => {
+  const selectOperator = async (person) => {
     setOperator(person);
     if (person) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(person));
       localStorage.setItem(ACTIVITY_KEY, Date.now().toString());
+      // Fetch user role by personnel_id
+      try {
+        const res = await usersApi.getAll({ search: '' });
+        const user = (res.data || []).find(u => u.personnel_id === person.id);
+        const role = user?.role_name || null;
+        setOperatorRole(role);
+        localStorage.setItem(ROLE_KEY, role || '');
+      } catch (err) {
+        console.error('Failed to fetch operator role:', err);
+        setOperatorRole(null);
+        localStorage.removeItem(ROLE_KEY);
+      }
       // Update last_login in users table
       usersApi.recordLogin(person.id).catch(err =>
         console.error('Failed to record login:', err)
@@ -86,17 +103,22 @@ export function OperatorProvider({ children }) {
     } else {
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(ACTIVITY_KEY);
+      localStorage.removeItem(ROLE_KEY);
+      setOperatorRole(null);
     }
   };
 
   const clearOperator = () => {
     setOperator(null);
+    setOperatorRole(null);
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(ACTIVITY_KEY);
+    localStorage.removeItem(ROLE_KEY);
   };
 
   const value = {
     operator,
+    operatorRole,
     personnel,
     loading,
     selectOperator,

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import ErrorBoundary from './components/ErrorBoundary';
-import { BrowserRouter as Router, Routes, Route, NavLink, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 
 // Context
 import { OperatorProvider } from './context/OperatorContext';
+import { useOperator } from './context/OperatorContext';
 import { ThemeProvider } from './context/ThemeContext';
 
 // Components
@@ -142,6 +143,7 @@ function AppContent() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showOperatorModal, setShowOperatorModal] = useState(true);
   const location = useLocation();
+  const { operatorRole } = useOperator();
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -270,9 +272,11 @@ function AppContent() {
         
         <div className="nav-section">
           <div className="nav-section-title">System</div>
-          <NavLink to="/users" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-            <Icons.Users /> Users
-          </NavLink>
+          {operatorRole?.toLowerCase() === 'admin' && (
+            <NavLink to="/users" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+              <Icons.Users /> Users
+            </NavLink>
+          )}
           <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <Icons.Settings /> Settings
           </NavLink>
@@ -295,7 +299,7 @@ function AppContent() {
         <Route path="/reports" element={<Reports />} />
         <Route path="/customer-sites" element={<CustomerSites />} />
         <Route path="/audit-log" element={<AuditLog />} />
-        <Route path="/users" element={<UserManagement />} />
+        <Route path="/users" element={operatorRole?.toLowerCase() === 'admin' ? <UserManagement /> : <Navigate to="/" replace />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     </main>

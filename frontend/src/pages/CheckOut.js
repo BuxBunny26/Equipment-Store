@@ -274,7 +274,7 @@ function CheckOut() {
           <p className="page-subtitle">Issue equipment to personnel</p>
         </div>
         <button className="btn btn-secondary" onClick={() => navigate(-1)}>
-          â† Back
+          &larr; Back
         </button>
       </div>
 
