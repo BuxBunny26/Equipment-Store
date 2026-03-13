@@ -124,24 +124,24 @@ function Reports() {
             Refresh
           </button>
           <button className="btn btn-secondary" onClick={() => {
-            const colMap = { overdue: 'overdue', 'checked-out': 'checkedOut', available: 'available', 'low-stock': 'lowStock' };
+            const colMap = { overdue: 'overdue', 'checked-out': 'checkedOut', available: 'available', 'low-stock': 'lowStock', 'by-category': 'byCategory', 'by-location': 'byLocation' };
             const cols = EXPORT_COLUMNS[colMap[activeTab]];
             if (cols && data.length > 0) exportData('csv', data, cols, `report_${activeTab}`, `Report: ${activeTab}`);
-          }} disabled={data.length === 0}>
+          }} disabled={data.length === 0 || !['overdue', 'checked-out', 'available', 'low-stock', 'by-category', 'by-location'].includes(activeTab)}>
             CSV
           </button>
           <button className="btn btn-secondary" onClick={() => {
-            const colMap = { overdue: 'overdue', 'checked-out': 'checkedOut', available: 'available', 'low-stock': 'lowStock' };
+            const colMap = { overdue: 'overdue', 'checked-out': 'checkedOut', available: 'available', 'low-stock': 'lowStock', 'by-category': 'byCategory', 'by-location': 'byLocation' };
             const cols = EXPORT_COLUMNS[colMap[activeTab]];
             if (cols && data.length > 0) exportData('excel', data, cols, `report_${activeTab}`, `Report: ${activeTab}`);
-          }} disabled={data.length === 0}>
+          }} disabled={data.length === 0 || !['overdue', 'checked-out', 'available', 'low-stock', 'by-category', 'by-location'].includes(activeTab)}>
             Excel
           </button>
           <button className="btn btn-secondary" onClick={() => {
-            const colMap = { overdue: 'overdue', 'checked-out': 'checkedOut', available: 'available', 'low-stock': 'lowStock' };
+            const colMap = { overdue: 'overdue', 'checked-out': 'checkedOut', available: 'available', 'low-stock': 'lowStock', 'by-category': 'byCategory', 'by-location': 'byLocation' };
             const cols = EXPORT_COLUMNS[colMap[activeTab]];
             if (cols && data.length > 0) exportData('pdf', data, cols, `report_${activeTab}`, `Report: ${activeTab}`);
-          }} disabled={data.length === 0}>
+          }} disabled={data.length === 0 || !['overdue', 'checked-out', 'available', 'low-stock', 'by-category', 'by-location'].includes(activeTab)}>
             PDF
           </button>
         </div>

@@ -91,6 +91,7 @@ function CheckIn() {
       await movementsApi.create(payload, photoFile);
 
       setSuccess(`Successfully returned: ${selectedEquipment?.equipment_name}`);
+      setTimeout(() => setSuccess(null), 5000);
 
       // Reset form
       setFormData({

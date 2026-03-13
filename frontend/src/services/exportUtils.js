@@ -177,6 +177,22 @@ export const EXPORT_COLUMNS = {
         { label: 'Location', accessor: 'current_location' },
     ],
 
+    byCategory: [
+        { label: 'Category', accessor: 'category' },
+        { label: 'Total Items', accessor: 'total_items' },
+        { label: 'Available', accessor: 'available' },
+        { label: 'Checked Out', accessor: 'checked_out' },
+        { label: 'Checkout Allowed', accessor: r => r.is_checkout_allowed ? 'Yes' : 'No' },
+        { label: 'Type', accessor: r => r.is_consumable ? 'Consumable' : 'Equipment' },
+    ],
+
+    byLocation: [
+        { label: 'Location', accessor: 'location' },
+        { label: 'Total Items', accessor: 'total_items' },
+        { label: 'Available', accessor: 'available' },
+        { label: 'Checked Out', accessor: 'checked_out' },
+    ],
+
     calibration: [
         { label: 'Equipment ID', accessor: 'equipment_code' },
         { label: 'Equipment Name', accessor: 'equipment_name' },

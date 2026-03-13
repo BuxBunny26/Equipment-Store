@@ -180,6 +180,7 @@ function CheckOut() {
 
       if (successNames.length > 0) {
         setSuccess(`Successfully checked out ${successNames.length} item(s): ${successNames.join(', ')}${selectedCustomer ? ` to ${selectedCustomer.display_name}` : ''}`);
+        setTimeout(() => setSuccess(null), 5000);
       }
       if (errors.length > 0) {
         setError(`Failed to check out: ${errors.join('; ')}`);
