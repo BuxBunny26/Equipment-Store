@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { reservationsApi, equipmentApi, personnelApi, customersApi } from '../services/api';
+import { useOperator } from '../context/OperatorContext';
 import { Icons } from '../components/Icons';
 
 function Reservations() {
+  const { operator, operatorRole } = useOperator();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [reservations, setReservations] = useState([]);
@@ -11,6 +13,7 @@ function Reservations() {
   const [personnel, setPersonnel] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [summary, setSummary] = useState({ by_status: [], upcoming_week: 0 });
+  const [selectedCategory, setSelectedCategory] = useState('');
   
   const [filters, setFilters] = useState({
     status: '',
@@ -113,7 +116,7 @@ function Reservations() {
       setEditingReservation(null);
       setFormData({
         equipment_id: '',
-        personnel_id: '',
+        personnel_id: operator?.id ? String(operator.id) : '',
         customer_id: '',
         start_date: '',
         end_date: '',
@@ -121,6 +124,7 @@ function Reservations() {
         notes: '',
       });
     }
+    setSelectedCategory('');
     setAvailability(null);
     setShowModal(true);
   };
@@ -326,60 +330,69 @@ function Reservations() {
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      {res.status === 'pending' && (
-                        <button 
-                          className="btn btn-sm btn-success"
-                          onClick={() => handleStatusChange(res.id, 'approved')}
-                          title="Approve"
-                        >
-                          <Icons.Check size={14} />
-                        </button>
-                      )}
-                      {res.status === 'approved' && (
-                        <button 
-                          className="btn btn-sm btn-primary"
-                          onClick={() => handleStatusChange(res.id, 'active')}
-                          title="Activate"
-                        >
-                          <Icons.Play size={14} />
-                        </button>
-                      )}
-                      {res.status === 'active' && (
-                        <button 
-                          className="btn btn-sm btn-success"
-                          onClick={() => handleStatusChange(res.id, 'completed')}
-                          title="Complete"
-                        >
-                          <Icons.Check size={14} />
-                        </button>
-                      )}
-                      {['pending', 'approved'].includes(res.status) && (
-                        <>
-                          <button 
-                            className="btn btn-sm btn-secondary"
-                            onClick={() => handleOpenModal(res)}
-                            title="Edit"
-                          >
-                            <Icons.Edit size={14} />
-                          </button>
-                          <button 
-                            className="btn btn-sm"
-                            onClick={() => handleStatusChange(res.id, 'cancelled')}
-                            title="Cancel"
-                          >
-                            <Icons.Close size={14} />
-                          </button>
-                        </>
-                      )}
-                      {res.status === 'cancelled' && (
-                        <button 
-                          className="btn btn-sm btn-danger"
-                          onClick={() => handleDelete(res.id)}
-                          title="Delete"
-                        >
-                          <Icons.Trash size={14} />
-                        </button>
-                      )}
+                      {(() => {
+                        const isCreator = operator && res.personnel_id === operator.id;
+                        const isAdminOrManager = operatorRole && ['admin', 'manager'].includes(operatorRole.toLowerCase());
+                        const canManage = isCreator || isAdminOrManager;
+                        return (
+                          <>
+                            {res.status === 'pending' && isAdminOrManager && (
+                              <button 
+                                className="btn btn-sm btn-success"
+                                onClick={() => handleStatusChange(res.id, 'approved')}
+                                title="Approve"
+                              >
+                                <Icons.Check size={14} />
+                              </button>
+                            )}
+                            {res.status === 'approved' && isAdminOrManager && (
+                              <button 
+                                className="btn btn-sm btn-primary"
+                                onClick={() => handleStatusChange(res.id, 'active')}
+                                title="Activate"
+                              >
+                                <Icons.Play size={14} />
+                              </button>
+                            )}
+                            {res.status === 'active' && isAdminOrManager && (
+                              <button 
+                                className="btn btn-sm btn-success"
+                                onClick={() => handleStatusChange(res.id, 'completed')}
+                                title="Complete"
+                              >
+                                <Icons.Check size={14} />
+                              </button>
+                            )}
+                            {['pending', 'approved'].includes(res.status) && canManage && (
+                              <>
+                                <button 
+                                  className="btn btn-sm btn-secondary"
+                                  onClick={() => handleOpenModal(res)}
+                                  title="Edit"
+                                >
+                                  <Icons.Edit size={14} />
+                                </button>
+                                <button 
+                                  className="btn btn-sm"
+                                  onClick={() => handleStatusChange(res.id, 'cancelled')}
+                                  title="Cancel"
+                                >
+                                  <Icons.Close size={14} />
+                                </button>
+                              </>
+                            )}
+                            {res.status === 'cancelled' && isAdminOrManager && (
+                              <button 
+                                className="btn btn-sm btn-danger"
+                                onClick={() => handleDelete(res.id)}
+                                title="Delete"
+                              >
+                                <Icons.Trash size={14} />
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </td>
                 </tr>
@@ -401,6 +414,23 @@ function Reservations() {
             <form onSubmit={handleSubmit}>
               <div className="modal-body">
                 <div className="form-group">
+                  <label className="form-label">Technology</label>
+                  <select
+                    className="form-input"
+                    value={selectedCategory}
+                    onChange={(e) => {
+                      setSelectedCategory(e.target.value);
+                      setFormData(prev => ({ ...prev, equipment_id: '' }));
+                    }}
+                  >
+                    <option value="">All Technologies</option>
+                    {[...new Set(equipment.map(eq => eq.category_name).filter(Boolean))].sort().map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
                   <label className="form-label">Equipment *</label>
                   <select
                     className="form-input"
@@ -409,11 +439,13 @@ function Reservations() {
                     required
                   >
                     <option value="">Select equipment...</option>
-                    {equipment.map(eq => (
-                      <option key={eq.id} value={eq.id}>
-                        {eq.equipment_id} - {eq.equipment_name}
-                      </option>
-                    ))}
+                    {equipment
+                      .filter(eq => !selectedCategory || eq.category_name === selectedCategory)
+                      .map(eq => (
+                        <option key={eq.id} value={eq.id}>
+                          {eq.equipment_id} - {eq.equipment_name}
+                        </option>
+                      ))}
                   </select>
                 </div>
 
