@@ -349,15 +349,18 @@ function LaptopModal({ item, personnel, onClose, onSuccess }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div className="form-group">
                 <label className="form-label">Laptop Brand *</label>
-                <input
-                  type="text"
+                <select
                   name="laptop_brand"
                   value={form.laptop_brand}
                   onChange={handleChange}
                   className="form-input"
-                  placeholder="e.g. Asus"
                   required
-                />
+                >
+                  <option value="">-- Select Brand --</option>
+                  {['Acer', 'Apple', 'Asus', 'Dell', 'HP', 'Huawei', 'Lenovo', 'LG', 'Microsoft', 'MSI', 'Samsung', 'Toshiba', 'Other'].map(brand => (
+                    <option key={brand} value={brand}>{brand}</option>
+                  ))}
+                </select>
               </div>
               <div className="form-group">
                 <label className="form-label">Laptop Model *</label>
