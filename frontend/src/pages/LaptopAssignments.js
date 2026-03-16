@@ -266,7 +266,8 @@ function LaptopModal({ item, personnel, onClose, onSuccess }) {
   };
 
   const handlePersonnelSelect = (e) => {
-    const person = personnel.find(p => p.full_name === e.target.value);
+    const personId = e.target.value;
+    const person = personnel.find(p => String(p.id) === personId);
     if (person) {
       setForm(prev => ({
         ...prev,
@@ -274,7 +275,7 @@ function LaptopModal({ item, personnel, onClose, onSuccess }) {
         employee_id: person.employee_id || '',
       }));
     } else {
-      setForm(prev => ({ ...prev, employee_name: e.target.value }));
+      setForm(prev => ({ ...prev, employee_name: '', employee_id: '' }));
     }
   };
 
@@ -316,21 +317,21 @@ function LaptopModal({ item, personnel, onClose, onSuccess }) {
         <form onSubmit={handleSubmit}>
           <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div className="form-group">
-              <label className="form-label">Employee Name *</label>
-              <input
-                list="personnel-list"
+              <label className="form-label">Employee *</label>
+              <select
                 name="employee_name"
-                value={form.employee_name}
+                value={personnel.find(p => p.full_name === form.employee_name)?.id || ''}
                 onChange={handlePersonnelSelect}
                 className="form-input"
-                placeholder="Type or select employee name"
                 required
-              />
-              <datalist id="personnel-list">
+              >
+                <option value="">-- Select Employee --</option>
                 {personnel.map(p => (
-                  <option key={p.id} value={p.full_name} />
+                  <option key={p.id} value={p.id}>
+                    {p.full_name}{p.employee_id ? ` (${p.employee_id})` : ''}
+                  </option>
                 ))}
-              </datalist>
+              </select>
             </div>
 
             <div className="form-group">
@@ -339,9 +340,9 @@ function LaptopModal({ item, personnel, onClose, onSuccess }) {
                 type="text"
                 name="employee_id"
                 value={form.employee_id}
-                onChange={handleChange}
                 className="form-input"
-                placeholder="e.g. EMP001"
+                readOnly
+                style={{ backgroundColor: 'var(--bg-secondary, #f5f5f5)' }}
               />
             </div>
 
