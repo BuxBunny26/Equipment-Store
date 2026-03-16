@@ -916,23 +916,85 @@ export const laptopAssignmentsApi = {
     getById: (id) => wrap(
         supabase.from('laptop_assignments').select('*').eq('id', id).single()
     ),
+    searchBySerial: (serial) => wrap(
+        supabase.from('laptop_assignments')
+            .select('*')
+            .ilike('serial_number', `%${serial}%`)
+            .order('created_at', { ascending: false })
+    ),
     create: (data) => wrap(
         supabase.from('laptop_assignments').insert(data).select().single()
     ),
     update: (id, data) => wrap(
         supabase.from('laptop_assignments').update(data).eq('id', id).select().single()
     ),
-    updateStatus: (id, status, dateReturned) => {
+    reassign: async (id, newAssignment) => {
+        // 1. Get current assignment
+        const { data: current } = await supabase.from('laptop_assignments').select('*').eq('id', id).single();
+        if (!current) throw new Error('Laptop assignment not found');
+
+        // 2. Log the old assignment to history
+        await supabase.from('laptop_history').insert({
+            laptop_assignment_id: id,
+            action: 'Reassigned',
+            employee_name: current.employee_name,
+            employee_id: current.employee_id,
+            employee_email: current.employee_email,
+            laptop_status: current.laptop_status,
+            notes: `Reassigned from ${current.employee_name} to ${newAssignment.employee_name}`,
+        });
+
+        // 3. Update the assignment with new employee info
+        return wrap(
+            supabase.from('laptop_assignments').update({
+                employee_name: newAssignment.employee_name,
+                employee_id: newAssignment.employee_id,
+                employee_email: newAssignment.employee_email,
+                date_assigned: newAssignment.date_assigned || new Date().toISOString().split('T')[0],
+                date_returned: null,
+                laptop_status: 'Active',
+                is_active: true,
+                setup_laptop: newAssignment.setup_laptop ?? false,
+                setup_m365: newAssignment.setup_m365 ?? false,
+                setup_adobe: newAssignment.setup_adobe ?? false,
+                setup_zoho: newAssignment.setup_zoho ?? false,
+                setup_smartsheet: newAssignment.setup_smartsheet ?? false,
+                setup_distribution_lists: newAssignment.setup_distribution_lists ?? false,
+                notes: newAssignment.notes || null,
+            }).eq('id', id).select().single()
+        );
+    },
+    updateStatus: async (id, status) => {
+        // Log status change to history
+        const { data: current } = await supabase.from('laptop_assignments').select('*').eq('id', id).single();
+        if (current) {
+            await supabase.from('laptop_history').insert({
+                laptop_assignment_id: id,
+                action: `Status: ${current.laptop_status} → ${status}`,
+                employee_name: current.employee_name,
+                employee_id: current.employee_id,
+                employee_email: current.employee_email,
+                laptop_status: status,
+                notes: null,
+            });
+        }
+
         const updates = { laptop_status: status };
         const inactiveStatuses = ['Returned', 'Stolen', 'Lost', 'Decommissioned'];
         updates.is_active = !inactiveStatuses.includes(status);
-        if (status === 'Returned' && !dateReturned) {
+        if (status === 'Returned') {
             updates.date_returned = new Date().toISOString().split('T')[0];
         }
         return wrap(
             supabase.from('laptop_assignments').update(updates).eq('id', id).select().single()
         );
     },
+    getHistory: (assignmentId) => wrap(
+        supabase.from('laptop_history')
+            .select('*')
+            .eq('laptop_assignment_id', assignmentId)
+            .order('performed_at', { ascending: false })
+    ),
     delete: (id) => wrap(
         supabase.from('laptop_assignments').delete().eq('id', id)
     ),

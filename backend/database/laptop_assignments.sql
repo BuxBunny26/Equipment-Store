@@ -42,3 +42,27 @@ ALTER TABLE laptop_assignments ENABLE ROW LEVEL SECURITY;
 -- Allow all operations for authenticated users (matches existing RLS pattern)
 CREATE POLICY "Allow all for authenticated users" ON laptop_assignments
     FOR ALL USING (true) WITH CHECK (true);
+
+-- ============================================
+-- Laptop History Table (assignment change log)
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS laptop_history (
+    id SERIAL PRIMARY KEY,
+    laptop_assignment_id INTEGER NOT NULL REFERENCES laptop_assignments(id) ON DELETE CASCADE,
+    action VARCHAR(50) NOT NULL,
+    employee_name VARCHAR(200),
+    employee_id VARCHAR(50),
+    employee_email VARCHAR(255),
+    laptop_status VARCHAR(50),
+    notes TEXT,
+    performed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_laptop_history_assignment ON laptop_history(laptop_assignment_id);
+CREATE INDEX IF NOT EXISTS idx_laptop_history_time ON laptop_history(performed_at);
+
+ALTER TABLE laptop_history ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all for authenticated users" ON laptop_history
+    FOR ALL USING (true) WITH CHECK (true);

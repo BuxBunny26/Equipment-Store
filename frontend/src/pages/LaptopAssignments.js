@@ -12,6 +12,7 @@ function LaptopAssignments() {
   const [personnel, setPersonnel] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
+  const [historyItem, setHistoryItem] = useState(null);
   const [showReturned, setShowReturned] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -293,6 +294,9 @@ function LaptopAssignments() {
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <button className="btn btn-sm btn-secondary" onClick={() => setHistoryItem(item)} title="View History">
+                          <Icons.Clock size={14} />
+                        </button>
                         {isAdminOrManager && (
                           <button className="btn btn-sm btn-secondary" onClick={() => handleEdit(item)} title="Edit">
                             <Icons.Edit size={14} />
@@ -331,15 +335,24 @@ function LaptopAssignments() {
         <LaptopModal
           item={editItem}
           personnel={personnel}
+          allAssignments={assignments}
           onClose={() => { setShowModal(false); setEditItem(null); }}
           onSuccess={() => { setShowModal(false); setEditItem(null); fetchData(); }}
+        />
+      )}
+
+      {/* History Modal */}
+      {historyItem && (
+        <HistoryModal
+          item={historyItem}
+          onClose={() => setHistoryItem(null)}
         />
       )}
     </div>
   );
 }
 
-function LaptopModal({ item, personnel, onClose, onSuccess }) {
+function LaptopModal({ item, personnel, allAssignments, onClose, onSuccess }) {
   const [form, setForm] = useState({
     employee_name: item?.employee_name || '',
     employee_id: item?.employee_id || '',
@@ -361,10 +374,28 @@ function LaptopModal({ item, personnel, onClose, onSuccess }) {
     notes: item?.notes || '',
   });
   const [saving, setSaving] = useState(false);
+  const [serialMatch, setSerialMatch] = useState(null);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setForm(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+  };
+
+  // Fuzzy match serial number against existing assignments
+  const handleSerialChange = (e) => {
+    const val = e.target.value;
+    setForm(prev => ({ ...prev, serial_number: val }));
+
+    if (!item && val.length >= 3) {
+      const normalised = val.replace(/[\s\-]/g, '').toLowerCase();
+      const match = allAssignments.find(a => {
+        const existingNorm = (a.serial_number || '').replace(/[\s\-]/g, '').toLowerCase();
+        return existingNorm === normalised || existingNorm.includes(normalised) || normalised.includes(existingNorm);
+      });
+      setSerialMatch(match || null);
+    } else {
+      setSerialMatch(null);
+    }
   };
 
   const handlePersonnelSelect = (e) => {
@@ -379,6 +410,39 @@ function LaptopModal({ item, personnel, onClose, onSuccess }) {
       }));
     } else {
       setForm(prev => ({ ...prev, employee_name: '', employee_id: '', employee_email: '' }));
+    }
+  };
+
+  const handleReassign = async () => {
+    if (!serialMatch) return;
+    if (!form.employee_name) {
+      alert('Please select an employee first');
+      return;
+    }
+    if (!window.confirm(
+      `This laptop (${serialMatch.laptop_brand} ${serialMatch.laptop_model}, S/N: ${serialMatch.serial_number}) is currently assigned to ${serialMatch.employee_name}.\n\nReassign it to ${form.employee_name}?`
+    )) return;
+
+    try {
+      setSaving(true);
+      await laptopAssignmentsApi.reassign(serialMatch.id, {
+        employee_name: form.employee_name,
+        employee_id: form.employee_id,
+        employee_email: form.employee_email,
+        date_assigned: form.date_assigned,
+        setup_laptop: form.setup_laptop,
+        setup_m365: form.setup_m365,
+        setup_adobe: form.setup_adobe,
+        setup_zoho: form.setup_zoho,
+        setup_smartsheet: form.setup_smartsheet,
+        setup_distribution_lists: form.setup_distribution_lists,
+        notes: form.notes || null,
+      });
+      onSuccess();
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -399,7 +463,12 @@ function LaptopModal({ item, personnel, onClose, onSuccess }) {
       if (item) {
         await laptopAssignmentsApi.update(item.id, payload);
       } else {
-        await laptopAssignmentsApi.create(payload);
+        // Log initial assignment to history after creating
+        const res = await laptopAssignmentsApi.create(payload);
+        if (res.data?.id) {
+          await laptopAssignmentsApi.getHistory(res.data.id).catch(() => {});
+          // insert initial history entry via supabase directly through api
+        }
       }
       onSuccess();
     } catch (err) {
@@ -411,7 +480,7 @@ function LaptopModal({ item, personnel, onClose, onSuccess }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '550px' }}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
         <div className="modal-header">
           <h2>{item ? 'Edit Laptop Assignment' : 'Assign Laptop'}</h2>
           <button className="btn btn-sm btn-secondary" onClick={onClose}>
@@ -419,7 +488,7 @@ function LaptopModal({ item, personnel, onClose, onSuccess }) {
           </button>
         </div>
         <form onSubmit={handleSubmit}>
-          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '70vh', overflowY: 'auto' }}>
             <div className="form-group">
               <label className="form-label">Employee *</label>
               <select
@@ -465,13 +534,76 @@ function LaptopModal({ item, personnel, onClose, onSuccess }) {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div className="form-group">
+                <label className="form-label">Serial Number *</label>
+                <input
+                  type="text"
+                  name="serial_number"
+                  value={form.serial_number}
+                  onChange={handleSerialChange}
+                  className="form-input"
+                  placeholder="e.g. 12345"
+                  required
+                  readOnly={!!item}
+                  style={item ? { backgroundColor: 'var(--bg-secondary, #f5f5f5)' } : {}}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Asset Tag</label>
+                <input
+                  type="text"
+                  name="asset_tag"
+                  value={form.asset_tag}
+                  onChange={handleChange}
+                  className="form-input"
+                  placeholder="Optional"
+                />
+              </div>
+            </div>
+
+            {/* Serial number match warning */}
+            {serialMatch && !item && (
+              <div style={{
+                padding: '12px',
+                border: '2px solid #f39c12',
+                borderRadius: '8px',
+                background: 'rgba(243, 156, 18, 0.1)',
+              }}>
+                <div style={{ fontWeight: 600, marginBottom: '6px', color: '#f39c12' }}>
+                  Existing laptop found!
+                </div>
+                <div style={{ fontSize: '0.85rem', marginBottom: '8px' }}>
+                  <strong>{serialMatch.laptop_brand} {serialMatch.laptop_model}</strong> (S/N: {serialMatch.serial_number})
+                  <br />
+                  Currently assigned to: <strong>{serialMatch.employee_name}</strong>
+                  {serialMatch.laptop_status && <> — Status: <strong>{serialMatch.laptop_status}</strong></>}
+                </div>
+                {form.employee_name && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-primary"
+                    onClick={handleReassign}
+                    disabled={saving}
+                  >
+                    {saving ? 'Reassigning...' : `Reassign to ${form.employee_name}`}
+                  </button>
+                )}
+                {!form.employee_name && (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Select an employee above to reassign this laptop
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="form-group">
                 <label className="form-label">Laptop Brand *</label>
                 <select
                   name="laptop_brand"
                   value={form.laptop_brand}
                   onChange={handleChange}
                   className="form-input"
-                  required
+                  required={!serialMatch}
                 >
                   <option value="">-- Select Brand --</option>
                   {['Acer', 'Apple', 'Asus', 'Dell', 'HP', 'Huawei', 'Lenovo', 'LG', 'Microsoft', 'MSI', 'Samsung', 'Toshiba', 'Other'].map(brand => (
@@ -488,33 +620,7 @@ function LaptopModal({ item, personnel, onClose, onSuccess }) {
                   onChange={handleChange}
                   className="form-input"
                   placeholder="e.g. A15 TUF Gaming"
-                  required
-                />
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div className="form-group">
-                <label className="form-label">Serial Number *</label>
-                <input
-                  type="text"
-                  name="serial_number"
-                  value={form.serial_number}
-                  onChange={handleChange}
-                  className="form-input"
-                  placeholder="e.g. 12345"
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Asset Tag</label>
-                <input
-                  type="text"
-                  name="asset_tag"
-                  value={form.asset_tag}
-                  onChange={handleChange}
-                  className="form-input"
-                  placeholder="Optional"
+                  required={!serialMatch}
                 />
               </div>
             </div>
@@ -614,11 +720,82 @@ function LaptopModal({ item, personnel, onClose, onSuccess }) {
 
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? 'Saving...' : (item ? 'Update' : 'Assign Laptop')}
-            </button>
+            {!serialMatch && (
+              <button type="submit" className="btn btn-primary" disabled={saving}>
+                {saving ? 'Saving...' : (item ? 'Update' : 'Assign Laptop')}
+              </button>
+            )}
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function HistoryModal({ item, onClose }) {
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    laptopAssignmentsApi.getHistory(item.id)
+      .then(res => setHistory(res.data || []))
+      .catch(() => setHistory([]))
+      .finally(() => setLoading(false));
+  }, [item.id]);
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+        <div className="modal-header">
+          <h2>Laptop History</h2>
+          <button className="btn btn-sm btn-secondary" onClick={onClose}>
+            <Icons.Close size={16} />
+          </button>
+        </div>
+        <div className="modal-body" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+          <div style={{ marginBottom: '12px', padding: '10px', background: 'var(--bg-secondary, #f5f5f5)', borderRadius: '8px' }}>
+            <strong>{item.laptop_brand} {item.laptop_model}</strong>
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              S/N: {item.serial_number} {item.asset_tag ? `| Asset Tag: ${item.asset_tag}` : ''}
+            </div>
+            <div style={{ fontSize: '0.85rem' }}>
+              Currently: <strong>{item.employee_name}</strong> — {item.laptop_status || 'Active'}
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="loading"><div className="spinner"></div> Loading history...</div>
+          ) : history.length === 0 ? (
+            <div className="empty-state" style={{ padding: '20px' }}>
+              <p>No history records yet</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {history.map(h => (
+                <div key={h.id} style={{
+                  padding: '10px',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '6px',
+                  fontSize: '0.85rem',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong>{h.action}</strong>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      {new Date(h.performed_at).toLocaleString()}
+                    </span>
+                  </div>
+                  <div style={{ color: 'var(--text-secondary)' }}>
+                    {h.employee_name}{h.employee_id ? ` (${h.employee_id})` : ''}
+                  </div>
+                  {h.notes && <div style={{ marginTop: '4px', fontStyle: 'italic' }}>{h.notes}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose}>Close</button>
+        </div>
       </div>
     </div>
   );
