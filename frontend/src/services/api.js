@@ -922,11 +922,17 @@ export const laptopAssignmentsApi = {
     update: (id, data) => wrap(
         supabase.from('laptop_assignments').update(data).eq('id', id).select().single()
     ),
-    returnLaptop: (id) => wrap(
-        supabase.from('laptop_assignments')
-            .update({ is_active: false, date_returned: new Date().toISOString().split('T')[0] })
-            .eq('id', id).select().single()
-    ),
+    updateStatus: (id, status, dateReturned) => {
+        const updates = { laptop_status: status };
+        const inactiveStatuses = ['Returned', 'Stolen', 'Lost', 'Decommissioned'];
+        updates.is_active = !inactiveStatuses.includes(status);
+        if (status === 'Returned' && !dateReturned) {
+            updates.date_returned = new Date().toISOString().split('T')[0];
+        }
+        return wrap(
+            supabase.from('laptop_assignments').update(updates).eq('id', id).select().single()
+        );
+    },
     delete: (id) => wrap(
         supabase.from('laptop_assignments').delete().eq('id', id)
     ),

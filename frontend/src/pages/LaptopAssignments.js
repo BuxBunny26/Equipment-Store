@@ -11,6 +11,17 @@ function LaptopAssignments() {
   const [editItem, setEditItem] = useState(null);
   const [showReturned, setShowReturned] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+
+  const LAPTOP_STATUSES = [
+    { value: 'Active', label: 'Active', badge: 'badge-available', color: 'var(--success-color)' },
+    { value: 'Returned', label: 'Returned', badge: 'badge-checked-out', color: 'var(--text-secondary)' },
+    { value: 'Stolen', label: 'Stolen', badge: 'badge-overdue', color: 'var(--error-color)' },
+    { value: 'Damaged', label: 'Damaged', badge: 'badge-overdue', color: '#e67e22' },
+    { value: 'Repairs', label: 'Sent for Repairs', badge: 'badge-low-stock', color: '#f39c12' },
+    { value: 'Lost', label: 'Lost', badge: 'badge-overdue', color: 'var(--error-color)' },
+    { value: 'Decommissioned', label: 'Decommissioned', badge: 'badge-checked-out', color: 'var(--text-secondary)' },
+  ];
 
   useEffect(() => {
     fetchData();
@@ -44,9 +55,14 @@ function LaptopAssignments() {
   };
 
   const handleReturn = async (item) => {
-    if (!window.confirm(`Mark laptop "${item.laptop_brand} ${item.laptop_model}" as returned from ${item.employee_name}?`)) return;
+    // No longer used — status changes go through the modal or status dropdown
+  };
+
+  const handleStatusChange = async (item, newStatus) => {
+    const statusLabel = LAPTOP_STATUSES.find(s => s.value === newStatus)?.label || newStatus;
+    if (!window.confirm(`Change status of "${item.laptop_brand} ${item.laptop_model}" to ${statusLabel}?`)) return;
     try {
-      await laptopAssignmentsApi.returnLaptop(item.id);
+      await laptopAssignmentsApi.updateStatus(item.id, newStatus);
       fetchData();
     } catch (err) {
       alert('Error: ' + err.message);
@@ -64,6 +80,7 @@ function LaptopAssignments() {
   };
 
   const filtered = assignments.filter(a => {
+    if (statusFilter && a.laptop_status !== statusFilter) return false;
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
@@ -124,30 +141,59 @@ function LaptopAssignments() {
               checked={showReturned}
               onChange={e => setShowReturned(e.target.checked)}
             />
-            Show returned laptops
+            Show inactive laptops
           </label>
+          <select
+            className="form-input"
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            style={{ minWidth: '150px' }}
+          >
+            <option value="">All Statuses</option>
+            {LAPTOP_STATUSES.map(s => (
+              <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
+          </select>
         </div>
       </div>
 
       {/* Summary */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '16px' }}>
         <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
-          <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--primary-color)' }}>
-            {assignments.filter(a => a.is_active).length}
+          <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--success-color)' }}>
+            {assignments.filter(a => a.laptop_status === 'Active').length}
           </div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Active Assignments</div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Active</div>
+        </div>
+        <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#f39c12' }}>
+            {assignments.filter(a => a.laptop_status === 'Repairs').length}
+          </div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>In Repairs</div>
+        </div>
+        <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#e67e22' }}>
+            {assignments.filter(a => a.laptop_status === 'Damaged').length}
+          </div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Damaged</div>
+        </div>
+        <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--error-color)' }}>
+            {assignments.filter(a => ['Stolen', 'Lost'].includes(a.laptop_status)).length}
+          </div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Stolen / Lost</div>
         </div>
         <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
           <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
-            {assignments.filter(a => !a.is_active).length}
+            {assignments.filter(a => ['Returned', 'Decommissioned'].includes(a.laptop_status)).length}
           </div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Returned</div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Returned / Decom.</div>
         </div>
         <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
-          <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--success-color)' }}>
+          <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--primary-color)' }}>
             {assignments.length}
           </div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Total Records</div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Total</div>
         </div>
       </div>
 
@@ -230,24 +276,32 @@ function LaptopAssignments() {
                       </div>
                     </td>
                     <td>
-                      {item.is_active ? (
-                        <span className="badge badge-available">Active</span>
-                      ) : (
-                        <span className="badge badge-checked-out">
-                          Returned {item.date_returned ? new Date(item.date_returned).toLocaleDateString() : ''}
-                        </span>
+                      {(() => {
+                        const st = LAPTOP_STATUSES.find(s => s.value === item.laptop_status) || LAPTOP_STATUSES[0];
+                        return <span className={`badge ${st.badge}`}>{st.label}</span>;
+                      })()}
+                      {item.laptop_status === 'Returned' && item.date_returned && (
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                          {new Date(item.date_returned).toLocaleDateString()}
+                        </div>
                       )}
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: '4px' }}>
+                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
                         <button className="btn btn-sm btn-secondary" onClick={() => handleEdit(item)} title="Edit">
                           <Icons.Edit size={14} />
                         </button>
-                        {item.is_active && (
-                          <button className="btn btn-sm btn-warning" onClick={() => handleReturn(item)} title="Mark as returned">
-                            <Icons.Check size={14} />
-                          </button>
-                        )}
+                        <select
+                          className="form-input"
+                          value={item.laptop_status || 'Active'}
+                          onChange={e => handleStatusChange(item, e.target.value)}
+                          style={{ padding: '4px 6px', fontSize: '0.75rem', minWidth: '100px' }}
+                          title="Change status"
+                        >
+                          {LAPTOP_STATUSES.map(s => (
+                            <option key={s.value} value={s.value}>{s.label}</option>
+                          ))}
+                        </select>
                         <button className="btn btn-sm btn-danger" onClick={() => handleDelete(item)} title="Delete">
                           <Icons.Trash size={14} />
                         </button>
@@ -291,6 +345,7 @@ function LaptopModal({ item, personnel, onClose, onSuccess }) {
     setup_zoho: item?.setup_zoho ?? false,
     setup_smartsheet: item?.setup_smartsheet ?? false,
     setup_distribution_lists: item?.setup_distribution_lists ?? false,
+    laptop_status: item?.laptop_status || 'Active',
     is_active: item?.is_active ?? true,
     notes: item?.notes || '',
   });
@@ -502,19 +557,36 @@ function LaptopModal({ item, personnel, onClose, onSuccess }) {
               </div>
             </div>
 
-            {item && (
-              <div className="form-group">
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    name="is_active"
-                    checked={form.is_active}
-                    onChange={handleChange}
-                  />
-                  Currently active (laptop is with employee)
-                </label>
-              </div>
-            )}
+            <div className="form-group">
+              <label className="form-label">Laptop Status</label>
+              <select
+                name="laptop_status"
+                value={form.laptop_status}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const inactiveStatuses = ['Returned', 'Stolen', 'Lost', 'Decommissioned'];
+                  setForm(prev => ({
+                    ...prev,
+                    laptop_status: val,
+                    is_active: !inactiveStatuses.includes(val),
+                    ...(val === 'Returned' && !prev.date_returned ? { date_returned: new Date().toISOString().split('T')[0] } : {}),
+                  }));
+                }}
+                className="form-input"
+              >
+                {[
+                  { value: 'Active', label: 'Active' },
+                  { value: 'Returned', label: 'Returned' },
+                  { value: 'Stolen', label: 'Stolen' },
+                  { value: 'Damaged', label: 'Damaged' },
+                  { value: 'Repairs', label: 'Sent for Repairs' },
+                  { value: 'Lost', label: 'Lost' },
+                  { value: 'Decommissioned', label: 'Decommissioned' },
+                ].map(s => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+            </div>
 
             <div className="form-group">
               <label className="form-label">Notes</label>

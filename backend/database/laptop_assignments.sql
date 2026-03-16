@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS laptop_assignments (
     asset_tag VARCHAR(100),
     date_assigned DATE NOT NULL,
     date_returned DATE,
+    laptop_status VARCHAR(50) NOT NULL DEFAULT 'Active',
     setup_laptop BOOLEAN NOT NULL DEFAULT FALSE,
     setup_m365 BOOLEAN NOT NULL DEFAULT FALSE,
     setup_adobe BOOLEAN NOT NULL DEFAULT FALSE,
