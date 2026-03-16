@@ -168,8 +168,8 @@ function LaptopAssignments() {
                   <th>Serial Number</th>
                   <th>Asset Tag</th>
                   <th>Date Assigned</th>
+                  <th>Setup</th>
                   <th>Status</th>
-                  <th>Notes</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -182,6 +182,11 @@ function LaptopAssignments() {
                         {item.employee_id && (
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                             {item.employee_id}
+                          </div>
+                        )}
+                        {item.employee_email && (
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                            {item.employee_email}
                           </div>
                         )}
                       </div>
@@ -198,6 +203,33 @@ function LaptopAssignments() {
                     <td>{item.asset_tag || '-'}</td>
                     <td>{item.date_assigned ? new Date(item.date_assigned).toLocaleDateString() : '-'}</td>
                     <td>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+                        {[
+                          { key: 'setup_laptop', label: 'Laptop' },
+                          { key: 'setup_m365', label: 'M365' },
+                          { key: 'setup_adobe', label: 'Adobe' },
+                          { key: 'setup_zoho', label: 'Zoho' },
+                          { key: 'setup_smartsheet', label: 'Smart' },
+                          { key: 'setup_distribution_lists', label: 'DLists' },
+                        ].map(chk => (
+                          <span
+                            key={chk.key}
+                            title={chk.label}
+                            style={{
+                              display: 'inline-block',
+                              padding: '1px 5px',
+                              fontSize: '0.65rem',
+                              borderRadius: '4px',
+                              background: item[chk.key] ? 'var(--success-color)' : 'var(--border-color)',
+                              color: item[chk.key] ? '#fff' : 'var(--text-secondary)',
+                            }}
+                          >
+                            {chk.label}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td>
                       {item.is_active ? (
                         <span className="badge badge-available">Active</span>
                       ) : (
@@ -205,9 +237,6 @@ function LaptopAssignments() {
                           Returned {item.date_returned ? new Date(item.date_returned).toLocaleDateString() : ''}
                         </span>
                       )}
-                    </td>
-                    <td style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {item.notes || '-'}
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: '4px' }}>
@@ -249,12 +278,19 @@ function LaptopModal({ item, personnel, onClose, onSuccess }) {
   const [form, setForm] = useState({
     employee_name: item?.employee_name || '',
     employee_id: item?.employee_id || '',
+    employee_email: item?.employee_email || '',
     laptop_brand: item?.laptop_brand || '',
     laptop_model: item?.laptop_model || '',
     serial_number: item?.serial_number || '',
     asset_tag: item?.asset_tag || '',
     date_assigned: item?.date_assigned || new Date().toISOString().split('T')[0],
     date_returned: item?.date_returned || '',
+    setup_laptop: item?.setup_laptop ?? false,
+    setup_m365: item?.setup_m365 ?? false,
+    setup_adobe: item?.setup_adobe ?? false,
+    setup_zoho: item?.setup_zoho ?? false,
+    setup_smartsheet: item?.setup_smartsheet ?? false,
+    setup_distribution_lists: item?.setup_distribution_lists ?? false,
     is_active: item?.is_active ?? true,
     notes: item?.notes || '',
   });
@@ -273,9 +309,10 @@ function LaptopModal({ item, personnel, onClose, onSuccess }) {
         ...prev,
         employee_name: person.full_name,
         employee_id: person.employee_id || '',
+        employee_email: person.email || '',
       }));
     } else {
-      setForm(prev => ({ ...prev, employee_name: '', employee_id: '' }));
+      setForm(prev => ({ ...prev, employee_name: '', employee_id: '', employee_email: '' }));
     }
   };
 
@@ -290,6 +327,7 @@ function LaptopModal({ item, personnel, onClose, onSuccess }) {
       const payload = { ...form };
       if (!payload.date_returned) delete payload.date_returned;
       if (!payload.asset_tag) payload.asset_tag = null;
+      if (!payload.employee_email) payload.employee_email = null;
       if (!payload.notes) payload.notes = null;
 
       if (item) {
@@ -334,16 +372,29 @@ function LaptopModal({ item, personnel, onClose, onSuccess }) {
               </select>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Employee ID</label>
-              <input
-                type="text"
-                name="employee_id"
-                value={form.employee_id}
-                className="form-input"
-                readOnly
-                style={{ backgroundColor: 'var(--bg-secondary, #f5f5f5)' }}
-              />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="form-group">
+                <label className="form-label">Employee ID</label>
+                <input
+                  type="text"
+                  name="employee_id"
+                  value={form.employee_id}
+                  className="form-input"
+                  readOnly
+                  style={{ backgroundColor: 'var(--bg-secondary, #f5f5f5)' }}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Email Address</label>
+                <input
+                  type="email"
+                  name="employee_email"
+                  value={form.employee_email}
+                  onChange={handleChange}
+                  className="form-input"
+                  placeholder="Auto-filled from employee"
+                />
+              </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -423,6 +474,31 @@ function LaptopModal({ item, personnel, onClose, onSuccess }) {
                   onChange={handleChange}
                   className="form-input"
                 />
+              </div>
+            </div>
+
+            {/* Setup Checklist */}
+            <div className="form-group">
+              <label className="form-label">Setup Checklist</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px', background: 'var(--bg-secondary, #f9f9f9)' }}>
+                {[
+                  { name: 'setup_laptop', label: 'Laptop set up' },
+                  { name: 'setup_m365', label: 'Microsoft 365 Business licence' },
+                  { name: 'setup_adobe', label: 'Adobe licence' },
+                  { name: 'setup_zoho', label: 'Zoho account' },
+                  { name: 'setup_smartsheet', label: 'Smartsheet access' },
+                  { name: 'setup_distribution_lists', label: 'Distribution lists (Microsoft)' },
+                ].map(chk => (
+                  <label key={chk.name} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.875rem' }}>
+                    <input
+                      type="checkbox"
+                      name={chk.name}
+                      checked={form[chk.name]}
+                      onChange={handleChange}
+                    />
+                    {chk.label}
+                  </label>
+                ))}
               </div>
             </div>
 
