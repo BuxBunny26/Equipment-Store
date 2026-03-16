@@ -1,0 +1,36 @@
+-- Laptop Assignments Table
+-- Tracks which employee has which company-provided laptop
+
+CREATE TABLE IF NOT EXISTS laptop_assignments (
+    id SERIAL PRIMARY KEY,
+    employee_name VARCHAR(200) NOT NULL,
+    employee_id VARCHAR(50),
+    laptop_brand VARCHAR(100) NOT NULL,
+    laptop_model VARCHAR(200) NOT NULL,
+    serial_number VARCHAR(100) NOT NULL,
+    asset_tag VARCHAR(100),
+    date_assigned DATE NOT NULL,
+    date_returned DATE,
+    notes TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Index for quick lookups
+CREATE INDEX IF NOT EXISTS idx_laptop_assignments_employee ON laptop_assignments(employee_name);
+CREATE INDEX IF NOT EXISTS idx_laptop_assignments_serial ON laptop_assignments(serial_number);
+CREATE INDEX IF NOT EXISTS idx_laptop_assignments_active ON laptop_assignments(is_active);
+
+-- Auto-update timestamp trigger
+CREATE TRIGGER trg_laptop_assignments_updated
+    BEFORE UPDATE ON laptop_assignments
+    FOR EACH ROW
+    EXECUTE FUNCTION update_timestamp();
+
+-- Enable Row Level Security
+ALTER TABLE laptop_assignments ENABLE ROW LEVEL SECURITY;
+
+-- Allow all operations for authenticated users (matches existing RLS pattern)
+CREATE POLICY "Allow all for authenticated users" ON laptop_assignments
+    FOR ALL USING (true) WITH CHECK (true);

@@ -906,4 +906,30 @@ export const equipmentImagesApi = {
     },
 };
 
+// Laptop Assignments
+export const laptopAssignmentsApi = {
+    getAll: (activeOnly = true) => {
+        let query = supabase.from('laptop_assignments').select('*').order('employee_name');
+        if (activeOnly) query = query.eq('is_active', true);
+        return wrap(query);
+    },
+    getById: (id) => wrap(
+        supabase.from('laptop_assignments').select('*').eq('id', id).single()
+    ),
+    create: (data) => wrap(
+        supabase.from('laptop_assignments').insert(data).select().single()
+    ),
+    update: (id, data) => wrap(
+        supabase.from('laptop_assignments').update(data).eq('id', id).select().single()
+    ),
+    returnLaptop: (id) => wrap(
+        supabase.from('laptop_assignments')
+            .update({ is_active: false, date_returned: new Date().toISOString().split('T')[0] })
+            .eq('id', id).select().single()
+    ),
+    delete: (id) => wrap(
+        supabase.from('laptop_assignments').delete().eq('id', id)
+    ),
+};
+
 export default supabase;
