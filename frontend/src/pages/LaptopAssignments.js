@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { laptopAssignmentsApi, personnelApi } from '../services/api';
+import { useOperator } from '../context/OperatorContext';
 import { Icons } from '../components/Icons';
 
 function LaptopAssignments() {
+  const { operatorRole } = useOperator();
+  const isAdminOrManager = operatorRole && ['admin', 'manager'].includes(operatorRole.toLowerCase());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [assignments, setAssignments] = useState([]);
@@ -109,9 +112,11 @@ function LaptopAssignments() {
           <p className="page-subtitle">Track company laptops assigned to employees</p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-primary" onClick={handleAdd}>
-            + Assign Laptop
-          </button>
+          {isAdminOrManager && (
+            <button className="btn btn-primary" onClick={handleAdd}>
+              + Assign Laptop
+            </button>
+          )}
         </div>
       </div>
 
@@ -288,23 +293,29 @@ function LaptopAssignments() {
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <button className="btn btn-sm btn-secondary" onClick={() => handleEdit(item)} title="Edit">
-                          <Icons.Edit size={14} />
-                        </button>
-                        <select
-                          className="form-input"
-                          value={item.laptop_status || 'Active'}
-                          onChange={e => handleStatusChange(item, e.target.value)}
-                          style={{ padding: '4px 6px', fontSize: '0.75rem', minWidth: '100px' }}
-                          title="Change status"
-                        >
-                          {LAPTOP_STATUSES.map(s => (
-                            <option key={s.value} value={s.value}>{s.label}</option>
-                          ))}
-                        </select>
-                        <button className="btn btn-sm btn-danger" onClick={() => handleDelete(item)} title="Delete">
-                          <Icons.Trash size={14} />
-                        </button>
+                        {isAdminOrManager && (
+                          <button className="btn btn-sm btn-secondary" onClick={() => handleEdit(item)} title="Edit">
+                            <Icons.Edit size={14} />
+                          </button>
+                        )}
+                        {isAdminOrManager ? (
+                          <select
+                            className="form-input"
+                            value={item.laptop_status || 'Active'}
+                            onChange={e => handleStatusChange(item, e.target.value)}
+                            style={{ padding: '4px 6px', fontSize: '0.75rem', minWidth: '100px' }}
+                            title="Change status"
+                          >
+                            {LAPTOP_STATUSES.map(s => (
+                              <option key={s.value} value={s.value}>{s.label}</option>
+                            ))}
+                          </select>
+                        ) : null}
+                        {isAdminOrManager && (
+                          <button className="btn btn-sm btn-danger" onClick={() => handleDelete(item)} title="Delete">
+                            <Icons.Trash size={14} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
