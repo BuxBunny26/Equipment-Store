@@ -27,6 +27,7 @@ import AuditLog from './pages/AuditLog';
 import CustomerSites from './pages/CustomerSites';
 import UserManagement from './pages/UserManagement';
 import LaptopAssignments from './pages/LaptopAssignments';
+import CellphoneAssignments from './pages/CellphoneAssignments';
 
 // Icons as simple SVG components
 const Icons = {
@@ -129,6 +130,12 @@ const Icons = {
       <path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9" />
       <path d="M2 17h20l-1 2H3l-1-2z" />
       <line x1="8" y1="10" x2="16" y2="10" />
+    </svg>
+  ),
+  Phone: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="7" y="2" width="10" height="20" rx="2" ry="2" />
+      <line x1="11" y1="18" x2="13" y2="18" />
     </svg>
   ),
   Menu: () => (
@@ -283,6 +290,9 @@ function AppContent() {
           <NavLink to="/laptop-assignments" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <Icons.Laptop /> Laptops
           </NavLink>
+          <NavLink to="/cellphone-assignments" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.Phone /> Cellphones
+          </NavLink>
         </div>
         
         <div className="nav-section">
@@ -316,6 +326,7 @@ function AppContent() {
         <Route path="/audit-log" element={<AuditLog />} />
         <Route path="/users" element={operatorRole?.toLowerCase() === 'admin' ? <UserManagement /> : <Navigate to="/" replace />} />
         <Route path="/laptop-assignments" element={<LaptopAssignments />} />
+        <Route path="/cellphone-assignments" element={<CellphoneAssignments />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     </main>

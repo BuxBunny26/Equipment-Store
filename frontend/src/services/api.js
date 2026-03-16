@@ -1000,4 +1000,88 @@ export const laptopAssignmentsApi = {
     ),
 };
 
+// Cellphone Assignments
+export const cellphoneAssignmentsApi = {
+    getAll: (activeOnly = true) => {
+        let query = supabase.from('cellphone_assignments').select('*').order('employee_name');
+        if (activeOnly) query = query.eq('is_active', true);
+        return wrap(query);
+    },
+    getById: (id) => wrap(
+        supabase.from('cellphone_assignments').select('*').eq('id', id).single()
+    ),
+    searchBySerial: (serial) => wrap(
+        supabase.from('cellphone_assignments')
+            .select('*')
+            .ilike('serial_number', `%${serial}%`)
+            .order('created_at', { ascending: false })
+    ),
+    create: (data) => wrap(
+        supabase.from('cellphone_assignments').insert(data).select().single()
+    ),
+    update: (id, data) => wrap(
+        supabase.from('cellphone_assignments').update(data).eq('id', id).select().single()
+    ),
+    reassign: async (id, newAssignment) => {
+        const { data: current } = await supabase.from('cellphone_assignments').select('*').eq('id', id).single();
+        if (!current) throw new Error('Cellphone assignment not found');
+
+        await supabase.from('cellphone_history').insert({
+            cellphone_assignment_id: id,
+            action: 'Reassigned',
+            employee_name: current.employee_name,
+            employee_id: current.employee_id,
+            employee_email: current.employee_email,
+            phone_status: current.phone_status,
+            notes: `Reassigned from ${current.employee_name} to ${newAssignment.employee_name}`,
+        });
+
+        return wrap(
+            supabase.from('cellphone_assignments').update({
+                employee_name: newAssignment.employee_name,
+                employee_id: newAssignment.employee_id,
+                employee_email: newAssignment.employee_email,
+                date_assigned: newAssignment.date_assigned || new Date().toISOString().split('T')[0],
+                date_returned: null,
+                phone_status: 'Active',
+                is_active: true,
+                notes: newAssignment.notes || null,
+            }).eq('id', id).select().single()
+        );
+    },
+    updateStatus: async (id, status) => {
+        const { data: current } = await supabase.from('cellphone_assignments').select('*').eq('id', id).single();
+        if (current) {
+            await supabase.from('cellphone_history').insert({
+                cellphone_assignment_id: id,
+                action: `Status: ${current.phone_status} → ${status}`,
+                employee_name: current.employee_name,
+                employee_id: current.employee_id,
+                employee_email: current.employee_email,
+                phone_status: status,
+                notes: null,
+            });
+        }
+
+        const updates = { phone_status: status };
+        const inactiveStatuses = ['Returned', 'Stolen', 'Lost', 'Decommissioned'];
+        updates.is_active = !inactiveStatuses.includes(status);
+        if (status === 'Returned') {
+            updates.date_returned = new Date().toISOString().split('T')[0];
+        }
+        return wrap(
+            supabase.from('cellphone_assignments').update(updates).eq('id', id).select().single()
+        );
+    },
+    getHistory: (assignmentId) => wrap(
+        supabase.from('cellphone_history')
+            .select('*')
+            .eq('cellphone_assignment_id', assignmentId)
+            .order('performed_at', { ascending: false })
+    ),
+    delete: (id) => wrap(
+        supabase.from('cellphone_assignments').delete().eq('id', id)
+    ),
+};
+
 export default supabase;

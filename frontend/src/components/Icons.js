@@ -262,6 +262,14 @@ export const Icons = {
       <line x1="21" y1="21" x2="16.65" y2="16.65" />
     </svg>
   ),
+
+  // Device icons
+  Phone: ({ size = 16, ...props }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width={size} height={size} {...props}>
+      <rect x="7" y="2" width="10" height="20" rx="2" ry="2" />
+      <line x1="11" y1="18" x2="13" y2="18" />
+    </svg>
+  ),
 };
 
 export default Icons;
