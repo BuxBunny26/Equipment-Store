@@ -79,22 +79,49 @@ function VehicleCheckoutForm() {
     fetchData();
   }, []);
 
-  // Pre-fill driver name when operator changes
+  // Pre-fill driver info when operator changes
   useEffect(() => {
-    if (operator?.full_name && !form.driver_name) {
-      setForm(prev => ({ ...prev, driver_name: operator.full_name }));
+    if (operator?.full_name && !form.driver_name && personnel.length > 0) {
+      const person = personnel.find(p => p.full_name === operator.full_name);
+      if (person) {
+        applyDriverInfo(person);
+      } else {
+        setForm(prev => ({ ...prev, driver_name: operator.full_name }));
+      }
     }
-  }, [operator, form.driver_name]);
+  }, [operator, form.driver_name, personnel]); // eslint-disable-line
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setForm(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
+  const applyDriverInfo = (person) => {
+    const updates = { driver_name: person.full_name };
+    // Auto-fill license info from personnel record
+    if (person.drivers_license_number) {
+      updates.driver_license_number = person.drivers_license_number;
+    }
+    if (person.drivers_license_expiry) {
+      const expiry = person.drivers_license_expiry.split('T')[0];
+      updates.driver_license_expiry = expiry;
+      if (new Date(expiry) < new Date()) {
+        setLicenseWarning('WARNING: Driver license has expired!');
+      } else {
+        setLicenseWarning('');
+      }
+    }
+    // Auto-fill supervisor from personnel record
+    if (person.supervisor) {
+      updates.supervisor = person.supervisor;
+    }
+    setForm(prev => ({ ...prev, ...updates }));
+  };
+
   const handleDriverSelect = (e) => {
     const person = personnel.find(p => String(p.id) === e.target.value);
     if (person) {
-      setForm(prev => ({ ...prev, driver_name: person.full_name }));
+      applyDriverInfo(person);
     }
   };
 

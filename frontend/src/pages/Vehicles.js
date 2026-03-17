@@ -980,7 +980,19 @@ function CheckoutModal({ item, vehicles, personnel, onClose, onSuccess }) {
     const personId = e.target.value;
     const person = personnel.find(p => String(p.id) === personId);
     if (person) {
-      setForm(prev => ({ ...prev, driver_name: person.full_name }));
+      const updates = { driver_name: person.full_name };
+      if (person.drivers_license_number) updates.driver_license_number = person.drivers_license_number;
+      if (person.drivers_license_expiry) {
+        const expiry = person.drivers_license_expiry.split('T')[0];
+        updates.driver_license_expiry = expiry;
+        if (new Date(expiry) < new Date()) {
+          setLicenseWarning('WARNING: Driver license has expired!');
+        } else {
+          setLicenseWarning('');
+        }
+      }
+      if (person.supervisor) updates.supervisor = person.supervisor;
+      setForm(prev => ({ ...prev, ...updates }));
     }
   };
 
