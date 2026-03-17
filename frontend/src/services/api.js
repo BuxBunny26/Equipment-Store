@@ -1084,4 +1084,120 @@ export const cellphoneAssignmentsApi = {
     ),
 };
 
+// ============================================
+// Vehicles
+// ============================================
+export const vehiclesApi = {
+    getAll: (activeOnly = true) => {
+        let query = supabase.from('vehicles').select('*').order('make');
+        if (activeOnly) query = query.eq('is_active', true);
+        return wrap(query);
+    },
+    getById: (id) => wrap(
+        supabase.from('vehicles').select('*').eq('id', id).single()
+    ),
+    create: (data) => wrap(
+        supabase.from('vehicles').insert(data).select().single()
+    ),
+    update: (id, data) => wrap(
+        supabase.from('vehicles').update(data).eq('id', id).select().single()
+    ),
+    updateStatus: async (id, status) => {
+        const updates = { vehicle_status: status };
+        const inactiveStatuses = ['Decommissioned', 'Sold', 'Written Off'];
+        updates.is_active = !inactiveStatuses.includes(status);
+        return wrap(
+            supabase.from('vehicles').update(updates).eq('id', id).select().single()
+        );
+    },
+    delete: (id) => wrap(
+        supabase.from('vehicles').delete().eq('id', id)
+    ),
+};
+
+// Vehicle Checkouts (pre-trip inspections)
+export const vehicleCheckoutsApi = {
+    getAll: (vehicleId = null, returnedOnly = false) => {
+        let query = supabase.from('vehicle_checkouts').select('*, vehicles(make, model, registration_number)').order('checkout_date', { ascending: false });
+        if (vehicleId) query = query.eq('vehicle_id', vehicleId);
+        if (!returnedOnly) query = query.eq('is_returned', false);
+        return wrap(query);
+    },
+    getAllIncludingReturned: (vehicleId = null) => {
+        let query = supabase.from('vehicle_checkouts').select('*, vehicles(make, model, registration_number)').order('checkout_date', { ascending: false });
+        if (vehicleId) query = query.eq('vehicle_id', vehicleId);
+        return wrap(query);
+    },
+    getById: (id) => wrap(
+        supabase.from('vehicle_checkouts').select('*, vehicles(make, model, registration_number)').eq('id', id).single()
+    ),
+    create: async (data) => {
+        const result = await wrap(
+            supabase.from('vehicle_checkouts').insert(data).select().single()
+        );
+        // Update vehicle's current odometer
+        if (data.start_odometer) {
+            await supabase.from('vehicles').update({ current_odometer: data.start_odometer }).eq('id', data.vehicle_id);
+        }
+        return result;
+    },
+    update: (id, data) => wrap(
+        supabase.from('vehicle_checkouts').update(data).eq('id', id).select().single()
+    ),
+    returnVehicle: async (id, endOdometer) => {
+        const { data: checkout } = await supabase.from('vehicle_checkouts').select('*').eq('id', id).single();
+        if (!checkout) throw new Error('Checkout record not found');
+        const result = await wrap(
+            supabase.from('vehicle_checkouts').update({
+                is_returned: true,
+                return_date: new Date().toISOString(),
+                end_odometer: endOdometer,
+            }).eq('id', id).select().single()
+        );
+        if (endOdometer) {
+            await supabase.from('vehicles').update({ current_odometer: endOdometer }).eq('id', checkout.vehicle_id);
+        }
+        return result;
+    },
+    delete: (id) => wrap(
+        supabase.from('vehicle_checkouts').delete().eq('id', id)
+    ),
+};
+
+// Vehicle Fines
+export const vehicleFinesApi = {
+    getAll: (vehicleId = null) => {
+        let query = supabase.from('vehicle_fines').select('*, vehicles(make, model, registration_number)').order('fine_date', { ascending: false });
+        if (vehicleId) query = query.eq('vehicle_id', vehicleId);
+        return wrap(query);
+    },
+    create: (data) => wrap(
+        supabase.from('vehicle_fines').insert(data).select().single()
+    ),
+    update: (id, data) => wrap(
+        supabase.from('vehicle_fines').update(data).eq('id', id).select().single()
+    ),
+    delete: (id) => wrap(
+        supabase.from('vehicle_fines').delete().eq('id', id)
+    ),
+};
+
+// Vehicle Services / Repairs
+export const vehicleServicesApi = {
+    getAll: (vehicleId = null) => {
+        let query = supabase.from('vehicle_services').select('*, vehicles(make, model, registration_number)').order('service_date', { ascending: false });
+        if (vehicleId) query = query.eq('vehicle_id', vehicleId);
+        return wrap(query);
+    },
+    create: (data) => wrap(
+        supabase.from('vehicle_services').insert(data).select().single()
+    ),
+    update: (id, data) => wrap(
+        supabase.from('vehicle_services').update(data).eq('id', id).select().single()
+    ),
+    delete: (id) => wrap(
+        supabase.from('vehicle_services').delete().eq('id', id)
+    ),
+};
+
 export default supabase;

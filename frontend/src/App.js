@@ -28,6 +28,7 @@ import CustomerSites from './pages/CustomerSites';
 import UserManagement from './pages/UserManagement';
 import LaptopAssignments from './pages/LaptopAssignments';
 import CellphoneAssignments from './pages/CellphoneAssignments';
+import Vehicles from './pages/Vehicles';
 
 // Icons as simple SVG components
 const Icons = {
@@ -136,6 +137,11 @@ const Icons = {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <rect x="7" y="2" width="10" height="20" rx="2" ry="2" />
       <line x1="11" y1="18" x2="13" y2="18" />
+    </svg>
+  ),
+  Vehicle: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M5 17h14M5 17a2 2 0 01-2-2V9a2 2 0 012-2h1l2-3h8l2 3h1a2 2 0 012 2v6a2 2 0 01-2 2M5 17a2 2 0 100 4 2 2 0 000-4zm14 0a2 2 0 100 4 2 2 0 000-4z" />
     </svg>
   ),
   Menu: () => (
@@ -293,6 +299,9 @@ function AppContent() {
           <NavLink to="/cellphone-assignments" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <Icons.Phone /> Cellphones
           </NavLink>
+          <NavLink to="/vehicles" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.Vehicle /> Vehicles
+          </NavLink>
         </div>
         
         <div className="nav-section">
@@ -327,6 +336,7 @@ function AppContent() {
         <Route path="/users" element={operatorRole?.toLowerCase() === 'admin' ? <UserManagement /> : <Navigate to="/" replace />} />
         <Route path="/laptop-assignments" element={<LaptopAssignments />} />
         <Route path="/cellphone-assignments" element={<CellphoneAssignments />} />
+        <Route path="/vehicles" element={<Vehicles />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     </main>
