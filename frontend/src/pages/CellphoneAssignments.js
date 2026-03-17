@@ -17,6 +17,10 @@ function CellphoneAssignments() {
   const [showReturned, setShowReturned] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [divisionFilter, setDivisionFilter] = useState('');
+  const [brandFilter, setBrandFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const PHONE_STATUSES = [
     { value: 'Active', label: 'Active', badge: 'badge-available', color: 'var(--success-color)' },
@@ -71,8 +75,23 @@ function CellphoneAssignments() {
     }
   };
 
+  // Build a lookup of employee_name -> division from personnel
+  const personnelDivisionMap = {}; // eslint-disable-line
+  personnel.forEach(p => { personnelDivisionMap[p.full_name?.toLowerCase()] = p.division || ''; });
+
+  // Get unique divisions and brands for filter dropdowns
+  const divisions = [...new Set(personnel.map(p => p.division).filter(Boolean))].sort();
+  const brands = [...new Set(assignments.map(a => a.phone_brand).filter(Boolean))].sort();
+
   const filtered = assignments.filter(a => {
     if (statusFilter && a.phone_status !== statusFilter) return false;
+    if (brandFilter && a.phone_brand !== brandFilter) return false;
+    if (divisionFilter) {
+      const empDiv = personnelDivisionMap[a.employee_name?.toLowerCase()] || '';
+      if (empDiv !== divisionFilter) return false;
+    }
+    if (dateFrom && a.date_assigned < dateFrom) return false;
+    if (dateTo && a.date_assigned > dateTo) return false;
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
@@ -131,25 +150,61 @@ function CellphoneAssignments() {
             onChange={e => setSearchTerm(e.target.value)}
             style={{ flex: 1, minWidth: '200px' }}
           />
-          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.875rem' }}>
-            <input
-              type="checkbox"
-              checked={showReturned}
-              onChange={e => setShowReturned(e.target.checked)}
-            />
-            Show inactive phones
-          </label>
+          <select
+            className="form-input"
+            value={divisionFilter}
+            onChange={e => setDivisionFilter(e.target.value)}
+            style={{ minWidth: '140px' }}
+          >
+            <option value="">All Divisions</option>
+            {divisions.map(d => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+          <select
+            className="form-input"
+            value={brandFilter}
+            onChange={e => setBrandFilter(e.target.value)}
+            style={{ minWidth: '140px' }}
+          >
+            <option value="">All Brands</option>
+            {brands.map(b => (
+              <option key={b} value={b}>{b}</option>
+            ))}
+          </select>
           <select
             className="form-input"
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
-            style={{ minWidth: '150px' }}
+            style={{ minWidth: '140px' }}
           >
             <option value="">All Statuses</option>
             {PHONE_STATUSES.map(s => (
               <option key={s.value} value={s.value}>{s.label}</option>
             ))}
           </select>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.875rem' }}>
+            <input
+              type="checkbox"
+              checked={showReturned}
+              onChange={e => setShowReturned(e.target.checked)}
+            />
+            Show inactive
+          </label>
+        </div>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginTop: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Assigned From:</label>
+            <input type="date" className="form-input" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ width: '150px' }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>To:</label>
+            <input type="date" className="form-input" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ width: '150px' }} />
+          </div>
+          {(divisionFilter || brandFilter || dateFrom || dateTo) && (
+            <button className="btn btn-sm" style={{ fontSize: '0.8rem' }} onClick={() => { setDivisionFilter(''); setBrandFilter(''); setDateFrom(''); setDateTo(''); }}>Clear Filters</button>
+          )}
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 'auto' }}>{filtered.length} record{filtered.length !== 1 ? 's' : ''}</span>
         </div>
       </div>
 
