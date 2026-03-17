@@ -98,14 +98,6 @@ function Vehicles() {
     } catch (err) { alert('Error: ' + err.message); }
   };
 
-  const handleStatusChange = async (v, newStatus) => {
-    if (!window.confirm(`Change status of ${v.registration_number} to ${newStatus}?`)) return;
-    try {
-      await vehiclesApi.updateStatus(v.id, newStatus);
-      fetchData();
-    } catch (err) { alert('Error: ' + err.message); }
-  };
-
   // ---------- Checkout Handlers ----------
   const handleReturnVehicle = async (endOdometer) => {
     if (!returnCheckout) return;

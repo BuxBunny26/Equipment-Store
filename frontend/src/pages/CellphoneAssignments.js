@@ -58,16 +58,7 @@ function CellphoneAssignments() {
     setShowModal(true);
   };
 
-  const handleStatusChange = async (item, newStatus) => {
-    const statusLabel = PHONE_STATUSES.find(s => s.value === newStatus)?.label || newStatus;
-    if (!window.confirm(`Change status of "${item.phone_brand} ${item.phone_model}" to ${statusLabel}?`)) return;
-    try {
-      await cellphoneAssignmentsApi.updateStatus(item.id, newStatus);
-      fetchData();
-    } catch (err) {
-      alert('Error: ' + err.message);
-    }
-  };
+
 
   const handleDelete = async (item) => {
     if (!window.confirm(`Delete this cellphone assignment record for ${item.employee_name}?`)) return;

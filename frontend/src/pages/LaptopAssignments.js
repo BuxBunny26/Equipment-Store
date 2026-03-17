@@ -58,20 +58,7 @@ function LaptopAssignments() {
     setShowModal(true);
   };
 
-  const handleReturn = async (item) => {
-    // No longer used — status changes go through the modal or status dropdown
-  };
 
-  const handleStatusChange = async (item, newStatus) => {
-    const statusLabel = LAPTOP_STATUSES.find(s => s.value === newStatus)?.label || newStatus;
-    if (!window.confirm(`Change status of "${item.laptop_brand} ${item.laptop_model}" to ${statusLabel}?`)) return;
-    try {
-      await laptopAssignmentsApi.updateStatus(item.id, newStatus);
-      fetchData();
-    } catch (err) {
-      alert('Error: ' + err.message);
-    }
-  };
 
   const handleDelete = async (item) => {
     if (!window.confirm(`Delete this laptop assignment record for ${item.employee_name}?`)) return;
