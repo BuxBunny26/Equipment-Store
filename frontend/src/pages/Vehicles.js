@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { vehiclesApi, vehicleCheckoutsApi, vehicleFinesApi, vehicleServicesApi, personnelApi } from '../services/api';
 import { useOperator } from '../context/OperatorContext';
 import { Icons } from '../components/Icons';
+import { getAssetConfig } from './Settings';
 
 const VEHICLE_STATUSES = [
   { value: 'Active', label: 'Active', badge: 'badge-available' },
@@ -814,7 +815,7 @@ function VehicleModal({ item, onClose, onSuccess }) {
                 <label className="form-label">Make *</label>
                 <select name="make" value={form.make} onChange={handleChange} className="form-input" required>
                   <option value="">-- Select Make --</option>
-                  {['Toyota', 'Ford', 'Volkswagen', 'Nissan', 'Isuzu', 'Hyundai', 'Kia', 'Mercedes-Benz', 'BMW', 'Renault', 'Mitsubishi', 'Mazda', 'Suzuki', 'Chevrolet', 'Other'].map(m => (
+                  {getAssetConfig().vehicleMakes.map(m => (
                     <option key={m} value={m}>{m}</option>
                   ))}
                 </select>
@@ -845,7 +846,7 @@ function VehicleModal({ item, onClose, onSuccess }) {
                 <label className="form-label">Fuel Type</label>
                 <select name="fuel_type" value={form.fuel_type} onChange={handleChange} className="form-input">
                   <option value="">-- Select --</option>
-                  {['Petrol', 'Diesel', 'Hybrid', 'Electric'].map(f => (
+                  {getAssetConfig().fuelTypes.map(f => (
                     <option key={f} value={f}>{f}</option>
                   ))}
                 </select>

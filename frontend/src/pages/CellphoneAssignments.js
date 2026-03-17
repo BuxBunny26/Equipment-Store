@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { cellphoneAssignmentsApi, personnelApi } from '../services/api';
 import { useOperator } from '../context/OperatorContext';
 import { Icons } from '../components/Icons';
+import { getAssetConfig } from './Settings';
 
 function CellphoneAssignments() {
   const { operatorRole } = useOperator();
@@ -550,7 +551,7 @@ function CellphoneModal({ item, personnel, allAssignments, onClose, onSuccess })
                   required={!serialMatch}
                 >
                   <option value="">-- Select Brand --</option>
-                  {['Apple', 'Google', 'Huawei', 'Nokia', 'OnePlus', 'Oppo', 'Samsung', 'Sony', 'Vivo', 'Xiaomi', 'Other'].map(brand => (
+                  {getAssetConfig().phoneBrands.map(brand => (
                     <option key={brand} value={brand}>{brand}</option>
                   ))}
                 </select>

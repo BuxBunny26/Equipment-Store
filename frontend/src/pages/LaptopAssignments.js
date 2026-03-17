@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { laptopAssignmentsApi, personnelApi } from '../services/api';
 import { useOperator } from '../context/OperatorContext';
 import { Icons } from '../components/Icons';
+import { getAssetConfig } from './Settings';
 
 function LaptopAssignments() {
   const { operatorRole } = useOperator();
@@ -580,7 +581,7 @@ function LaptopModal({ item, personnel, allAssignments, onClose, onSuccess }) {
                   required={!serialMatch}
                 >
                   <option value="">-- Select Brand --</option>
-                  {['Acer', 'Apple', 'Asus', 'Dell', 'HP', 'Huawei', 'Lenovo', 'LG', 'Microsoft', 'MSI', 'Samsung', 'Toshiba', 'Other'].map(brand => (
+                  {getAssetConfig().laptopBrands.map(brand => (
                     <option key={brand} value={brand}>{brand}</option>
                   ))}
                 </select>

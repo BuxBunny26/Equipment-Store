@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { categoriesApi, subcategoriesApi, locationsApi, personnelApi, laptopAssignmentsApi, cellphoneAssignmentsApi, vehiclesApi, vehicleFinesApi } from '../services/api';
+import { categoriesApi, subcategoriesApi, locationsApi, personnelApi } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 
 function Settings() {
@@ -788,181 +788,166 @@ function PersonnelSettings() {
   );
 }
 
-// Assets Settings
-function AssetsSettings() {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [laptops, setLaptops] = useState([]);
-  const [cellphones, setCellphones] = useState([]);
-  const [vehicles, setVehicles] = useState([]);
-  const [fines, setFines] = useState([]);
+// Assets Settings — manage dropdown options for asset forms
+const ASSET_CONFIG_KEY = 'equipment_store_asset_config';
 
-  useEffect(() => {
-    fetchAssets();
-  }, []);
+const DEFAULT_ASSET_CONFIG = {
+  laptopBrands: ['Acer', 'Apple', 'Asus', 'Dell', 'HP', 'Huawei', 'Lenovo', 'LG', 'Microsoft', 'MSI', 'Samsung', 'Toshiba', 'Other'],
+  phoneBrands: ['Apple', 'Google', 'Huawei', 'Nokia', 'OnePlus', 'Oppo', 'Samsung', 'Sony', 'Vivo', 'Xiaomi', 'Other'],
+  vehicleMakes: ['Toyota', 'Ford', 'Volkswagen', 'Nissan', 'Isuzu', 'Hyundai', 'Kia', 'Mercedes-Benz', 'BMW', 'Renault', 'Mitsubishi', 'Mazda', 'Suzuki', 'Chevrolet', 'Other'],
+  fuelTypes: ['Petrol', 'Diesel', 'Hybrid', 'Electric'],
+};
 
-  const fetchAssets = async () => {
-    try {
-      setLoading(true);
-      const [laptopRes, cellphoneRes, vehicleRes, finesRes] = await Promise.all([
-        laptopAssignmentsApi.getAll(true),
-        cellphoneAssignmentsApi.getAll(true),
-        vehiclesApi.getAll(true),
-        vehicleFinesApi.getAll(),
-      ]);
-      setLaptops(laptopRes.data || []);
-      setCellphones(cellphoneRes.data || []);
-      setVehicles(vehicleRes.data || []);
-      setFines(finesRes.data || []);
-      setError(null);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+export function getAssetConfig() {
+  try {
+    const stored = localStorage.getItem(ASSET_CONFIG_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return { ...DEFAULT_ASSET_CONFIG, ...parsed };
     }
+  } catch { /* ignore */ }
+  return { ...DEFAULT_ASSET_CONFIG };
+}
+
+function saveAssetConfig(config) {
+  localStorage.setItem(ASSET_CONFIG_KEY, JSON.stringify(config));
+}
+
+function EditableListSection({ title, items, onUpdate }) {
+  const [newItem, setNewItem] = useState('');
+
+  const handleAdd = () => {
+    const trimmed = newItem.trim();
+    if (!trimmed) return;
+    if (items.some(i => i.toLowerCase() === trimmed.toLowerCase())) {
+      alert('This item already exists');
+      return;
+    }
+    // Insert before "Other" if present, otherwise append
+    const otherIdx = items.indexOf('Other');
+    const updated = [...items];
+    if (otherIdx >= 0) {
+      updated.splice(otherIdx, 0, trimmed);
+    } else {
+      updated.push(trimmed);
+    }
+    onUpdate(updated);
+    setNewItem('');
   };
 
-  if (loading) {
-    return <div className="loading"><div className="spinner"></div> Loading...</div>;
-  }
-
-  const activeLaptops = laptops.filter(l => l.laptop_status === 'Active');
-  const repairLaptops = laptops.filter(l => ['Repairs', 'Damaged'].includes(l.laptop_status));
-  const inactiveLaptops = laptops.filter(l => ['Returned', 'Decommissioned', 'Stolen', 'Lost'].includes(l.laptop_status));
-
-  const activeCellphones = cellphones.filter(c => c.phone_status === 'Active');
-  const repairCellphones = cellphones.filter(c => ['Repairs', 'Damaged'].includes(c.phone_status));
-  const inactiveCellphones = cellphones.filter(c => ['Returned', 'Decommissioned', 'Stolen', 'Lost'].includes(c.phone_status));
-
-  const activeVehicles = vehicles.filter(v => v.vehicle_status === 'Active' || v.vehicle_status === 'In Use');
-  const serviceVehicles = vehicles.filter(v => ['In Service', 'Repairs'].includes(v.vehicle_status));
-  const inactiveVehicles = vehicles.filter(v => ['Decommissioned', 'Sold', 'Written Off'].includes(v.vehicle_status));
-
-  const unpaidFines = fines.filter(f => f.status === 'Unpaid');
-  const totalFineAmount = unpaidFines.reduce((sum, f) => sum + (parseFloat(f.fine_amount) || 0), 0);
-
-  // Vehicle alerts
-  const now = new Date();
-  const licenseDueVehicles = vehicles.filter(v => {
-    if (!v.license_disk_expiry || !v.is_active) return false;
-    const days = (new Date(v.license_disk_expiry) - now) / (1000 * 60 * 60 * 24);
-    return days <= 30;
-  });
-  const serviceDueVehicles = vehicles.filter(v => {
-    if (!v.next_service_date || !v.is_active) return false;
-    const days = (new Date(v.next_service_date) - now) / (1000 * 60 * 60 * 24);
-    return days <= 30;
-  });
-
-  const cardStyle = {
-    padding: '16px',
-    background: 'var(--bg-primary)',
-    borderRadius: 'var(--radius-md)',
-    border: '1px solid var(--border-color)',
+  const handleRemove = (idx) => {
+    if (!window.confirm(`Remove "${items[idx]}"?`)) return;
+    onUpdate(items.filter((_, i) => i !== idx));
   };
 
-  const statRow = {
-    display: 'flex',
-    justifyContent: 'space-between',
-    padding: '8px 0',
-    borderBottom: '1px solid var(--border-color)',
-    fontSize: '0.875rem',
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); handleAdd(); }
+  };
+
+  return (
+    <div style={{ marginBottom: '24px' }}>
+      <h4 style={{ marginBottom: '8px' }}>{title}</h4>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+        {items.map((item, idx) => (
+          <span
+            key={idx}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              background: 'var(--bg-secondary)',
+              borderRadius: '16px',
+              fontSize: '0.825rem',
+              border: '1px solid var(--border-color)',
+            }}
+          >
+            {item}
+            <button
+              onClick={() => handleRemove(idx)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--error-color)',
+                cursor: 'pointer',
+                padding: 0,
+                fontSize: '1rem',
+                lineHeight: 1,
+              }}
+              title="Remove"
+            >
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <input
+          type="text"
+          className="form-input"
+          value={newItem}
+          onChange={e => setNewItem(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={`Add new ${title.toLowerCase().replace(/s$/, '')}...`}
+          style={{ flex: 1 }}
+        />
+        <button className="btn btn-primary" onClick={handleAdd} disabled={!newItem.trim()}>
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AssetsSettings() {
+  const [config, setConfig] = useState(getAssetConfig);
+  const [saved, setSaved] = useState(false);
+
+  const updateList = (key) => (newList) => {
+    const updated = { ...config, [key]: newList };
+    setConfig(updated);
+    saveAssetConfig(updated);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleReset = () => {
+    if (!window.confirm('Reset all asset dropdown options to defaults? This cannot be undone.')) return;
+    setConfig({ ...DEFAULT_ASSET_CONFIG });
+    saveAssetConfig(DEFAULT_ASSET_CONFIG);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   };
 
   return (
     <div>
-      <div style={{ marginBottom: '16px' }}>
-        <h3>Assets Overview</h3>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Summary of all company assets</p>
-      </div>
-
-      {error && <div className="alert alert-error">{error}</div>}
-
-      {/* Summary Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-        <div style={{ ...cardStyle, textAlign: 'center' }}>
-          <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--primary-color)' }}>
-            {laptops.length + cellphones.length + vehicles.length}
-          </div>
-          <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Total Assets</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div>
+          <h3>Asset Configuration</h3>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+            Manage dropdown options used in laptop, cellphone, and vehicle forms
+          </p>
         </div>
-        <div style={{ ...cardStyle, textAlign: 'center' }}>
-          <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--success-color)' }}>
-            {activeLaptops.length + activeCellphones.length + activeVehicles.length}
-          </div>
-          <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Active / In Use</div>
-        </div>
-        <div style={{ ...cardStyle, textAlign: 'center' }}>
-          <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f39c12' }}>
-            {repairLaptops.length + repairCellphones.length + serviceVehicles.length}
-          </div>
-          <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Repairs / Service</div>
-        </div>
-        <div style={{ ...cardStyle, textAlign: 'center' }}>
-          <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
-            {inactiveLaptops.length + inactiveCellphones.length + inactiveVehicles.length}
-          </div>
-          <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Inactive / Decom.</div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {saved && <span style={{ color: 'var(--success-color)', fontSize: '0.875rem', fontWeight: 500 }}>Saved!</span>}
+          <button className="btn btn-secondary" onClick={handleReset}>Reset to Defaults</button>
         </div>
       </div>
 
-      {/* Breakdown by Asset Type */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-        {/* Laptops */}
-        <div style={cardStyle}>
-          <h4 style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between' }}>
-            Laptops <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>{laptops.length}</span>
-          </h4>
-          <div style={statRow}><span>Active</span><span style={{ fontWeight: 600, color: 'var(--success-color)' }}>{activeLaptops.length}</span></div>
-          <div style={statRow}><span>Repairs / Damaged</span><span style={{ fontWeight: 600, color: '#f39c12' }}>{repairLaptops.length}</span></div>
-          <div style={{ ...statRow, borderBottom: 'none' }}><span>Returned / Decom. / Lost</span><span style={{ fontWeight: 600 }}>{inactiveLaptops.length}</span></div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
+        <div style={{ padding: '16px', background: 'var(--bg-primary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+          <EditableListSection title="Laptop Brands" items={config.laptopBrands} onUpdate={updateList('laptopBrands')} />
         </div>
-
-        {/* Cellphones */}
-        <div style={cardStyle}>
-          <h4 style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between' }}>
-            Cellphones <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>{cellphones.length}</span>
-          </h4>
-          <div style={statRow}><span>Active</span><span style={{ fontWeight: 600, color: 'var(--success-color)' }}>{activeCellphones.length}</span></div>
-          <div style={statRow}><span>Repairs / Damaged</span><span style={{ fontWeight: 600, color: '#f39c12' }}>{repairCellphones.length}</span></div>
-          <div style={{ ...statRow, borderBottom: 'none' }}><span>Returned / Decom. / Lost</span><span style={{ fontWeight: 600 }}>{inactiveCellphones.length}</span></div>
+        <div style={{ padding: '16px', background: 'var(--bg-primary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+          <EditableListSection title="Phone Brands" items={config.phoneBrands} onUpdate={updateList('phoneBrands')} />
         </div>
-
-        {/* Vehicles */}
-        <div style={cardStyle}>
-          <h4 style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between' }}>
-            Vehicles <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>{vehicles.length}</span>
-          </h4>
-          <div style={statRow}><span>Active / In Use</span><span style={{ fontWeight: 600, color: 'var(--success-color)' }}>{activeVehicles.length}</span></div>
-          <div style={statRow}><span>In Service / Repairs</span><span style={{ fontWeight: 600, color: '#f39c12' }}>{serviceVehicles.length}</span></div>
-          <div style={{ ...statRow, borderBottom: 'none' }}><span>Decom. / Sold / Written Off</span><span style={{ fontWeight: 600 }}>{inactiveVehicles.length}</span></div>
+        <div style={{ padding: '16px', background: 'var(--bg-primary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+          <EditableListSection title="Vehicle Makes" items={config.vehicleMakes} onUpdate={updateList('vehicleMakes')} />
+        </div>
+        <div style={{ padding: '16px', background: 'var(--bg-primary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+          <EditableListSection title="Fuel Types" items={config.fuelTypes} onUpdate={updateList('fuelTypes')} />
         </div>
       </div>
-
-      {/* Alerts Section */}
-      {(licenseDueVehicles.length > 0 || serviceDueVehicles.length > 0 || unpaidFines.length > 0) && (
-        <div style={cardStyle}>
-          <h4 style={{ marginBottom: '12px', color: '#f39c12' }}>Alerts</h4>
-          {licenseDueVehicles.length > 0 && (
-            <div style={{ ...statRow, color: 'var(--error-color)' }}>
-              <span>License disk expiring / expired</span>
-              <span style={{ fontWeight: 600 }}>{licenseDueVehicles.length} vehicle{licenseDueVehicles.length > 1 ? 's' : ''}</span>
-            </div>
-          )}
-          {serviceDueVehicles.length > 0 && (
-            <div style={{ ...statRow, color: '#f39c12' }}>
-              <span>Service due within 30 days</span>
-              <span style={{ fontWeight: 600 }}>{serviceDueVehicles.length} vehicle{serviceDueVehicles.length > 1 ? 's' : ''}</span>
-            </div>
-          )}
-          {unpaidFines.length > 0 && (
-            <div style={{ ...statRow, borderBottom: 'none', color: 'var(--error-color)' }}>
-              <span>Unpaid fines</span>
-              <span style={{ fontWeight: 600 }}>{unpaidFines.length} (R{totalFineAmount.toLocaleString()})</span>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
