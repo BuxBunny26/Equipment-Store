@@ -151,7 +151,9 @@ function Vehicles() {
       v.make?.toLowerCase().includes(term) ||
       v.model?.toLowerCase().includes(term) ||
       v.registration_number?.toLowerCase().includes(term) ||
-      v.vin_number?.toLowerCase().includes(term)
+      v.vin_number?.toLowerCase().includes(term) ||
+      v.assigned_to?.toLowerCase().includes(term) ||
+      v.fuel_type?.toLowerCase().includes(term)
     );
   });
 
@@ -365,6 +367,8 @@ function Vehicles() {
                     <tr>
                       <th>Vehicle</th>
                       <th>Registration</th>
+                      <th>Fuel</th>
+                      <th>Assigned To</th>
                       <th>Odometer</th>
                       <th>License Disk Expiry</th>
                       <th>Next Service</th>
@@ -387,6 +391,8 @@ function Vehicles() {
                             </div>
                           </td>
                           <td><strong style={{ fontFamily: 'monospace' }}>{v.registration_number}</strong></td>
+                          <td>{v.fuel_type || '-'}</td>
+                          <td>{v.assigned_to || '-'}</td>
                           <td>{v.current_odometer ? v.current_odometer.toLocaleString() + ' km' : '-'}</td>
                           <td>
                             {v.license_disk_expiry ? (
@@ -764,7 +770,9 @@ function VehicleModal({ item, onClose, onSuccess }) {
     registration_number: item?.registration_number || '',
     year: item?.year || '',
     color: item?.color || '',
+    fuel_type: item?.fuel_type || '',
     vin_number: item?.vin_number || '',
+    assigned_to: item?.assigned_to || '',
     vehicle_status: item?.vehicle_status || 'Active',
     license_disk_expiry: item?.license_disk_expiry || '',
     registration_expiry: item?.registration_expiry || '',
@@ -853,8 +861,24 @@ function VehicleModal({ item, onClose, onSuccess }) {
                 <input type="text" name="color" value={form.color} onChange={handleChange} className="form-input" placeholder="e.g. White" />
               </div>
               <div className="form-group">
+                <label className="form-label">Fuel Type</label>
+                <select name="fuel_type" value={form.fuel_type} onChange={handleChange} className="form-input">
+                  <option value="">-- Select --</option>
+                  {['Petrol', 'Diesel', 'Hybrid', 'Electric'].map(f => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="form-group">
                 <label className="form-label">VIN Number</label>
                 <input type="text" name="vin_number" value={form.vin_number} onChange={handleChange} className="form-input" placeholder="Vehicle Identification Number" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Assigned To</label>
+                <input type="text" name="assigned_to" value={form.assigned_to} onChange={handleChange} className="form-input" placeholder="e.g. Pool Vehicle, RS Pool Vehicle" />
               </div>
             </div>
 
