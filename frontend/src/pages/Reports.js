@@ -50,6 +50,22 @@ function Reports() {
           setStats(response?.data || null);
           setData([]);
           break;
+        case 'vehicles':
+          response = await reportsApi.getVehicleReport();
+          setData(Array.isArray(response?.data) ? response.data : []);
+          break;
+        case 'cellphones':
+          response = await reportsApi.getCellphoneReport();
+          setData(Array.isArray(response?.data) ? response.data : []);
+          break;
+        case 'laptops':
+          response = await reportsApi.getLaptopReport();
+          setData(Array.isArray(response?.data) ? response.data : []);
+          break;
+        case 'calibration-due':
+          response = await reportsApi.getCalibrationDueReport();
+          setData(Array.isArray(response?.data) ? response.data : []);
+          break;
         default:
           setData([]);
       }
@@ -107,6 +123,14 @@ function Reports() {
         return <ByLocationReport data={data} />;
       case 'usage':
         return <UsageReport stats={stats} />;
+      case 'vehicles':
+        return <VehicleReport data={data} />;
+      case 'cellphones':
+        return <CellphoneReport data={data} />;
+      case 'laptops':
+        return <LaptopReport data={data} />;
+      case 'calibration-due':
+        return <CalibrationDueReport data={data} />;
       default:
         return null;
     }
@@ -117,31 +141,31 @@ function Reports() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Reports</h1>
-          <p className="page-subtitle">Equipment inventory reports and analytics</p>
+          <p className="page-subtitle">Equipment &amp; asset reports and analytics</p>
         </div>
         <div style={{ display: 'flex', gap: '6px' }}>
           <button className="btn btn-secondary" onClick={fetchData}>
             Refresh
           </button>
           <button className="btn btn-secondary" onClick={() => {
-            const colMap = { overdue: 'overdue', 'checked-out': 'checkedOut', available: 'available', 'low-stock': 'lowStock', 'by-category': 'byCategory', 'by-location': 'byLocation' };
+            const colMap = { overdue: 'overdue', 'checked-out': 'checkedOut', available: 'available', 'low-stock': 'lowStock', 'by-category': 'byCategory', 'by-location': 'byLocation', vehicles: 'vehicleReport', cellphones: 'cellphoneReport', laptops: 'laptopReport', 'calibration-due': 'calibrationDue' };
             const cols = EXPORT_COLUMNS[colMap[activeTab]];
             if (cols && data.length > 0) exportData('csv', data, cols, `report_${activeTab}`, `Report: ${activeTab}`);
-          }} disabled={data.length === 0 || !['overdue', 'checked-out', 'available', 'low-stock', 'by-category', 'by-location'].includes(activeTab)}>
+          }} disabled={data.length === 0 || activeTab === 'usage'}>
             CSV
           </button>
           <button className="btn btn-secondary" onClick={() => {
-            const colMap = { overdue: 'overdue', 'checked-out': 'checkedOut', available: 'available', 'low-stock': 'lowStock', 'by-category': 'byCategory', 'by-location': 'byLocation' };
+            const colMap = { overdue: 'overdue', 'checked-out': 'checkedOut', available: 'available', 'low-stock': 'lowStock', 'by-category': 'byCategory', 'by-location': 'byLocation', vehicles: 'vehicleReport', cellphones: 'cellphoneReport', laptops: 'laptopReport', 'calibration-due': 'calibrationDue' };
             const cols = EXPORT_COLUMNS[colMap[activeTab]];
             if (cols && data.length > 0) exportData('excel', data, cols, `report_${activeTab}`, `Report: ${activeTab}`);
-          }} disabled={data.length === 0 || !['overdue', 'checked-out', 'available', 'low-stock', 'by-category', 'by-location'].includes(activeTab)}>
+          }} disabled={data.length === 0 || activeTab === 'usage'}>
             Excel
           </button>
           <button className="btn btn-secondary" onClick={() => {
-            const colMap = { overdue: 'overdue', 'checked-out': 'checkedOut', available: 'available', 'low-stock': 'lowStock', 'by-category': 'byCategory', 'by-location': 'byLocation' };
+            const colMap = { overdue: 'overdue', 'checked-out': 'checkedOut', available: 'available', 'low-stock': 'lowStock', 'by-category': 'byCategory', 'by-location': 'byLocation', vehicles: 'vehicleReport', cellphones: 'cellphoneReport', laptops: 'laptopReport', 'calibration-due': 'calibrationDue' };
             const cols = EXPORT_COLUMNS[colMap[activeTab]];
             if (cols && data.length > 0) exportData('pdf', data, cols, `report_${activeTab}`, `Report: ${activeTab}`);
-          }} disabled={data.length === 0 || !['overdue', 'checked-out', 'available', 'low-stock', 'by-category', 'by-location'].includes(activeTab)}>
+          }} disabled={data.length === 0 || activeTab === 'usage'}>
             PDF
           </button>
         </div>
@@ -190,6 +214,31 @@ function Reports() {
           onClick={() => setActiveTab('usage')}
         >
           Usage Stats
+        </button>
+        <span style={{ borderLeft: '2px solid var(--border-color)', margin: '4px 4px', alignSelf: 'stretch' }} />
+        <button
+          className={`tab ${activeTab === 'vehicles' ? 'active' : ''}`}
+          onClick={() => setActiveTab('vehicles')}
+        >
+          Vehicles
+        </button>
+        <button
+          className={`tab ${activeTab === 'cellphones' ? 'active' : ''}`}
+          onClick={() => setActiveTab('cellphones')}
+        >
+          Cellphones
+        </button>
+        <button
+          className={`tab ${activeTab === 'laptops' ? 'active' : ''}`}
+          onClick={() => setActiveTab('laptops')}
+        >
+          Laptops
+        </button>
+        <button
+          className={`tab ${activeTab === 'calibration-due' ? 'active' : ''}`}
+          onClick={() => setActiveTab('calibration-due')}
+        >
+          Calibration Due
         </button>
       </div>
 
@@ -597,6 +646,305 @@ function UsageReport({ stats }) {
             </tbody>
           </table>
         )}
+      </div>
+    </div>
+  );
+}
+
+// Vehicle Report Component
+function VehicleReport({ data }) {
+  if (data.length === 0) {
+    return (
+      <div className="empty-state">
+        <h3>No Vehicles</h3>
+        <p>No vehicle records found</p>
+      </div>
+    );
+  }
+
+  const active = data.filter(v => v.is_active);
+  const statusCounts = data.reduce((acc, v) => {
+    acc[v.vehicle_status] = (acc[v.vehicle_status] || 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        <div className="badge badge-available" style={{ padding: '6px 12px', fontSize: '0.85rem' }}>
+          {active.length} Active
+        </div>
+        {Object.entries(statusCounts).map(([status, count]) => (
+          <div key={status} className="badge" style={{ padding: '6px 12px', fontSize: '0.85rem', background: 'var(--bg-secondary)' }}>
+            {status}: {count}
+          </div>
+        ))}
+        <div style={{ marginLeft: 'auto', color: 'var(--text-secondary)', fontSize: '0.85rem', alignSelf: 'center' }}>
+          {data.length} total vehicle{data.length !== 1 ? 's' : ''}
+        </div>
+      </div>
+      <div className="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Make / Model</th>
+              <th>Year</th>
+              <th>Registration</th>
+              <th>VIN</th>
+              <th>Assigned Driver</th>
+              <th>Division</th>
+              <th>Odometer</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((v) => (
+              <tr key={v.id}>
+                <td><strong>{v.make}</strong> {v.model}</td>
+                <td>{v.year || '-'}</td>
+                <td>{v.registration_number || '-'}</td>
+                <td style={{ fontSize: '0.8rem' }}>{v.vin_number || '-'}</td>
+                <td>{v.assigned_driver || '-'}</td>
+                <td>{v.division || '-'}</td>
+                <td>{v.current_odometer ? v.current_odometer.toLocaleString() + ' km' : '-'}</td>
+                <td>
+                  <span className={`badge ${v.vehicle_status === 'Active' ? 'badge-available' : v.vehicle_status === 'In Service' ? 'badge-checked-out' : ''}`}>
+                    {v.vehicle_status}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Cellphone Report Component
+function CellphoneReport({ data }) {
+  if (data.length === 0) {
+    return (
+      <div className="empty-state">
+        <h3>No Cellphones</h3>
+        <p>No cellphone assignment records found</p>
+      </div>
+    );
+  }
+
+  const active = data.filter(c => c.is_active);
+  const brandCounts = data.reduce((acc, c) => {
+    acc[c.phone_brand] = (acc[c.phone_brand] || 0) + 1;
+    return acc;
+  }, {});
+  const statusCounts = data.reduce((acc, c) => {
+    acc[c.phone_status] = (acc[c.phone_status] || 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        <div className="badge badge-available" style={{ padding: '6px 12px', fontSize: '0.85rem' }}>
+          {active.length} Active
+        </div>
+        {Object.entries(brandCounts).map(([brand, count]) => (
+          <div key={brand} className="badge" style={{ padding: '6px 12px', fontSize: '0.85rem', background: 'var(--bg-secondary)' }}>
+            {brand}: {count}
+          </div>
+        ))}
+        {Object.entries(statusCounts).filter(([s]) => s !== 'Active').map(([status, count]) => (
+          <div key={status} className="badge badge-checked-out" style={{ padding: '6px 12px', fontSize: '0.85rem' }}>
+            {status}: {count}
+          </div>
+        ))}
+        <div style={{ marginLeft: 'auto', color: 'var(--text-secondary)', fontSize: '0.85rem', alignSelf: 'center' }}>
+          {data.length} total device{data.length !== 1 ? 's' : ''}
+        </div>
+      </div>
+      <div className="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th>Brand</th>
+              <th>Model</th>
+              <th>IMEI</th>
+              <th>Phone Number</th>
+              <th>Date Assigned</th>
+              <th>Division</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((c) => (
+              <tr key={c.id}>
+                <td><strong>{c.employee_name}</strong></td>
+                <td>{c.phone_brand}</td>
+                <td>{c.phone_model}</td>
+                <td style={{ fontSize: '0.8rem' }}>{c.imei_number || '-'}</td>
+                <td>{c.phone_number || '-'}</td>
+                <td style={{ fontSize: '0.8rem' }}>{c.date_assigned ? new Date(c.date_assigned).toLocaleDateString() : '-'}</td>
+                <td>{c.notes || '-'}</td>
+                <td>
+                  <span className={`badge ${c.phone_status === 'Active' ? 'badge-available' : 'badge-checked-out'}`}>
+                    {c.phone_status}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Laptop Report Component
+function LaptopReport({ data }) {
+  if (data.length === 0) {
+    return (
+      <div className="empty-state">
+        <h3>No Laptops</h3>
+        <p>No laptop assignment records found</p>
+      </div>
+    );
+  }
+
+  const active = data.filter(l => l.is_active);
+  const brandCounts = data.reduce((acc, l) => {
+    acc[l.laptop_brand] = (acc[l.laptop_brand] || 0) + 1;
+    return acc;
+  }, {});
+  const statusCounts = data.reduce((acc, l) => {
+    acc[l.laptop_status] = (acc[l.laptop_status] || 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        <div className="badge badge-available" style={{ padding: '6px 12px', fontSize: '0.85rem' }}>
+          {active.length} Active
+        </div>
+        {Object.entries(brandCounts).map(([brand, count]) => (
+          <div key={brand} className="badge" style={{ padding: '6px 12px', fontSize: '0.85rem', background: 'var(--bg-secondary)' }}>
+            {brand}: {count}
+          </div>
+        ))}
+        {Object.entries(statusCounts).filter(([s]) => s !== 'Active').map(([status, count]) => (
+          <div key={status} className="badge badge-checked-out" style={{ padding: '6px 12px', fontSize: '0.85rem' }}>
+            {status}: {count}
+          </div>
+        ))}
+        <div style={{ marginLeft: 'auto', color: 'var(--text-secondary)', fontSize: '0.85rem', alignSelf: 'center' }}>
+          {data.length} total laptop{data.length !== 1 ? 's' : ''}
+        </div>
+      </div>
+      <div className="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th>Brand</th>
+              <th>Model</th>
+              <th>Serial Number</th>
+              <th>Asset Tag</th>
+              <th>Date Assigned</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((l) => (
+              <tr key={l.id}>
+                <td><strong>{l.employee_name}</strong></td>
+                <td>{l.laptop_brand}</td>
+                <td>{l.laptop_model}</td>
+                <td style={{ fontSize: '0.8rem' }}>{l.serial_number || '-'}</td>
+                <td>{l.asset_tag || '-'}</td>
+                <td style={{ fontSize: '0.8rem' }}>{l.date_assigned ? new Date(l.date_assigned).toLocaleDateString() : '-'}</td>
+                <td>
+                  <span className={`badge ${l.laptop_status === 'Active' ? 'badge-available' : 'badge-checked-out'}`}>
+                    {l.laptop_status}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Calibration Due Report Component
+function CalibrationDueReport({ data }) {
+  if (data.length === 0) {
+    return (
+      <div className="empty-state">
+        <h3>No Calibrations Due</h3>
+        <p>All calibrations are currently valid</p>
+      </div>
+    );
+  }
+
+  const expired = data.filter(r => r.calibration_status === 'Expired');
+  const dueSoon = data.filter(r => r.calibration_status === 'Due Soon');
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        {expired.length > 0 && (
+          <div className="alert alert-error" style={{ margin: 0, padding: '6px 12px', fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <Icons.Warning size={16} />
+            <strong>{expired.length} Expired</strong>
+          </div>
+        )}
+        {dueSoon.length > 0 && (
+          <div className="alert alert-warning" style={{ margin: 0, padding: '6px 12px', fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <Icons.Warning size={16} />
+            <strong>{dueSoon.length} Due Soon</strong>
+          </div>
+        )}
+        <div style={{ marginLeft: 'auto', color: 'var(--text-secondary)', fontSize: '0.85rem', alignSelf: 'center' }}>
+          {data.length} item{data.length !== 1 ? 's' : ''} requiring attention
+        </div>
+      </div>
+      <div className="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Equipment ID</th>
+              <th>Name</th>
+              <th>Category</th>
+              <th>Serial Number</th>
+              <th>Certificate #</th>
+              <th>Provider</th>
+              <th>Calibration Date</th>
+              <th>Expiry Date</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((r) => (
+              <tr key={r.id}>
+                <td><strong>{r.equipment_code || '-'}</strong></td>
+                <td>{r.equipment_name || '-'}</td>
+                <td style={{ fontSize: '0.8rem' }}>{r.category || '-'}</td>
+                <td style={{ fontSize: '0.8rem' }}>{r.serial_number || '-'}</td>
+                <td>{r.certificate_number || '-'}</td>
+                <td>{r.calibration_provider || '-'}</td>
+                <td style={{ fontSize: '0.8rem' }}>{r.calibration_date ? new Date(r.calibration_date).toLocaleDateString() : '-'}</td>
+                <td style={{ fontSize: '0.8rem' }}>{r.expiry_date ? new Date(r.expiry_date).toLocaleDateString() : '-'}</td>
+                <td>
+                  <span className={`badge ${r.calibration_status === 'Expired' ? 'badge-overdue' : 'badge-checked-out'}`}>
+                    {r.calibration_status}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

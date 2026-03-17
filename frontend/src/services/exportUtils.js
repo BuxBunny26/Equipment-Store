@@ -269,4 +269,53 @@ export const EXPORT_COLUMNS = {
         { label: 'Purpose', accessor: 'purpose' },
         { label: 'Status', accessor: 'status' },
     ],
+
+    vehicleReport: [
+        { label: 'Make', accessor: 'make' },
+        { label: 'Model', accessor: 'model' },
+        { label: 'Year', accessor: 'year' },
+        { label: 'Registration', accessor: 'registration_number' },
+        { label: 'VIN', accessor: 'vin_number' },
+        { label: 'Status', accessor: 'vehicle_status' },
+        { label: 'Assigned Driver', accessor: 'assigned_driver' },
+        { label: 'Division', accessor: 'division' },
+        { label: 'Odometer', accessor: 'current_odometer' },
+        { label: 'Active', accessor: r => r.is_active ? 'Yes' : 'No' },
+    ],
+
+    cellphoneReport: [
+        { label: 'Employee', accessor: 'employee_name' },
+        { label: 'Brand', accessor: 'phone_brand' },
+        { label: 'Model', accessor: 'phone_model' },
+        { label: 'IMEI', accessor: 'imei_number' },
+        { label: 'Phone Number', accessor: 'phone_number' },
+        { label: 'Status', accessor: 'phone_status' },
+        { label: 'Date Assigned', accessor: r => r.date_assigned ? new Date(r.date_assigned).toLocaleDateString() : '' },
+        { label: 'Division', accessor: 'notes' },
+        { label: 'Active', accessor: r => r.is_active ? 'Yes' : 'No' },
+    ],
+
+    laptopReport: [
+        { label: 'Employee', accessor: 'employee_name' },
+        { label: 'Brand', accessor: 'laptop_brand' },
+        { label: 'Model', accessor: 'laptop_model' },
+        { label: 'Serial Number', accessor: 'serial_number' },
+        { label: 'Asset Tag', accessor: 'asset_tag' },
+        { label: 'Status', accessor: 'laptop_status' },
+        { label: 'Date Assigned', accessor: r => r.date_assigned ? new Date(r.date_assigned).toLocaleDateString() : '' },
+        { label: 'Active', accessor: r => r.is_active ? 'Yes' : 'No' },
+    ],
+
+    calibrationDue: [
+        { label: 'Equipment ID', accessor: 'equipment_code' },
+        { label: 'Equipment Name', accessor: 'equipment_name' },
+        { label: 'Category', accessor: 'category' },
+        { label: 'Serial Number', accessor: 'serial_number' },
+        { label: 'Manufacturer', accessor: 'manufacturer' },
+        { label: 'Certificate #', accessor: 'certificate_number' },
+        { label: 'Provider', accessor: 'calibration_provider' },
+        { label: 'Calibration Date', accessor: r => r.calibration_date ? new Date(r.calibration_date).toLocaleDateString() : '' },
+        { label: 'Expiry Date', accessor: r => r.expiry_date ? new Date(r.expiry_date).toLocaleDateString() : '' },
+        { label: 'Status', accessor: 'calibration_status' },
+    ],
 };

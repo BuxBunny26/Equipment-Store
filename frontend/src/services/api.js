@@ -389,6 +389,33 @@ export const reportsApi = {
     getUsageStats: (params = {}) => wrapRpc(
         supabase.rpc('get_usage_stats', { p_from_date: params.from_date || null, p_to_date: params.to_date || null })
     ),
+
+    // Asset reports
+    getVehicleReport: () => wrap(
+        supabase.from('vehicles').select('*').order('make')
+    ).then(res => ({ data: res.data || [] })),
+
+    getCellphoneReport: () => wrap(
+        supabase.from('cellphone_assignments').select('*').order('employee_name')
+    ).then(res => ({ data: res.data || [] })),
+
+    getLaptopReport: () => wrap(
+        supabase.from('laptop_assignments').select('*').order('employee_name')
+    ).then(res => ({ data: res.data || [] })),
+
+    getCalibrationDueReport: () => wrap(
+        supabase.from('calibration_records')
+            .select(`id, serial_number, expiry_date, calibration_status, certificate_number, calibration_provider, calibration_date,
+                equipment(equipment_id, equipment_name, manufacturer, categories(name))`)
+            .in('calibration_status', ['Expired', 'Due Soon'])
+            .order('expiry_date', { ascending: true })
+    ).then(res => ({
+        data: (res.data || []).map(r => ({ ...r,
+            equipment_code: r.equipment?.equipment_id, equipment_name: r.equipment?.equipment_name,
+            manufacturer: r.equipment?.manufacturer, category: r.equipment?.categories?.name,
+            equipment: undefined,
+        }))
+    })),
 };
 
 // Customers
