@@ -29,6 +29,7 @@ import UserManagement from './pages/UserManagement';
 import LaptopAssignments from './pages/LaptopAssignments';
 import CellphoneAssignments from './pages/CellphoneAssignments';
 import Vehicles from './pages/Vehicles';
+import VehicleCheckoutForm from './pages/VehicleCheckoutForm';
 import AssetsDashboard from './pages/AssetsDashboard';
 
 // Icons as simple SVG components
@@ -306,6 +307,9 @@ function AppContent() {
           <NavLink to="/vehicles" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <Icons.Vehicle /> Vehicles
           </NavLink>
+          <NavLink to="/vehicle-checkout" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.CheckOut /> Pre-Trip Form
+          </NavLink>
         </div>
         
         <div className="nav-section">
@@ -341,6 +345,7 @@ function AppContent() {
         <Route path="/laptop-assignments" element={<LaptopAssignments />} />
         <Route path="/cellphone-assignments" element={<CellphoneAssignments />} />
         <Route path="/vehicles" element={<Vehicles />} />
+        <Route path="/vehicle-checkout" element={<VehicleCheckoutForm />} />
         <Route path="/assets" element={<AssetsDashboard />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
