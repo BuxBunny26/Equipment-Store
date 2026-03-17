@@ -16,7 +16,9 @@ VALUES
   ('BR02GLZN', 'Toyota', 'Hilux 2.4 DC', 2024, 'Diesel', 'White', 'RS Pool Vehicle', 'Active', 'Same vehicle appears in two files for different reporting months.'),
   ('CM99YMZN', 'Toyota', 'Urban Cruiser 1.5 X', 2025, 'Petrol', 'White', 'RS Pool Vehicle', 'Active', 'Newer unit.'),
   ('CM99YVZN', 'Toyota', 'Urban Cruiser 1.5 X', 2025, 'Petrol', 'White', 'RS Pool Vehicle', 'Active', 'Newer unit.'),
-  ('BL67XTZN', 'Toyota', 'Urban Cruiser 1.5 X', 2022, 'Petrol', 'White', 'RS Urban Pool 2', 'Active', 'Responsibility label differs from the others and should be standardised.')
+  ('BL67XTZN', 'Toyota', 'Urban Cruiser 1.5 X', 2022, 'Petrol', 'White', 'RS Urban Pool 2', 'Active', 'Responsibility label differs from the others and should be standardised.'),
+  ('NPN43679', 'Toyota', 'Hilux S/C', NULL, 'Petrol', 'White', 'Pool Vehicle', 'Active', 'Single cab Hilux. Used by Sipho Zwane, supervised by Francois Pienaar.'),
+  ('N26078S', 'Toyota', 'Fortuner', NULL, 'Diesel', 'White', 'Pool Vehicle', 'Active', 'Additional Fortuner in fleet. Registration format differs from ZN plates.')
 ON CONFLICT (registration_number) DO UPDATE SET
   make = EXCLUDED.make,
   model = EXCLUDED.model,
