@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { categoriesApi, subcategoriesApi, locationsApi, personnelApi } from '../services/api';
+import { categoriesApi, subcategoriesApi, locationsApi, personnelApi, laptopAssignmentsApi, cellphoneAssignmentsApi, vehiclesApi, vehicleFinesApi } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 
 function Settings() {
@@ -41,6 +41,12 @@ function Settings() {
           Personnel
         </button>
         <button
+          className={`tab ${activeTab === 'assets' ? 'active' : ''}`}
+          onClick={() => setActiveTab('assets')}
+        >
+          Assets
+        </button>
+        <button
           className={`tab ${activeTab === 'appearance' ? 'active' : ''}`}
           onClick={() => setActiveTab('appearance')}
         >
@@ -54,6 +60,7 @@ function Settings() {
         {activeTab === 'subcategories' && <SubcategoriesSettings />}
         {activeTab === 'locations' && <LocationsSettings />}
         {activeTab === 'personnel' && <PersonnelSettings />}
+        {activeTab === 'assets' && <AssetsSettings />}
         {activeTab === 'appearance' && <AppearanceSettings />}
       </div>
     </div>
@@ -775,6 +782,185 @@ function PersonnelSettings() {
               </div>
             </form>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Assets Settings
+function AssetsSettings() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [laptops, setLaptops] = useState([]);
+  const [cellphones, setCellphones] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
+  const [fines, setFines] = useState([]);
+
+  useEffect(() => {
+    fetchAssets();
+  }, []);
+
+  const fetchAssets = async () => {
+    try {
+      setLoading(true);
+      const [laptopRes, cellphoneRes, vehicleRes, finesRes] = await Promise.all([
+        laptopAssignmentsApi.getAll(true),
+        cellphoneAssignmentsApi.getAll(true),
+        vehiclesApi.getAll(true),
+        vehicleFinesApi.getAll(),
+      ]);
+      setLaptops(laptopRes.data || []);
+      setCellphones(cellphoneRes.data || []);
+      setVehicles(vehicleRes.data || []);
+      setFines(finesRes.data || []);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="loading"><div className="spinner"></div> Loading...</div>;
+  }
+
+  const activeLaptops = laptops.filter(l => l.laptop_status === 'Active');
+  const repairLaptops = laptops.filter(l => ['Repairs', 'Damaged'].includes(l.laptop_status));
+  const inactiveLaptops = laptops.filter(l => ['Returned', 'Decommissioned', 'Stolen', 'Lost'].includes(l.laptop_status));
+
+  const activeCellphones = cellphones.filter(c => c.phone_status === 'Active');
+  const repairCellphones = cellphones.filter(c => ['Repairs', 'Damaged'].includes(c.phone_status));
+  const inactiveCellphones = cellphones.filter(c => ['Returned', 'Decommissioned', 'Stolen', 'Lost'].includes(c.phone_status));
+
+  const activeVehicles = vehicles.filter(v => v.vehicle_status === 'Active' || v.vehicle_status === 'In Use');
+  const serviceVehicles = vehicles.filter(v => ['In Service', 'Repairs'].includes(v.vehicle_status));
+  const inactiveVehicles = vehicles.filter(v => ['Decommissioned', 'Sold', 'Written Off'].includes(v.vehicle_status));
+
+  const unpaidFines = fines.filter(f => f.status === 'Unpaid');
+  const totalFineAmount = unpaidFines.reduce((sum, f) => sum + (parseFloat(f.fine_amount) || 0), 0);
+
+  // Vehicle alerts
+  const now = new Date();
+  const licenseDueVehicles = vehicles.filter(v => {
+    if (!v.license_disk_expiry || !v.is_active) return false;
+    const days = (new Date(v.license_disk_expiry) - now) / (1000 * 60 * 60 * 24);
+    return days <= 30;
+  });
+  const serviceDueVehicles = vehicles.filter(v => {
+    if (!v.next_service_date || !v.is_active) return false;
+    const days = (new Date(v.next_service_date) - now) / (1000 * 60 * 60 * 24);
+    return days <= 30;
+  });
+
+  const cardStyle = {
+    padding: '16px',
+    background: 'var(--bg-primary)',
+    borderRadius: 'var(--radius-md)',
+    border: '1px solid var(--border-color)',
+  };
+
+  const statRow = {
+    display: 'flex',
+    justifyContent: 'space-between',
+    padding: '8px 0',
+    borderBottom: '1px solid var(--border-color)',
+    fontSize: '0.875rem',
+  };
+
+  return (
+    <div>
+      <div style={{ marginBottom: '16px' }}>
+        <h3>Assets Overview</h3>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Summary of all company assets</p>
+      </div>
+
+      {error && <div className="alert alert-error">{error}</div>}
+
+      {/* Summary Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+        <div style={{ ...cardStyle, textAlign: 'center' }}>
+          <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--primary-color)' }}>
+            {laptops.length + cellphones.length + vehicles.length}
+          </div>
+          <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Total Assets</div>
+        </div>
+        <div style={{ ...cardStyle, textAlign: 'center' }}>
+          <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--success-color)' }}>
+            {activeLaptops.length + activeCellphones.length + activeVehicles.length}
+          </div>
+          <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Active / In Use</div>
+        </div>
+        <div style={{ ...cardStyle, textAlign: 'center' }}>
+          <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f39c12' }}>
+            {repairLaptops.length + repairCellphones.length + serviceVehicles.length}
+          </div>
+          <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Repairs / Service</div>
+        </div>
+        <div style={{ ...cardStyle, textAlign: 'center' }}>
+          <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
+            {inactiveLaptops.length + inactiveCellphones.length + inactiveVehicles.length}
+          </div>
+          <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Inactive / Decom.</div>
+        </div>
+      </div>
+
+      {/* Breakdown by Asset Type */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+        {/* Laptops */}
+        <div style={cardStyle}>
+          <h4 style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between' }}>
+            Laptops <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>{laptops.length}</span>
+          </h4>
+          <div style={statRow}><span>Active</span><span style={{ fontWeight: 600, color: 'var(--success-color)' }}>{activeLaptops.length}</span></div>
+          <div style={statRow}><span>Repairs / Damaged</span><span style={{ fontWeight: 600, color: '#f39c12' }}>{repairLaptops.length}</span></div>
+          <div style={{ ...statRow, borderBottom: 'none' }}><span>Returned / Decom. / Lost</span><span style={{ fontWeight: 600 }}>{inactiveLaptops.length}</span></div>
+        </div>
+
+        {/* Cellphones */}
+        <div style={cardStyle}>
+          <h4 style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between' }}>
+            Cellphones <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>{cellphones.length}</span>
+          </h4>
+          <div style={statRow}><span>Active</span><span style={{ fontWeight: 600, color: 'var(--success-color)' }}>{activeCellphones.length}</span></div>
+          <div style={statRow}><span>Repairs / Damaged</span><span style={{ fontWeight: 600, color: '#f39c12' }}>{repairCellphones.length}</span></div>
+          <div style={{ ...statRow, borderBottom: 'none' }}><span>Returned / Decom. / Lost</span><span style={{ fontWeight: 600 }}>{inactiveCellphones.length}</span></div>
+        </div>
+
+        {/* Vehicles */}
+        <div style={cardStyle}>
+          <h4 style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between' }}>
+            Vehicles <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>{vehicles.length}</span>
+          </h4>
+          <div style={statRow}><span>Active / In Use</span><span style={{ fontWeight: 600, color: 'var(--success-color)' }}>{activeVehicles.length}</span></div>
+          <div style={statRow}><span>In Service / Repairs</span><span style={{ fontWeight: 600, color: '#f39c12' }}>{serviceVehicles.length}</span></div>
+          <div style={{ ...statRow, borderBottom: 'none' }}><span>Decom. / Sold / Written Off</span><span style={{ fontWeight: 600 }}>{inactiveVehicles.length}</span></div>
+        </div>
+      </div>
+
+      {/* Alerts Section */}
+      {(licenseDueVehicles.length > 0 || serviceDueVehicles.length > 0 || unpaidFines.length > 0) && (
+        <div style={cardStyle}>
+          <h4 style={{ marginBottom: '12px', color: '#f39c12' }}>Alerts</h4>
+          {licenseDueVehicles.length > 0 && (
+            <div style={{ ...statRow, color: 'var(--error-color)' }}>
+              <span>License disk expiring / expired</span>
+              <span style={{ fontWeight: 600 }}>{licenseDueVehicles.length} vehicle{licenseDueVehicles.length > 1 ? 's' : ''}</span>
+            </div>
+          )}
+          {serviceDueVehicles.length > 0 && (
+            <div style={{ ...statRow, color: '#f39c12' }}>
+              <span>Service due within 30 days</span>
+              <span style={{ fontWeight: 600 }}>{serviceDueVehicles.length} vehicle{serviceDueVehicles.length > 1 ? 's' : ''}</span>
+            </div>
+          )}
+          {unpaidFines.length > 0 && (
+            <div style={{ ...statRow, borderBottom: 'none', color: 'var(--error-color)' }}>
+              <span>Unpaid fines</span>
+              <span style={{ fontWeight: 600 }}>{unpaidFines.length} (R{totalFineAmount.toLocaleString()})</span>
+            </div>
+          )}
         </div>
       )}
     </div>
