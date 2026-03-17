@@ -18,6 +18,12 @@ function wrapRpc(promise) {
     });
 }
 
+// Escape special characters for PostgREST ilike/or filters
+function escapeSearch(str) {
+    if (!str) return str;
+    return str.replace(/%/g, '\\%').replace(/_/g, '\\_').replace(/,/g, '').replace(/\./g, '');
+}
+
 // Categories
 export const categoriesApi = {
     getAll: () => wrap(
@@ -93,7 +99,7 @@ export const personnelApi = {
     getAll: (activeOnly = true, search = '') => {
         let query = supabase.from('personnel').select('*').order('full_name');
         if (activeOnly) query = query.eq('is_active', true);
-        if (search) query = query.or(`full_name.ilike.%${search}%,employee_id.ilike.%${search}%,email.ilike.%${search}%`);
+        if (search) query = query.or(`full_name.ilike.%${escapeSearch(search)}%,employee_id.ilike.%${escapeSearch(search)}%,email.ilike.%${escapeSearch(search)}%`);
         return wrap(query);
     },
     getById: (id) => wrap(
@@ -128,7 +134,8 @@ export const equipmentApi = {
         if (category_id) query = query.eq('category_id', category_id);
         if (subcategory_id) query = query.eq('subcategory_id', subcategory_id);
         if (search) {
-            query = query.or(`equipment_id.ilike.%${search}%,equipment_name.ilike.%${search}%,serial_number.ilike.%${search}%,description.ilike.%${search}%`);
+            const s = escapeSearch(search);
+            query = query.or(`equipment_id.ilike.%${s}%,equipment_name.ilike.%${s}%,serial_number.ilike.%${s}%,description.ilike.%${s}%`);
         }
         return wrap(query).then(res => ({
             data: (res.data || []).filter(e => {
@@ -393,7 +400,7 @@ export const customersApi = {
             .order('display_name');
         if (active_only !== 'false') query = query.eq('is_active', true);
         if (country) query = query.eq('billing_country', country);
-        if (search) query = query.or(`display_name.ilike.%${search}%,customer_number.ilike.%${search}%`);
+        if (search) query = query.or(`display_name.ilike.%${escapeSearch(search)}%,customer_number.ilike.%${escapeSearch(search)}%`);
         const result = await wrap(query);
         if (has_equipment) {
             const { data: movements } = await supabase.from('equipment_movements')
@@ -467,7 +474,14 @@ export const calibrationApi = {
             .select('id, serial_number, calibration_date, expiry_date, certificate_number, calibration_provider, calibration_status, certificate_file_url, notes, created_at')
             .eq('equipment_id', equipmentId)
             .order('calibration_date', { ascending: false })
-    ),
+    ).then(res => ({
+        data: (res.data || []).map(r => ({
+            ...r,
+            validity_days: r.calibration_date && r.expiry_date
+                ? Math.ceil((new Date(r.expiry_date) - new Date(r.calibration_date)) / (1000 * 60 * 60 * 24))
+                : null,
+        }))
+    })),
 
     create: (data, certificateFile) => {
         let status = data.calibration_status;
@@ -487,8 +501,10 @@ export const calibrationApi = {
         if (certificateFile) {
             return promise.then(async (result) => {
                 const record = result.data;
-                const fileName = `cert_${record.id}_${Date.now()}.pdf`;
-                await supabase.storage.from('calibration-certificates').upload(fileName, certificateFile, { contentType: certificateFile.type });
+                const ext = certificateFile.name?.split('.').pop() || 'pdf';
+                const fileName = `cert_${record.id}_${Date.now()}.${ext}`;
+                const { error: uploadError } = await supabase.storage.from('calibration-certificates').upload(fileName, certificateFile, { contentType: certificateFile.type });
+                if (uploadError) throw new Error('Certificate upload failed: ' + uploadError.message);
                 const { data: urlData } = supabase.storage.from('calibration-certificates').getPublicUrl(fileName);
                 await supabase.from('calibration_records').update({ certificate_file_url: urlData.publicUrl }).eq('id', record.id);
                 return { data: { ...record, certificate_file_url: urlData.publicUrl } };
@@ -506,8 +522,10 @@ export const calibrationApi = {
         if (certificateFile) {
             return promise.then(async (result) => {
                 const record = result.data;
-                const fileName = `cert_${id}_${Date.now()}.pdf`;
-                await supabase.storage.from('calibration-certificates').upload(fileName, certificateFile, { contentType: certificateFile.type });
+                const ext = certificateFile.name?.split('.').pop() || 'pdf';
+                const fileName = `cert_${id}_${Date.now()}.${ext}`;
+                const { error: uploadError } = await supabase.storage.from('calibration-certificates').upload(fileName, certificateFile, { contentType: certificateFile.type });
+                if (uploadError) throw new Error('Certificate upload failed: ' + uploadError.message);
                 const { data: urlData } = supabase.storage.from('calibration-certificates').getPublicUrl(fileName);
                 await supabase.from('calibration_records').update({ certificate_file_url: urlData.publicUrl }).eq('id', id);
                 return { data: { ...record, certificate_file_url: urlData.publicUrl } };
@@ -607,7 +625,7 @@ export const maintenanceApi = {
         if (type_id) query = query.eq('maintenance_type_id', type_id);
         if (from_date) query = query.gte('maintenance_date', from_date);
         if (to_date) query = query.lte('maintenance_date', to_date);
-        if (search) query = query.or(`description.ilike.%${search}%,work_order_number.ilike.%${search}%`);
+        if (search) query = query.or(`description.ilike.%${escapeSearch(search)}%,work_order_number.ilike.%${escapeSearch(search)}%`);
         return wrap(query).then(res => ({
             data: (res.data || []).map(m => ({ ...m,
                 equipment_code: m.equipment?.equipment_id, equipment_name: m.equipment?.equipment_name,
@@ -762,7 +780,7 @@ export const usersApi = {
             .order('full_name');
         if (role_id) query = query.eq('role_id', role_id);
         if (is_active !== undefined) query = query.eq('is_active', is_active === 'true');
-        if (search) query = query.or(`username.ilike.%${search}%,full_name.ilike.%${search}%,email.ilike.%${search}%`);
+        if (search) query = query.or(`username.ilike.%${escapeSearch(search)}%,full_name.ilike.%${escapeSearch(search)}%,email.ilike.%${escapeSearch(search)}%`);
         return wrap(query).then(res => ({
             data: (res.data || []).map(u => ({ ...u,
                 role_name: u.roles?.name, permissions: u.roles?.permissions,
@@ -942,7 +960,7 @@ export const laptopAssignmentsApi = {
             employee_email: current.employee_email,
             laptop_status: current.laptop_status,
             notes: `Reassigned from ${current.employee_name} to ${newAssignment.employee_name}`,
-        });
+        }).then(({ error }) => { if (error) console.error('History insert failed:', error.message); });
 
         // 3. Update the assignment with new employee info
         return wrap(
@@ -976,7 +994,7 @@ export const laptopAssignmentsApi = {
                 employee_email: current.employee_email,
                 laptop_status: status,
                 notes: null,
-            });
+            }).then(({ error }) => { if (error) console.error('History insert failed:', error.message); });
         }
 
         const updates = { laptop_status: status };
@@ -1034,7 +1052,7 @@ export const cellphoneAssignmentsApi = {
             employee_email: current.employee_email,
             phone_status: current.phone_status,
             notes: `Reassigned from ${current.employee_name} to ${newAssignment.employee_name}`,
-        });
+        }).then(({ error }) => { if (error) console.error('History insert failed:', error.message); });
 
         return wrap(
             supabase.from('cellphone_assignments').update({
@@ -1060,7 +1078,7 @@ export const cellphoneAssignmentsApi = {
                 employee_email: current.employee_email,
                 phone_status: status,
                 notes: null,
-            });
+            }).then(({ error }) => { if (error) console.error('History insert failed:', error.message); });
         }
 
         const updates = { phone_status: status };

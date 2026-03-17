@@ -14,7 +14,25 @@ function EquipmentImageGallery({ equipmentId, editable = false }) {
     if (equipmentId) {
       fetchImages();
     }
-  }, [equipmentId]);
+  }, [equipmentId]); // eslint-disable-line
+
+  // Keyboard navigation for lightbox
+  useEffect(() => {
+    if (!selectedImage) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setSelectedImage(null);
+      if (e.key === 'ArrowLeft' && images.length > 1) {
+        const idx = images.findIndex(i => i.id === selectedImage.id);
+        setSelectedImage(images[(idx - 1 + images.length) % images.length]);
+      }
+      if (e.key === 'ArrowRight' && images.length > 1) {
+        const idx = images.findIndex(i => i.id === selectedImage.id);
+        setSelectedImage(images[(idx + 1) % images.length]);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedImage, images]);
 
   const fetchImages = async () => {
     try {
@@ -32,6 +50,19 @@ function EquipmentImageGallery({ equipmentId, editable = false }) {
   const handleFileSelect = async (e) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+
+    // Validate file types and sizes
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) {
+        setError(`"${file.name}" is not an image file`);
+        return;
+      }
+      if (file.size > maxSize) {
+        setError(`"${file.name}" exceeds 10MB limit`);
+        return;
+      }
+    }
 
     setUploading(true);
     setError(null);
@@ -243,6 +274,7 @@ function EquipmentImageGallery({ equipmentId, editable = false }) {
               overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column',
+              position: 'relative',
             }}
           >
             {/* Lightbox Header */}
@@ -258,7 +290,7 @@ function EquipmentImageGallery({ equipmentId, editable = false }) {
                   <div style={{ fontWeight: 500 }}>{selectedImage.caption}</div>
                 )}
                 <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                  Uploaded {new Date(selectedImage.created_at).toLocaleDateString()}
+                  Uploaded {selectedImage.created_at ? new Date(selectedImage.created_at).toLocaleDateString() : 'Unknown'}
                 </div>
               </div>
               <button 

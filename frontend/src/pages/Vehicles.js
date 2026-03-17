@@ -61,30 +61,23 @@ function Vehicles() {
 
   useEffect(() => {
     fetchData();
-  }, [activeTab, showReturned]);
+  }, [activeTab, showReturned]); // eslint-disable-line
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [vehiclesRes, personnelRes] = await Promise.all([
+      const [vehiclesRes, personnelRes, checkoutsRes, finesRes, servicesRes] = await Promise.all([
         vehiclesApi.getAll(false),
         personnelApi.getAll(true),
+        (showReturned ? vehicleCheckoutsApi.getAllIncludingReturned() : vehicleCheckoutsApi.getAll()),
+        vehicleFinesApi.getAll(),
+        vehicleServicesApi.getAll(),
       ]);
       setVehicles(vehiclesRes.data || []);
       setPersonnel(personnelRes.data || []);
-
-      if (activeTab === 'checkouts') {
-        const checkoutsRes = showReturned
-          ? await vehicleCheckoutsApi.getAllIncludingReturned()
-          : await vehicleCheckoutsApi.getAll();
-        setCheckouts(checkoutsRes.data || []);
-      } else if (activeTab === 'fines') {
-        const finesRes = await vehicleFinesApi.getAll();
-        setFines(finesRes.data || []);
-      } else if (activeTab === 'services') {
-        const servicesRes = await vehicleServicesApi.getAll();
-        setServices(servicesRes.data || []);
-      }
+      setCheckouts(checkoutsRes.data || []);
+      setFines(finesRes.data || []);
+      setServices(servicesRes.data || []);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -154,9 +147,9 @@ function Vehicles() {
   });
 
   const filteredCheckouts = checkouts.filter(c => {
-    if (checkoutVehicleFilter && c.vehicle_id !== checkoutVehicleFilter) return false;
-    if (checkoutDateFrom && c.checkout_date < checkoutDateFrom) return false;
-    if (checkoutDateTo && c.checkout_date > checkoutDateTo + 'T23:59:59') return false;
+    if (checkoutVehicleFilter && String(c.vehicle_id) !== checkoutVehicleFilter) return false;
+    if (checkoutDateFrom && c.checkout_date && c.checkout_date.split('T')[0] < checkoutDateFrom) return false;
+    if (checkoutDateTo && c.checkout_date && c.checkout_date.split('T')[0] > checkoutDateTo) return false;
     if (!checkoutSearch) return true;
     const term = checkoutSearch.toLowerCase();
     return (
@@ -794,9 +787,9 @@ function VehicleModal({ item, onClose, onSuccess }) {
     vin_number: item?.vin_number || '',
     assigned_to: item?.assigned_to || '',
     vehicle_status: item?.vehicle_status || 'Active',
-    license_disk_expiry: item?.license_disk_expiry || '',
-    registration_expiry: item?.registration_expiry || '',
-    next_service_date: item?.next_service_date || '',
+    license_disk_expiry: item?.license_disk_expiry?.split('T')[0] || '',
+    registration_expiry: item?.registration_expiry?.split('T')[0] || '',
+    next_service_date: item?.next_service_date?.split('T')[0] || '',
     next_service_odometer: item?.next_service_odometer || '',
     current_odometer: item?.current_odometer || '',
     notes: item?.notes || '',
@@ -853,7 +846,7 @@ function VehicleModal({ item, onClose, onSuccess }) {
                 <label className="form-label">Make *</label>
                 <select name="make" value={form.make} onChange={handleChange} className="form-input" required>
                   <option value="">-- Select Make --</option>
-                  {getAssetConfig().vehicleMakes.map(m => (
+                  {(getAssetConfig().vehicleMakes || []).map(m => (
                     <option key={m} value={m}>{m}</option>
                   ))}
                 </select>
@@ -884,7 +877,7 @@ function VehicleModal({ item, onClose, onSuccess }) {
                 <label className="form-label">Fuel Type</label>
                 <select name="fuel_type" value={form.fuel_type} onChange={handleChange} className="form-input">
                   <option value="">-- Select --</option>
-                  {getAssetConfig().fuelTypes.map(f => (
+                  {(getAssetConfig().fuelTypes || []).map(f => (
                     <option key={f} value={f}>{f}</option>
                   ))}
                 </select>
@@ -1074,8 +1067,8 @@ function CheckoutModal({ item, vehicles, personnel, onClose, onSuccess }) {
     try {
       setSaving(true);
       const payload = { ...form };
-      payload.vehicle_id = parseInt(payload.vehicle_id, 10);
-      payload.start_odometer = parseInt(payload.start_odometer, 10);
+      payload.vehicle_id = parseInt(payload.vehicle_id, 10) || null;
+      payload.start_odometer = parseInt(payload.start_odometer, 10) || 0;
       // Clean empty fields
       Object.keys(payload).forEach(k => {
         if (payload[k] === '') payload[k] = null;

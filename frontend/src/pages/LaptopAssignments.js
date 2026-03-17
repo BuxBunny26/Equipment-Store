@@ -436,13 +436,19 @@ function LaptopModal({ item, personnel, allAssignments, onClose, onSuccess }) {
       if (!payload.notes) payload.notes = null;
 
       if (item) {
+        // If status changed, use updateStatus to log history
+        if (payload.laptop_status !== item.laptop_status) {
+          await laptopAssignmentsApi.updateStatus(item.id, payload.laptop_status);
+          delete payload.laptop_status;
+          delete payload.is_active;
+          delete payload.date_returned;
+        }
         await laptopAssignmentsApi.update(item.id, payload);
       } else {
-        // Log initial assignment to history after creating
         const res = await laptopAssignmentsApi.create(payload);
         if (res.data?.id) {
-          await laptopAssignmentsApi.getHistory(res.data.id).catch(() => {});
-          // insert initial history entry via supabase directly through api
+          // Log initial assignment to history
+          await laptopAssignmentsApi.updateStatus(res.data.id, 'Active').catch(() => {});
         }
       }
       onSuccess();

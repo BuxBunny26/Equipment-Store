@@ -195,6 +195,8 @@ function Equipment() {
             >
               Clear Filters
             </button>
+
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 'auto' }}>{equipment.length} item{equipment.length !== 1 ? 's' : ''}</span>
           </div>
         </form>
       </div>

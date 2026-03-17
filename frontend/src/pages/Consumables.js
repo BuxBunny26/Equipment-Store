@@ -12,6 +12,8 @@ function Consumables() {
   const [showIssueModal, setShowIssueModal] = useState(false);
   const [showRestockModal, setShowRestockModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [stockFilter, setStockFilter] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -57,6 +59,22 @@ function Consumables() {
     return <span className="badge badge-available">In Stock</span>;
   };
 
+  const filteredConsumables = consumables.filter(item => {
+    if (stockFilter === 'low' && !item.is_low_stock) return false;
+    if (stockFilter === 'out' && item.available_quantity > 0) return false;
+    if (stockFilter === 'in' && (item.available_quantity <= 0 || item.is_low_stock)) return false;
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      return (
+        item.equipment_name?.toLowerCase().includes(term) ||
+        item.equipment_id?.toLowerCase().includes(term) ||
+        item.category?.toLowerCase().includes(term) ||
+        item.subcategory?.toLowerCase().includes(term)
+      );
+    }
+    return true;
+  });
+
   if (loading) {
     return (
       <div className="loading">
@@ -92,12 +110,41 @@ function Consumables() {
         </div>
       )}
 
+      {/* Search and Filter */}
+      <div className="card" style={{ marginBottom: '1rem', padding: '12px 16px' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            className="form-input"
+            placeholder="Search consumables..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            style={{ maxWidth: '250px' }}
+          />
+          <select
+            className="form-input"
+            value={stockFilter}
+            onChange={e => setStockFilter(e.target.value)}
+            style={{ maxWidth: '160px' }}
+          >
+            <option value="">All Stock Status</option>
+            <option value="in">In Stock</option>
+            <option value="low">Low Stock</option>
+            <option value="out">Out of Stock</option>
+          </select>
+          {(searchTerm || stockFilter) && (
+            <button className="btn btn-sm" onClick={() => { setSearchTerm(''); setStockFilter(''); }}>Clear</button>
+          )}
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 'auto' }}>{filteredConsumables.length} item{filteredConsumables.length !== 1 ? 's' : ''}</span>
+        </div>
+      </div>
+
       {/* Consumables Table */}
       <div className="card">
-        {consumables.length === 0 ? (
+        {filteredConsumables.length === 0 ? (
           <div className="empty-state">
             <h3>No consumables found</h3>
-            <p>Add items to the Consumables category to track them here</p>
+            <p>{consumables.length === 0 ? 'Add items to the Consumables category to track them here' : 'No items match the current filters'}</p>
           </div>
         ) : (
           <div className="table-container">
@@ -114,7 +161,7 @@ function Consumables() {
                 </tr>
               </thead>
               <tbody>
-                {consumables.map((item) => (
+                {filteredConsumables.map((item) => (
                   <tr key={item.id}>
                     <td>
                       <strong>{item.equipment_id}</strong>
@@ -241,9 +288,9 @@ function IssueModal({ item, locations, personnel, onClose, onSuccess }) {
       await movementsApi.create({
         equipment_id: item.id,
         action: 'ISSUE',
-        quantity: parseInt(formData.quantity),
-        location_id: parseInt(formData.location_id),
-        personnel_id: parseInt(formData.personnel_id),
+        quantity: parseInt(formData.quantity, 10) || 1,
+        location_id: parseInt(formData.location_id, 10) || null,
+        personnel_id: parseInt(formData.personnel_id, 10) || null,
         notes: formData.notes,
         created_by: operator?.full_name || 'System',
       });
@@ -365,7 +412,7 @@ function RestockModal({ item, onClose, onSuccess }) {
       await movementsApi.create({
         equipment_id: item.id,
         action: 'RESTOCK',
-        quantity: parseInt(formData.quantity),
+        quantity: parseInt(formData.quantity, 10) || 1,
         notes: formData.notes,
         created_by: operator?.full_name || 'System',
       });

@@ -201,8 +201,8 @@ function CellphoneAssignments() {
             <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>To:</label>
             <input type="date" className="form-input" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ width: '150px' }} />
           </div>
-          {(divisionFilter || brandFilter || dateFrom || dateTo) && (
-            <button className="btn btn-sm" style={{ fontSize: '0.8rem' }} onClick={() => { setDivisionFilter(''); setBrandFilter(''); setDateFrom(''); setDateTo(''); }}>Clear Filters</button>
+          {(divisionFilter || brandFilter || dateFrom || dateTo || searchTerm || statusFilter) && (
+            <button className="btn btn-sm" style={{ fontSize: '0.8rem' }} onClick={() => { setDivisionFilter(''); setBrandFilter(''); setDateFrom(''); setDateTo(''); setSearchTerm(''); setStatusFilter(''); }}>Clear Filters</button>
           )}
           <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 'auto' }}>{filtered.length} record{filtered.length !== 1 ? 's' : ''}</span>
         </div>
@@ -465,6 +465,13 @@ function CellphoneModal({ item, personnel, allAssignments, onClose, onSuccess })
       if (!payload.notes) payload.notes = null;
 
       if (item) {
+        // If status changed, use updateStatus to log history
+        if (payload.phone_status !== item.phone_status) {
+          await cellphoneAssignmentsApi.updateStatus(item.id, payload.phone_status);
+          delete payload.phone_status;
+          delete payload.is_active;
+          delete payload.date_returned;
+        }
         await cellphoneAssignmentsApi.update(item.id, payload);
       } else {
         await cellphoneAssignmentsApi.create(payload);

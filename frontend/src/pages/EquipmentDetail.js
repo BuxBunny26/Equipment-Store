@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { equipmentApi, calibrationApi } from '../services/api';
+import EquipmentImageGallery from '../components/EquipmentImageGallery';
 
 function EquipmentDetail() {
   const { id } = useParams();
@@ -85,7 +86,7 @@ function EquipmentDetail() {
 
   const openCertificate = (record) => {
     if (record.certificate_file_url) {
-      window.open(record.certificate_file_url, '_blank');
+      window.open(record.certificate_file_url, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -216,6 +217,12 @@ function EquipmentDetail() {
           onClick={() => setActiveTab('history')}
         >
           Movement History ({history.length})
+        </button>
+        <button
+          className={`tab ${activeTab === 'images' ? 'active' : ''}`}
+          onClick={() => setActiveTab('images')}
+        >
+          Images
         </button>
       </div>
 
@@ -431,6 +438,12 @@ function EquipmentDetail() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {activeTab === 'images' && (
+        <div className="card">
+          <EquipmentImageGallery equipmentId={equipment.id} editable={true} />
         </div>
       )}
     </div>

@@ -96,7 +96,12 @@ function AddEquipmentModal({ onClose, onSuccess }) {
     setError(null);
 
     try {
-      await equipmentApi.create(formData);
+      const submitData = { ...formData };
+      // Convert empty strings to null for FK fields
+      if (!submitData.category_id) submitData.category_id = null;
+      if (!submitData.subcategory_id) submitData.subcategory_id = null;
+      if (!submitData.current_location_id) submitData.current_location_id = null;
+      await equipmentApi.create(submitData);
       onSuccess();
     } catch (err) {
       setError(err.message);

@@ -81,7 +81,7 @@ function Calibration() {
 
   const handleSearch = (e) => {
     e.preventDefault();
-    fetchCalibrationStatus();
+    // fetchCalibrationStatus is triggered by the useEffect on filters.search change
   };
 
   const handleViewHistory = async (item) => {
@@ -110,11 +110,22 @@ function Calibration() {
       notes: '',
     });
     setCertificateFile(null);
+    setShowHistoryModal(false);
     setShowAddModal(true);
   };
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
+    if (certificateFile && certificateFile.size > 10 * 1024 * 1024) {
+      setError('Certificate file must be less than 10MB');
+      setTimeout(() => setError(null), 5000);
+      return;
+    }
+    if (calibrationForm.expiry_date && calibrationForm.calibration_date && calibrationForm.expiry_date < calibrationForm.calibration_date) {
+      setError('Expiry date cannot be before calibration date');
+      setTimeout(() => setError(null), 5000);
+      return;
+    }
     setFormSubmitting(true);
     try {
       await calibrationApi.create(calibrationForm, certificateFile);
@@ -135,9 +146,9 @@ function Calibration() {
     // Look up URL from history records first, then from equipment list
     const record = calibrationHistory.find(r => r.id === recordId) || 
                    equipment.find(r => r.id === recordId || r.calibration_record_id === recordId);
-    const url = record?.certificate_file_url || record?.certificate_file_path;
+    const url = record?.certificate_file_url;
     if (url) {
-      window.open(url, '_blank');
+      window.open(url, '_blank', 'noopener,noreferrer');
     } else {
       setError('Certificate file not available');
       setTimeout(() => setError(null), 3000);
@@ -147,9 +158,16 @@ function Calibration() {
   const handleDownloadCertificate = (recordId) => {
     const record = calibrationHistory.find(r => r.id === recordId) || 
                    equipment.find(r => r.id === recordId || r.calibration_record_id === recordId);
-    const url = record?.certificate_file_url || record?.certificate_file_path;
+    const url = record?.certificate_file_url;
     if (url) {
-      window.open(url, '_blank');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = record?.certificate_number ? `certificate_${record.certificate_number}` : 'certificate';
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     } else {
       setError('Certificate file not available');
       setTimeout(() => setError(null), 3000);
@@ -295,8 +313,6 @@ function Calibration() {
 
       {/* Equipment Table */}
       <div className="card">
-        {error && <div className="error-message">{error}</div>}
-
         {loading ? (
           <div className="loading-spinner">Loading...</div>
         ) : (
@@ -354,7 +370,7 @@ function Calibration() {
                         {item.certificate_file_url ? (
                           <button
                             className="btn btn-small"
-                            onClick={() => window.open(item.certificate_file_url, '_blank')}
+                            onClick={() => window.open(item.certificate_file_url, '_blank', 'noopener,noreferrer')}
                             title="View Certificate PDF"
                             style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px' }}
                           >
@@ -542,7 +558,7 @@ function Calibration() {
                           <td>{record.calibration_provider || '-'}</td>
                           <td>{record.notes || '-'}</td>
                           <td>
-                            {record.certificate_file_path ? (
+                            {record.certificate_file_url ? (
                               <div className="action-buttons">
                                 <button
                                   className="btn btn-small btn-secondary"

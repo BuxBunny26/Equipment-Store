@@ -123,6 +123,7 @@ export const EXPORT_COLUMNS = {
         { label: 'Subcategory', accessor: 'subcategory_name' },
         { label: 'Serial Number', accessor: 'serial_number' },
         { label: 'Status', accessor: 'status' },
+        { label: 'Calibration Status', accessor: 'calibration_status' },
         { label: 'Location', accessor: 'current_location' },
         { label: 'Holder', accessor: 'current_holder' },
         { label: 'Manufacturer', accessor: 'manufacturer' },
