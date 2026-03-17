@@ -39,6 +39,9 @@ function Vehicles() {
   const [editCheckout, setEditCheckout] = useState(null);
   const [showReturned, setShowReturned] = useState(false);
   const [checkoutSearch, setCheckoutSearch] = useState('');
+  const [checkoutDateFrom, setCheckoutDateFrom] = useState('');
+  const [checkoutDateTo, setCheckoutDateTo] = useState('');
+  const [checkoutVehicleFilter, setCheckoutVehicleFilter] = useState('');
 
   // Fines data
   const [fines, setFines] = useState([]);
@@ -151,6 +154,9 @@ function Vehicles() {
   });
 
   const filteredCheckouts = checkouts.filter(c => {
+    if (checkoutVehicleFilter && c.vehicle_id !== checkoutVehicleFilter) return false;
+    if (checkoutDateFrom && c.checkout_date < checkoutDateFrom) return false;
+    if (checkoutDateTo && c.checkout_date > checkoutDateTo + 'T23:59:59') return false;
     if (!checkoutSearch) return true;
     const term = checkoutSearch.toLowerCase();
     return (
@@ -451,6 +457,17 @@ function Vehicles() {
                 onChange={e => setCheckoutSearch(e.target.value)}
                 style={{ flex: 1, minWidth: '200px' }}
               />
+              <select
+                className="form-input"
+                value={checkoutVehicleFilter}
+                onChange={e => setCheckoutVehicleFilter(e.target.value)}
+                style={{ minWidth: '180px' }}
+              >
+                <option value="">All Vehicles</option>
+                {vehicles.filter(v => v.is_active).sort((a, b) => (a.registration_number || '').localeCompare(b.registration_number || '')).map(v => (
+                  <option key={v.id} value={v.id}>{v.registration_number} - {v.make} {v.model}</option>
+                ))}
+              </select>
               <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.875rem' }}>
                 <input
                   type="checkbox"
@@ -459,6 +476,20 @@ function Vehicles() {
                 />
                 Show returned trips
               </label>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginTop: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>From:</label>
+                <input type="date" className="form-input" value={checkoutDateFrom} onChange={e => setCheckoutDateFrom(e.target.value)} style={{ width: '150px' }} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>To:</label>
+                <input type="date" className="form-input" value={checkoutDateTo} onChange={e => setCheckoutDateTo(e.target.value)} style={{ width: '150px' }} />
+              </div>
+              {(checkoutDateFrom || checkoutDateTo || checkoutVehicleFilter) && (
+                <button className="btn btn-sm" style={{ fontSize: '0.8rem' }} onClick={() => { setCheckoutDateFrom(''); setCheckoutDateTo(''); setCheckoutVehicleFilter(''); }}>Clear Filters</button>
+              )}
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 'auto' }}>{filteredCheckouts.length} record{filteredCheckouts.length !== 1 ? 's' : ''}</span>
             </div>
           </div>
 
