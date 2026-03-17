@@ -100,10 +100,10 @@ function Vehicles() {
   };
 
   // ---------- Checkout Handlers ----------
-  const handleReturnVehicle = async (endOdometer) => {
+  const handleReturnVehicle = async (returnData) => {
     if (!returnCheckout) return;
     try {
-      await vehicleCheckoutsApi.returnVehicle(returnCheckout.id, endOdometer);
+      await vehicleCheckoutsApi.returnVehicle(returnCheckout.id, returnData);
       setReturnCheckout(null);
       fetchData();
     } catch (err) { alert('Error: ' + err.message); }
@@ -522,9 +522,15 @@ function Vehicles() {
                           </span>
                         </td>
                         <td>
-                          <span className={`badge ${c.is_returned ? 'badge-checked-out' : 'badge-available'}`}>
-                            {c.is_returned ? 'Returned' : 'Out'}
+                          <span className={`badge ${c.is_returned ? (c.handed_over_to ? 'badge-low-stock' : 'badge-checked-out') : 'badge-available'}`}>
+                            {c.is_returned ? (c.handed_over_to ? 'Handed Over' : 'Returned') : 'Out'}
                           </span>
+                          {c.is_returned && c.return_location && (
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>{c.return_location}</div>
+                          )}
+                          {c.is_returned && c.handed_over_to && (
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>→ {c.handed_over_to}</div>
+                          )}
                         </td>
                         <td>
                           <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -706,6 +712,7 @@ function Vehicles() {
       {returnCheckout && (
         <ReturnModal
           checkout={returnCheckout}
+          personnel={personnel}
           onClose={() => setReturnCheckout(null)}
           onReturn={handleReturnVehicle}
         />
@@ -1246,9 +1253,19 @@ function CheckoutModal({ item, vehicles, personnel, onClose, onSuccess }) {
 // ============================================
 // Return Vehicle Modal
 // ============================================
-function ReturnModal({ checkout, onClose, onReturn }) {
+function ReturnModal({ checkout, personnel, onClose, onReturn }) {
   const [endOdometer, setEndOdometer] = useState('');
+  const [returnType, setReturnType] = useState('depot');
+  const [returnLocation, setReturnLocation] = useState('');
+  const [handedOverTo, setHandedOverTo] = useState('');
+  const [returnNotes, setReturnNotes] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const DEPOTS = [
+    'WearCheck - Longmeadow',
+    'WearCheck - Springs',
+    'WearCheck - Westville',
+  ];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -1257,14 +1274,25 @@ function ReturnModal({ checkout, onClose, onReturn }) {
       alert('End odometer cannot be less than start odometer');
       return;
     }
+    if (returnType === 'depot' && !returnLocation) {
+      alert('Please select a depot'); return;
+    }
+    if (returnType === 'handover' && !handedOverTo) {
+      alert('Please select the driver to hand over to'); return;
+    }
     setSaving(true);
-    await onReturn(parseInt(endOdometer, 10));
+    await onReturn({
+      endOdometer: parseInt(endOdometer, 10),
+      returnLocation: returnType === 'depot' ? returnLocation : null,
+      handedOverTo: returnType === 'handover' ? handedOverTo : null,
+      returnNotes: returnNotes || null,
+    });
     setSaving(false);
   };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
         <div className="modal-header">
           <h2>Return Vehicle</h2>
           <button className="btn btn-sm btn-secondary" onClick={onClose}><Icons.Close size={16} /></button>
@@ -1280,6 +1308,46 @@ function ReturnModal({ checkout, onClose, onReturn }) {
                 Start odometer: <strong>{checkout.start_odometer?.toLocaleString()} km</strong>
               </div>
             </div>
+
+            {/* Return Type Selection */}
+            <div className="form-group">
+              <label className="form-label">Return Type *</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button type="button" className={`btn ${returnType === 'depot' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ flex: 1 }} onClick={() => setReturnType('depot')}>
+                  Return to Depot
+                </button>
+                <button type="button" className={`btn ${returnType === 'handover' ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ flex: 1 }} onClick={() => setReturnType('handover')}>
+                  Hand Over to Driver
+                </button>
+              </div>
+            </div>
+
+            {/* Depot Selection */}
+            {returnType === 'depot' && (
+              <div className="form-group">
+                <label className="form-label">Return to Depot *</label>
+                <select value={returnLocation} onChange={e => setReturnLocation(e.target.value)} className="form-input" required>
+                  <option value="">-- Select Depot --</option>
+                  {DEPOTS.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+            )}
+
+            {/* Driver Handover */}
+            {returnType === 'handover' && (
+              <div className="form-group">
+                <label className="form-label">Hand Over to Driver *</label>
+                <select value={handedOverTo} onChange={e => setHandedOverTo(e.target.value)} className="form-input" required>
+                  <option value="">-- Select Driver --</option>
+                  {(personnel || []).filter(p => p.full_name !== checkout.driver_name).map(p => (
+                    <option key={p.id} value={p.full_name}>{p.full_name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="form-group">
               <label className="form-label">End Odometer (km) *</label>
               <input
@@ -1297,11 +1365,22 @@ function ReturnModal({ checkout, onClose, onReturn }) {
                 Distance travelled: <strong>{(parseInt(endOdometer, 10) - checkout.start_odometer).toLocaleString()} km</strong>
               </div>
             )}
+
+            <div className="form-group">
+              <label className="form-label">Return Notes</label>
+              <textarea
+                value={returnNotes}
+                onChange={e => setReturnNotes(e.target.value)}
+                className="form-input"
+                rows={2}
+                placeholder="Any notes about the return..."
+              />
+            </div>
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
             <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? 'Returning...' : 'Return Vehicle'}
+              {saving ? 'Processing...' : returnType === 'handover' ? 'Hand Over Vehicle' : 'Return Vehicle'}
             </button>
           </div>
         </form>

@@ -1144,15 +1144,19 @@ export const vehicleCheckoutsApi = {
     update: (id, data) => wrap(
         supabase.from('vehicle_checkouts').update(data).eq('id', id).select().single()
     ),
-    returnVehicle: async (id, endOdometer) => {
+    returnVehicle: async (id, { endOdometer, returnLocation, handedOverTo, returnNotes }) => {
         const { data: checkout } = await supabase.from('vehicle_checkouts').select('*').eq('id', id).single();
         if (!checkout) throw new Error('Checkout record not found');
+        const updateData = {
+            is_returned: true,
+            return_date: new Date().toISOString(),
+            end_odometer: endOdometer,
+        };
+        if (returnLocation) updateData.return_location = returnLocation;
+        if (handedOverTo) updateData.handed_over_to = handedOverTo;
+        if (returnNotes) updateData.return_notes = returnNotes;
         const result = await wrap(
-            supabase.from('vehicle_checkouts').update({
-                is_returned: true,
-                return_date: new Date().toISOString(),
-                end_odometer: endOdometer,
-            }).eq('id', id).select().single()
+            supabase.from('vehicle_checkouts').update(updateData).eq('id', id).select().single()
         );
         if (endOdometer) {
             await supabase.from('vehicles').update({ current_odometer: endOdometer }).eq('id', checkout.vehicle_id);
