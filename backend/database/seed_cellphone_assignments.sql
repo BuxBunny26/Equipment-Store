@@ -79,11 +79,11 @@ VALUES ('Deon Gaarkeuken', 'Huawei', 'Mobile Wifi - E5783-230a', '86984806668223
 
 -- Samsung A26 5G - Daniel Molapo
 INSERT INTO cellphone_assignments (employee_name, phone_brand, phone_model, imei_number, serial_number, phone_number, date_assigned, phone_status, is_active, notes)
-VALUES ('Daniel Molapo', 'Samsung', 'A26 5G', '355039216597889', 'No EID', '082 802 3079', '2025-08-28', 'Active', true, 'RS');
+VALUES ('Daniel Molapo', 'Samsung', 'A26 5G', '355039216597889', 'No EID', '+27 82 802 3079', '2025-08-28', 'Active', true, 'RS');
 
 -- Samsung A26 5G - Sergant Thlou
 INSERT INTO cellphone_assignments (employee_name, phone_brand, phone_model, imei_number, serial_number, phone_number, date_assigned, phone_status, is_active, notes)
-VALUES ('Sergant Thlou', 'Samsung', 'A26 5G', '355039216555283', 'No EID', '082 882 7758', '2025-08-28', 'Active', true, 'RS');
+VALUES ('Sergant Thlou', 'Samsung', 'A26 5G', '355039216555283', 'No EID', '+27 82 882 7758', '2025-08-28', 'Active', true, 'RS');
 
 -- Samsung A36 5G - Spare
 INSERT INTO cellphone_assignments (employee_name, phone_brand, phone_model, imei_number, serial_number, date_assigned, phone_status, is_active, notes)
@@ -91,19 +91,19 @@ VALUES ('Spare', 'Samsung', 'A36 5G', '350540332589737', '8904305120250083622501
 
 -- Samsung A36 5G - Dave Viljoen
 INSERT INTO cellphone_assignments (employee_name, phone_brand, phone_model, imei_number, serial_number, phone_number, date_assigned, phone_status, is_active, notes)
-VALUES ('Dave Viljoen', 'Samsung', 'A36 5G', '350540332590489', '89043051202500836225011057062047', '081 010 6409', '2025-08-28', 'Active', true, 'GP');
+VALUES ('Dave Viljoen', 'Samsung', 'A36 5G', '350540332590489', '89043051202500836225011057062047', '+27 81 010 6409', '2025-08-28', 'Active', true, 'GP');
 
 -- Samsung A36 5G - Hein Coetzer
 INSERT INTO cellphone_assignments (employee_name, phone_brand, phone_model, imei_number, serial_number, phone_number, date_assigned, phone_status, is_active, notes)
-VALUES ('Hein Coetzer', 'Samsung', 'A36 5G', '350540332589895', '89043051202500836225011061001120', '082 888 7419', '2025-08-28', 'Active', true, 'GP');
+VALUES ('Hein Coetzer', 'Samsung', 'A36 5G', '350540332589895', '89043051202500836225011061001120', '+27 82 888 7419', '2025-08-28', 'Active', true, 'GP');
 
 -- Samsung S25 Ultra - Edward Pieterse Jnr
 INSERT INTO cellphone_assignments (employee_name, phone_brand, phone_model, imei_number, serial_number, phone_number, date_assigned, phone_status, is_active, notes)
-VALUES ('Edward Pieterse Jnr', 'Samsung', 'S25 Ultra', '352857872075319', '89043051202300838925003824877629', '083 793 0923', '2025-08-28', 'Active', true, 'RS');
+VALUES ('Edward Pieterse Jnr', 'Samsung', 'S25 Ultra', '352857872075319', '89043051202300838925003824877629', '+27 83 793 0923', '2025-08-28', 'Active', true, 'RS');
 
 -- Samsung S25 Ultra - Annah Modutwane
 INSERT INTO cellphone_assignments (employee_name, phone_brand, phone_model, imei_number, serial_number, phone_number, date_assigned, phone_status, is_active, notes)
-VALUES ('Annah Modutwane', 'Samsung', 'S25 Ultra', '357081141413400', '89033023525100100100044814003885', '083 357 9812', '2025-08-28', 'Active', true, 'RS');
+VALUES ('Annah Modutwane', 'Samsung', 'S25 Ultra', '357081141413400', '89033023525100100100044814003885', '+27 83 357 9812', '2025-08-28', 'Active', true, 'RS');
 
 -- Rugged SA Conquest S12 - SBM Mondo Vessel
 INSERT INTO cellphone_assignments (employee_name, phone_brand, phone_model, imei_number, serial_number, date_assigned, phone_status, is_active, notes)
@@ -123,8 +123,8 @@ VALUES ('Evert Viljoen', 'Samsung', 'A56 5G', '353438986120447', '89033023527100
 
 -- Samsung S25 Ultra - Peet Peacock
 INSERT INTO cellphone_assignments (employee_name, phone_brand, phone_model, imei_number, serial_number, phone_number, date_assigned, phone_status, is_active, notes)
-VALUES ('Peet Peacock', 'Samsung', 'S25 Ultra', '352857877556065', '89043051202300838925027771083717', '072 635 1881', '2025-04-12', 'Active', true, 'RS');
+VALUES ('Peet Peacock', 'Samsung', 'S25 Ultra', '352857877556065', '89043051202300838925027771083717', '+27 72 635 1881', '2025-04-12', 'Active', true, 'RS');
 
 -- Samsung A3 - Thulani Tembe
 INSERT INTO cellphone_assignments (employee_name, phone_brand, phone_model, imei_number, serial_number, phone_number, date_assigned, phone_status, is_active, notes)
-VALUES ('Thulani Tembe', 'Samsung', 'A3', '350540332589739', '89043051202500836225011060784034', '066 175 3959', '2026-01-30', 'Active', true, 'RS');
+VALUES ('Thulani Tembe', 'Samsung', 'A3', '350540332589739', '89043051202500836225011060784034', '+27 66 175 3959', '2026-01-30', 'Active', true, 'RS');
