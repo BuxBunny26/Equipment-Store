@@ -29,6 +29,7 @@ import UserManagement from './pages/UserManagement';
 import LaptopAssignments from './pages/LaptopAssignments';
 import CellphoneAssignments from './pages/CellphoneAssignments';
 import Vehicles from './pages/Vehicles';
+import AssetsDashboard from './pages/AssetsDashboard';
 
 // Icons as simple SVG components
 const Icons = {
@@ -293,6 +294,9 @@ function AppContent() {
 
         <div className="nav-section">
           <div className="nav-section-title">Assets</div>
+          <NavLink to="/assets" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.Dashboard /> Overview
+          </NavLink>
           <NavLink to="/laptop-assignments" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <Icons.Laptop /> Laptops
           </NavLink>
@@ -337,6 +341,7 @@ function AppContent() {
         <Route path="/laptop-assignments" element={<LaptopAssignments />} />
         <Route path="/cellphone-assignments" element={<CellphoneAssignments />} />
         <Route path="/vehicles" element={<Vehicles />} />
+        <Route path="/assets" element={<AssetsDashboard />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     </main>
