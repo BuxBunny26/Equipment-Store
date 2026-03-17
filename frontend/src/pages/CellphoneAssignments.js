@@ -272,7 +272,7 @@ function CellphoneAssignments() {
                       )}
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                         <button className="btn btn-sm btn-secondary" onClick={() => setHistoryItem(item)} title="View History">
                           <Icons.Clock size={14} />
                         </button>
@@ -281,19 +281,6 @@ function CellphoneAssignments() {
                             <Icons.Edit size={14} />
                           </button>
                         )}
-                        {isAdminOrManager ? (
-                          <select
-                            className="form-input"
-                            value={item.phone_status || 'Active'}
-                            onChange={e => handleStatusChange(item, e.target.value)}
-                            style={{ padding: '4px 6px', fontSize: '0.75rem', minWidth: '100px' }}
-                            title="Change status"
-                          >
-                            {PHONE_STATUSES.map(s => (
-                              <option key={s.value} value={s.value}>{s.label}</option>
-                            ))}
-                          </select>
-                        ) : null}
                         {isAdminOrManager && (
                           <button className="btn btn-sm btn-danger" onClick={() => handleDelete(item)} title="Delete">
                             <Icons.Trash size={14} />
