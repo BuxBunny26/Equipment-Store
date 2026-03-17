@@ -113,7 +113,13 @@ function VehicleCheckoutForm() {
     }
     // Auto-fill supervisor from personnel record
     if (person.supervisor) {
-      updates.supervisor = person.supervisor;
+      const supMatch = personnel.find(p =>
+        p.full_name === person.supervisor ||
+        p.full_name?.toLowerCase() === person.supervisor.toLowerCase() ||
+        p.full_name?.toLowerCase().includes(person.supervisor.toLowerCase()) ||
+        person.supervisor.toLowerCase().includes(p.full_name?.toLowerCase())
+      );
+      updates.supervisor = supMatch ? supMatch.full_name : person.supervisor;
     }
     setForm(prev => ({ ...prev, ...updates }));
   };
