@@ -387,6 +387,7 @@ function Vehicles() {
                             <div>
                               <strong>{v.make} {v.model}</strong>
                               {v.year && <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{v.year}</div>}
+                              {v.vin_number && <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>VIN: {v.vin_number}</div>}
                               {v.qr_code && <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>QR: {v.qr_code}</div>}
                             </div>
                           </td>
@@ -417,7 +418,7 @@ function Vehicles() {
                             })()}
                           </td>
                           <td>
-                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                               <button className="btn btn-sm btn-secondary" onClick={() => setDetailVehicle(v)} title="View Details">
                                 <Icons.Clock size={14} />
                               </button>
@@ -425,18 +426,6 @@ function Vehicles() {
                                 <button className="btn btn-sm btn-secondary" onClick={() => { setEditVehicle(v); setShowVehicleModal(true); }} title="Edit">
                                   <Icons.Edit size={14} />
                                 </button>
-                              )}
-                              {isAdminOrManager && (
-                                <select
-                                  className="form-input"
-                                  value={v.vehicle_status}
-                                  onChange={e => handleStatusChange(v, e.target.value)}
-                                  style={{ padding: '4px 6px', fontSize: '0.75rem', minWidth: '100px' }}
-                                >
-                                  {VEHICLE_STATUSES.map(s => (
-                                    <option key={s.value} value={s.value}>{s.label}</option>
-                                  ))}
-                                </select>
                               )}
                               {isAdminOrManager && (
                                 <button className="btn btn-sm btn-danger" onClick={() => handleDeleteVehicle(v)} title="Delete">
