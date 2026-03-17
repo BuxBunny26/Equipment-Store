@@ -79,9 +79,9 @@ function VehicleCheckoutForm() {
     fetchData();
   }, []);
 
-  // Pre-fill driver info when operator changes
+  // Pre-fill driver info when operator/personnel loads
   useEffect(() => {
-    if (operator?.full_name && !form.driver_name && personnel.length > 0) {
+    if (operator?.full_name && personnel.length > 0 && !form.supervisor) {
       const person = personnel.find(p => p.full_name === operator.full_name);
       if (person) {
         applyDriverInfo(person);
@@ -89,7 +89,7 @@ function VehicleCheckoutForm() {
         setForm(prev => ({ ...prev, driver_name: operator.full_name }));
       }
     }
-  }, [operator, form.driver_name, personnel]); // eslint-disable-line
+  }, [operator, personnel]); // eslint-disable-line
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
