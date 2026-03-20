@@ -135,16 +135,23 @@ function CellphoneAssignments() {
   });
 
   // Known division abbreviations used in cellphone assignment notes
-  const DIVISION_ABBREVS = { 'rs': 'RS', 'afs': 'AFS', 'gp': 'GP', 'gp consult': 'GP', 'wearcheck': 'RS' };
+  const DIVISION_ABBREVS = { 'rs': 'RS', 'afs': 'AFS', 'gp': 'GP Consult', 'gp consult': 'GP Consult', 'wearcheck': 'RS' };
+
+  // Standardise division names
+  const standardiseDivision = (div) => {
+    if (!div) return '';
+    if (div === 'GP') return 'GP Consult';
+    return div;
+  };
 
   const getDivision = (item) => {
     // 1. Exact name match
     const byName = personnelDivisionMap[item.employee_name?.toLowerCase()];
-    if (byName) return byName;
+    if (byName) return standardiseDivision(byName);
     // 2. Employee ID match
     if (item.employee_id) {
       const byId = personnelDivisionByIdMap[item.employee_id.toLowerCase()];
-      if (byId) return byId;
+      if (byId) return standardiseDivision(byId);
     }
     // 3. Partial name match (e.g. "Arnold van Zyl" matches "Arnoldus van Zyl")
     if (item.employee_name) {
@@ -162,7 +169,7 @@ function CellphoneAssignments() {
         }
         return false;
       });
-      if (partialMatch?.division) return partialMatch.division;
+      if (partialMatch?.division) return standardiseDivision(partialMatch.division);
     }
     // 4. Fall back to notes field if it contains a known division abbreviation
     if (item.notes) {
