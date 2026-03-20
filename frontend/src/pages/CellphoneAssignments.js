@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { cellphoneAssignmentsApi, personnelApi } from '../services/api';
 import { useOperator } from '../context/OperatorContext';
 import { Icons } from '../components/Icons';
 import { getAssetConfig } from './Settings';
+import { exportData } from '../services/exportUtils';
 
 function CellphoneAssignments() {
   const { operatorRole } = useOperator();
@@ -25,6 +26,9 @@ function CellphoneAssignments() {
   const [showReassignModal, setShowReassignModal] = useState(false);
   const [reassignItem, setReassignItem] = useState(null);
   const [upgradeFilter, setUpgradeFilter] = useState('');
+  const [sortCol, setSortCol] = useState('employee_name');
+  const [sortDir, setSortDir] = useState('asc');
+  const [showDivisionBreakdown, setShowDivisionBreakdown] = useState(false);
 
   const PHONE_STATUSES = [
     { value: 'Active', label: 'Active', badge: 'badge-available', color: 'var(--success-color)' },
@@ -209,9 +213,169 @@ function CellphoneAssignments() {
       a.serial_number?.toLowerCase().includes(term) ||
       a.imei_number?.toLowerCase().includes(term) ||
       a.phone_number?.toLowerCase().includes(term) ||
-      a.asset_tag?.toLowerCase().includes(term)
+      a.asset_tag?.toLowerCase().includes(term) ||
+      a.network_provider?.toLowerCase().includes(term) ||
+      a.sim_number?.toLowerCase().includes(term)
     );
   });
+
+  // Column sorting
+  const handleSort = (col) => {
+    if (sortCol === col) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
+  };
+
+  const sortedFiltered = useMemo(() => {
+    const arr = [...filtered];
+    arr.sort((a, b) => {
+      let valA, valB;
+      switch (sortCol) {
+        case 'employee_name': valA = a.employee_name || ''; valB = b.employee_name || ''; break;
+        case 'division': valA = getDivision(a); valB = getDivision(b); break;
+        case 'phone': valA = `${a.phone_brand} ${a.phone_model}`; valB = `${b.phone_brand} ${b.phone_model}`; break;
+        case 'phone_number': valA = a.phone_number || ''; valB = b.phone_number || ''; break;
+        case 'date_assigned': valA = a.date_assigned || ''; valB = b.date_assigned || ''; break;
+        case 'phone_age': valA = getPhoneAgeMonths(a.date_assigned); valB = getPhoneAgeMonths(b.date_assigned); return sortDir === 'asc' ? valA - valB : valB - valA;
+        case 'status': valA = a.phone_status || ''; valB = b.phone_status || ''; break;
+        case 'network': valA = a.network_provider || ''; valB = b.network_provider || ''; break;
+        default: valA = a.employee_name || ''; valB = b.employee_name || '';
+      }
+      if (typeof valA === 'string') {
+        const cmp = valA.localeCompare(valB, undefined, { sensitivity: 'base' });
+        return sortDir === 'asc' ? cmp : -cmp;
+      }
+      return 0;
+    });
+    return arr;
+  }, [filtered, sortCol, sortDir]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Duplicate phone detection (employees with multiple active phones)
+  const duplicatePhoneEmployees = useMemo(() => {
+    const activeCounts = {};
+    assignments.filter(a => a.phone_status === 'Active').forEach(a => {
+      const name = a.employee_name?.toLowerCase();
+      if (name && name !== 'spare') {
+        activeCounts[name] = (activeCounts[name] || 0) + 1;
+      }
+    });
+    return Object.entries(activeCounts).filter(([, count]) => count > 1).map(([name, count]) => ({ name, count }));
+  }, [assignments]);
+
+  // Division breakdown
+  const divisionBreakdown = useMemo(() => {
+    const counts = {};
+    assignments.filter(a => a.phone_status === 'Active').forEach(a => {
+      const div = getDivision(a) || 'Unassigned';
+      counts[div] = (counts[div] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [assignments, personnel]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Contract/Warranty alert helpers
+  const getContractStatus = (item) => {
+    if (!item.contract_end_date || item.phone_status !== 'Active') return 'ok';
+    const end = new Date(item.contract_end_date);
+    const now = new Date();
+    const daysLeft = Math.floor((end - now) / (1000 * 60 * 60 * 24));
+    if (daysLeft < 0) return 'expired';
+    if (daysLeft <= 90) return 'expiring';
+    return 'ok';
+  };
+
+  const getWarrantyStatus = (item) => {
+    if (!item.warranty_end_date || item.phone_status !== 'Active') return 'ok';
+    const end = new Date(item.warranty_end_date);
+    const now = new Date();
+    const daysLeft = Math.floor((end - now) / (1000 * 60 * 60 * 24));
+    if (daysLeft < 0) return 'expired';
+    if (daysLeft <= 90) return 'expiring';
+    return 'ok';
+  };
+
+  const contractAlerts = assignments.filter(a => ['expired', 'expiring'].includes(getContractStatus(a)));
+  const warrantyAlerts = assignments.filter(a => ['expired', 'expiring'].includes(getWarrantyStatus(a)));
+
+  // Export handler
+  const handleExport = (format) => {
+    const exportColumns = [
+      { label: 'Employee', accessor: 'employee_name' },
+      { label: 'Employee ID', accessor: 'employee_id' },
+      { label: 'Division', accessor: r => getDivision(r) || '' },
+      { label: 'Phone Brand', accessor: 'phone_brand' },
+      { label: 'Phone Model', accessor: 'phone_model' },
+      { label: 'Serial Number', accessor: 'serial_number' },
+      { label: 'IMEI', accessor: 'imei_number' },
+      { label: 'Phone Number', accessor: 'phone_number' },
+      { label: 'Network Provider', accessor: 'network_provider' },
+      { label: 'SIM Number', accessor: 'sim_number' },
+      { label: 'Date Assigned', accessor: r => r.date_assigned ? new Date(r.date_assigned).toLocaleDateString() : '' },
+      { label: 'Phone Age', accessor: r => getPhoneAgeLabel(r.date_assigned) },
+      { label: 'Upgrade Status', accessor: r => { const s = getUpgradeStatus(r); return s === 'due' ? 'UPGRADE DUE' : s === 'approaching' ? 'UPGRADE SOON' : 'OK'; } },
+      { label: 'Status', accessor: 'phone_status' },
+      { label: 'Device Cost (R)', accessor: r => r.device_cost ? Number(r.device_cost).toFixed(2) : '' },
+      { label: 'Monthly Cost (R)', accessor: r => r.monthly_cost ? Number(r.monthly_cost).toFixed(2) : '' },
+      { label: 'Contract End', accessor: r => r.contract_end_date ? new Date(r.contract_end_date).toLocaleDateString() : '' },
+      { label: 'Warranty End', accessor: r => r.warranty_end_date ? new Date(r.warranty_end_date).toLocaleDateString() : '' },
+      { label: 'Notes', accessor: 'notes' },
+    ];
+    exportData(format, sortedFiltered, exportColumns, 'cellphone_assignments', 'Cellphone Assignments Report');
+  };
+
+  // Print handler
+  const handlePrint = () => {
+    const printContent = sortedFiltered.map(item => ({
+      employee: item.employee_name || '',
+      division: getDivision(item) || '',
+      phone: `${item.phone_brand} ${item.phone_model}`,
+      serial: item.serial_number || '',
+      imei: item.imei_number || '',
+      phoneNumber: item.phone_number || '',
+      assigned: item.date_assigned ? new Date(item.date_assigned).toLocaleDateString() : '',
+      age: getPhoneAgeLabel(item.date_assigned),
+      status: item.phone_status || '',
+    }));
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html><head><title>Cellphone Assignments</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        h1 { font-size: 18px; margin-bottom: 4px; }
+        .subtitle { font-size: 12px; color: #666; margin-bottom: 16px; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        th { background: #333; color: white; padding: 6px 8px; text-align: left; }
+        td { padding: 5px 8px; border-bottom: 1px solid #ddd; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        .footer { margin-top: 16px; font-size: 10px; color: #999; }
+        @media print { body { padding: 0; } }
+      </style></head><body>
+      <h1>Cellphone Assignments Report</h1>
+      <div class="subtitle">Generated: ${new Date().toLocaleDateString()} | Records: ${printContent.length}</div>
+      <table>
+        <thead><tr>
+          <th>Employee</th><th>Division</th><th>Phone</th><th>Serial</th><th>Phone Number</th><th>Assigned</th><th>Age</th><th>Status</th>
+        </tr></thead>
+        <tbody>${printContent.map(r => `
+          <tr><td>${r.employee}</td><td>${r.division}</td><td>${r.phone}</td><td style="font-family:monospace;font-size:10px">${r.serial}</td><td>${r.phoneNumber}</td><td>${r.assigned}</td><td>${r.age}</td><td>${r.status}</td></tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="footer">Equipment Store - Cellphone Assignments</div>
+      </body></html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 300);
+  };
+
+  const SortHeader = ({ col, label }) => (
+    <th onClick={() => handleSort(col)} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+      {label} {sortCol === col ? (sortDir === 'asc' ? '▲' : '▼') : <span style={{ opacity: 0.3 }}>▲</span>}
+    </th>
+  );
 
   if (loading) {
     return (
@@ -229,7 +393,19 @@ function CellphoneAssignments() {
           <h1 className="page-title">Cellphone Assignments</h1>
           <p className="page-subtitle">Track company cellphones assigned to employees</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary" onClick={() => handleExport('csv')} title="Export CSV">
+            <Icons.Download size={14} /> CSV
+          </button>
+          <button className="btn btn-secondary" onClick={() => handleExport('excel')} title="Export Excel">
+            <Icons.Download size={14} /> Excel
+          </button>
+          <button className="btn btn-secondary" onClick={() => handleExport('pdf')} title="Export PDF">
+            <Icons.Download size={14} /> PDF
+          </button>
+          <button className="btn btn-secondary" onClick={handlePrint} title="Print">
+            🖨️ Print
+          </button>
           {isAdminOrManager && (
             <button className="btn btn-primary" onClick={handleAdd}>
               + Assign Cellphone
@@ -377,6 +553,22 @@ function CellphoneAssignments() {
           </div>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Total</div>
         </div>
+        {contractAlerts.length > 0 && (
+          <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#8e44ad' }}>
+              {contractAlerts.length}
+            </div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Contract Alerts</div>
+          </div>
+        )}
+        {warrantyAlerts.length > 0 && (
+          <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#2980b9' }}>
+              {warrantyAlerts.length}
+            </div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Warranty Alerts</div>
+          </div>
+        )}
       </div>
 
       {/* Upgrade Alert Banner */}
@@ -475,9 +667,101 @@ function CellphoneAssignments() {
         </div>
       )}
 
+      {/* Contract/Warranty Alert Banner */}
+      {(contractAlerts.length > 0 || warrantyAlerts.length > 0) && (
+        <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+            <span style={{ fontSize: '1.1rem' }}>📋</span>
+            <strong style={{ fontSize: '0.95rem' }}>Contract & Warranty Alerts</strong>
+          </div>
+
+          {contractAlerts.length > 0 && (
+            <div style={{ padding: '10px 14px', border: '1px solid #8e44ad', borderRadius: '8px', background: 'rgba(142, 68, 173, 0.08)', marginBottom: warrantyAlerts.length > 0 ? '8px' : '0' }}>
+              <div style={{ color: '#8e44ad', fontWeight: 600, fontSize: '0.9rem', marginBottom: '6px' }}>
+                📝 {contractAlerts.length} contract{contractAlerts.length !== 1 ? 's' : ''} expiring/expired
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {contractAlerts.slice(0, 6).map(a => (
+                  <span key={a.id} style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '12px', background: 'rgba(142, 68, 173, 0.15)', color: '#6c3483', whiteSpace: 'nowrap' }}>
+                    {a.employee_name} — ends {new Date(a.contract_end_date).toLocaleDateString()}
+                  </span>
+                ))}
+                {contractAlerts.length > 6 && <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>+{contractAlerts.length - 6} more</span>}
+              </div>
+            </div>
+          )}
+
+          {warrantyAlerts.length > 0 && (
+            <div style={{ padding: '10px 14px', border: '1px solid #2980b9', borderRadius: '8px', background: 'rgba(41, 128, 185, 0.08)' }}>
+              <div style={{ color: '#2980b9', fontWeight: 600, fontSize: '0.9rem', marginBottom: '6px' }}>
+                🛡️ {warrantyAlerts.length} warrant{warrantyAlerts.length !== 1 ? 'ies' : 'y'} expiring/expired
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {warrantyAlerts.slice(0, 6).map(a => (
+                  <span key={a.id} style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '12px', background: 'rgba(41, 128, 185, 0.15)', color: '#1a5276', whiteSpace: 'nowrap' }}>
+                    {a.employee_name} — ends {new Date(a.warranty_end_date).toLocaleDateString()}
+                  </span>
+                ))}
+                {warrantyAlerts.length > 6 && <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>+{warrantyAlerts.length - 6} more</span>}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Duplicate Phone Alert */}
+      {duplicatePhoneEmployees.length > 0 && (
+        <div className="card" style={{ marginBottom: '16px', padding: '16px', border: '1px solid #f39c12' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+            <span style={{ fontSize: '1rem' }}>⚠️</span>
+            <strong style={{ fontSize: '0.9rem', color: '#e67e22' }}>Duplicate Active Phones Detected</strong>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            {duplicatePhoneEmployees.map(d => (
+              <span key={d.name} style={{ fontSize: '0.8rem', padding: '3px 10px', borderRadius: '12px', background: 'rgba(243, 156, 18, 0.15)', color: '#d35400' }}>
+                {d.name} — {d.count} active phones
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Division Breakdown */}
+      <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setShowDivisionBreakdown(!showDivisionBreakdown)}>
+          <span style={{ fontSize: '1rem' }}>🏢</span>
+          <strong style={{ fontSize: '0.9rem' }}>Division Breakdown</strong>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>({divisionBreakdown.length} divisions)</span>
+          <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{showDivisionBreakdown ? '▼' : '▶'}</span>
+        </div>
+        {showDivisionBreakdown && (
+          <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {divisionBreakdown.map(([div, count]) => {
+              const maxCount = divisionBreakdown[0]?.[1] || 1;
+              return (
+                <div key={div} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '0.85rem', minWidth: '120px', textAlign: 'right' }}>{div}</span>
+                  <div style={{ flex: 1, background: 'var(--bg-secondary, #f0f0f0)', borderRadius: '4px', height: '20px', overflow: 'hidden' }}>
+                    <div style={{
+                      width: `${(count / maxCount) * 100}%`,
+                      height: '100%',
+                      background: 'var(--primary-color)',
+                      borderRadius: '4px',
+                      transition: 'width 0.3s ease',
+                      minWidth: '2px',
+                    }} />
+                  </div>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, minWidth: '30px' }}>{count}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Table */}
       <div className="card">
-        {filtered.length === 0 ? (
+        {sortedFiltered.length === 0 ? (
           <div className="empty-state">
             <h3>No cellphone assignments found</h3>
             <p>{searchTerm ? 'Try a different search term' : 'Click "Assign Cellphone" to add the first record'}</p>
@@ -487,19 +771,20 @@ function CellphoneAssignments() {
             <table>
               <thead>
                 <tr>
-                  <th>Employee</th>
-                  <th>Division</th>
-                  <th>Phone</th>
+                  <SortHeader col="employee_name" label="Employee" />
+                  <SortHeader col="division" label="Division" />
+                  <SortHeader col="phone" label="Phone" />
                   <th>Serial / IMEI</th>
-                  <th>Phone Number</th>
-                  <th>Date Assigned</th>
-                  <th>Phone Age</th>
-                  <th>Status</th>
+                  <SortHeader col="phone_number" label="Phone Number" />
+                  <SortHeader col="network" label="Network" />
+                  <SortHeader col="date_assigned" label="Date Assigned" />
+                  <SortHeader col="phone_age" label="Phone Age" />
+                  <SortHeader col="status" label="Status" />
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(item => (
+                {sortedFiltered.map(item => (
                   <tr key={item.id}>
                     <td>
                       <div>
@@ -540,6 +825,13 @@ function CellphoneAssignments() {
                       </div>
                     </td>
                     <td>{item.phone_number || '-'}</td>
+                    <td>
+                      <div>
+                        {item.network_provider && <div style={{ fontSize: '0.85rem' }}>{item.network_provider}</div>}
+                        {item.sim_number && <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>SIM: {item.sim_number}</div>}
+                        {!item.network_provider && !item.sim_number && '-'}
+                      </div>
+                    </td>
                     <td>{item.date_assigned ? new Date(item.date_assigned).toLocaleDateString() : '-'}</td>
                     <td>
                       {(() => {
@@ -679,6 +971,12 @@ function CellphoneModal({ item, personnel, allAssignments, onClose, onSuccess })
     phone_status: item?.phone_status || 'Active',
     is_active: item?.is_active ?? true,
     notes: item?.notes || '',
+    device_cost: item?.device_cost || '',
+    monthly_cost: item?.monthly_cost || '',
+    contract_end_date: item?.contract_end_date || '',
+    warranty_end_date: item?.warranty_end_date || '',
+    sim_number: item?.sim_number || '',
+    network_provider: item?.network_provider || '',
   });
   const [saving, setSaving] = useState(false);
   const [serialMatch, setSerialMatch] = useState(null);
@@ -761,6 +1059,12 @@ function CellphoneModal({ item, personnel, allAssignments, onClose, onSuccess })
       if (!payload.imei_number) payload.imei_number = null;
       if (!payload.phone_number) payload.phone_number = null;
       if (!payload.notes) payload.notes = null;
+      if (!payload.device_cost) payload.device_cost = null;
+      if (!payload.monthly_cost) payload.monthly_cost = null;
+      if (!payload.contract_end_date) payload.contract_end_date = null;
+      if (!payload.warranty_end_date) payload.warranty_end_date = null;
+      if (!payload.sim_number) payload.sim_number = null;
+      if (!payload.network_provider) payload.network_provider = null;
 
       if (item) {
         // If status changed, use updateStatus to log history
@@ -1020,6 +1324,98 @@ function CellphoneModal({ item, personnel, allAssignments, onClose, onSuccess })
                 rows="2"
                 placeholder="Any additional notes"
               />
+            </div>
+
+            {/* SIM & Network */}
+            <div style={{ borderTop: '1px solid var(--border-color, #e0e0e0)', paddingTop: '12px', marginTop: '4px' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '8px', color: 'var(--text-secondary)' }}>SIM & Network</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group">
+                  <label className="form-label">Network Provider</label>
+                  <select
+                    name="network_provider"
+                    value={form.network_provider}
+                    onChange={handleChange}
+                    className="form-input"
+                  >
+                    <option value="">-- Select --</option>
+                    {['Vodacom', 'MTN', 'Cell C', 'Telkom', 'Rain', 'Other'].map(n => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">SIM Number</label>
+                  <input
+                    type="text"
+                    name="sim_number"
+                    value={form.sim_number}
+                    onChange={handleChange}
+                    className="form-input"
+                    placeholder="SIM card number"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Cost Tracking */}
+            <div style={{ borderTop: '1px solid var(--border-color, #e0e0e0)', paddingTop: '12px', marginTop: '4px' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '8px', color: 'var(--text-secondary)' }}>Cost Tracking</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group">
+                  <label className="form-label">Device Cost (R)</label>
+                  <input
+                    type="number"
+                    name="device_cost"
+                    value={form.device_cost}
+                    onChange={handleChange}
+                    className="form-input"
+                    placeholder="e.g. 15999.00"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Monthly Cost (R)</label>
+                  <input
+                    type="number"
+                    name="monthly_cost"
+                    value={form.monthly_cost}
+                    onChange={handleChange}
+                    className="form-input"
+                    placeholder="e.g. 599.00"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Contract & Warranty */}
+            <div style={{ borderTop: '1px solid var(--border-color, #e0e0e0)', paddingTop: '12px', marginTop: '4px' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '8px', color: 'var(--text-secondary)' }}>Contract & Warranty</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group">
+                  <label className="form-label">Contract End Date</label>
+                  <input
+                    type="date"
+                    name="contract_end_date"
+                    value={form.contract_end_date}
+                    onChange={handleChange}
+                    className="form-input"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Warranty End Date</label>
+                  <input
+                    type="date"
+                    name="warranty_end_date"
+                    value={form.warranty_end_date}
+                    onChange={handleChange}
+                    className="form-input"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
