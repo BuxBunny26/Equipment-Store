@@ -126,7 +126,7 @@ function CellphoneAssignments() {
     }
   };
 
-  // Build lookups for division from personnel (by name and by employee_id)
+  // Build lookups for division from personnel (by name, partial name, and employee_id)
   const personnelDivisionMap = {}; // eslint-disable-line
   const personnelDivisionByIdMap = {};
   personnel.forEach(p => {
@@ -134,18 +134,49 @@ function CellphoneAssignments() {
     if (p.employee_id) personnelDivisionByIdMap[p.employee_id.toLowerCase()] = p.division || '';
   });
 
+  // Known division abbreviations used in cellphone assignment notes
+  const DIVISION_ABBREVS = { 'rs': 'RS', 'afs': 'AFS', 'gp': 'GP', 'gp consult': 'GP', 'wearcheck': 'RS' };
+
   const getDivision = (item) => {
+    // 1. Exact name match
     const byName = personnelDivisionMap[item.employee_name?.toLowerCase()];
     if (byName) return byName;
+    // 2. Employee ID match
     if (item.employee_id) {
       const byId = personnelDivisionByIdMap[item.employee_id.toLowerCase()];
       if (byId) return byId;
+    }
+    // 3. Partial name match (e.g. "Arnold van Zyl" matches "Arnoldus van Zyl")
+    if (item.employee_name) {
+      const nameLower = item.employee_name.toLowerCase();
+      const partialMatch = personnel.find(p => {
+        if (!p.full_name) return false;
+        const pName = p.full_name.toLowerCase();
+        // Check if last name matches and first name starts similarly
+        const nameParts = nameLower.split(' ');
+        const pParts = pName.split(' ');
+        if (nameParts.length >= 2 && pParts.length >= 2) {
+          const lastName = nameParts.slice(1).join(' ');
+          const pLastName = pParts.slice(1).join(' ');
+          return lastName === pLastName && (pParts[0].startsWith(nameParts[0]) || nameParts[0].startsWith(pParts[0]));
+        }
+        return false;
+      });
+      if (partialMatch?.division) return partialMatch.division;
+    }
+    // 4. Fall back to notes field if it contains a known division abbreviation
+    if (item.notes) {
+      const notesLower = item.notes.toLowerCase().trim();
+      if (DIVISION_ABBREVS[notesLower]) return DIVISION_ABBREVS[notesLower];
     }
     return '';
   };
 
   // Get unique divisions and brands for filter dropdowns
-  const divisions = [...new Set(personnel.map(p => p.division).filter(Boolean))].sort();
+  // Include divisions from both personnel and assignment notes
+  const personnelDivisions = personnel.map(p => p.division).filter(Boolean);
+  const assignmentDivisions = assignments.map(a => getDivision(a)).filter(Boolean);
+  const divisions = [...new Set([...personnelDivisions, ...assignmentDivisions])].sort();
   const brands = [...new Set(assignments.map(a => a.phone_brand).filter(Boolean))].sort();
 
   const filtered = assignments.filter(a => {
