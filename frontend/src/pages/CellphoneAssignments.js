@@ -22,6 +22,10 @@ function CellphoneAssignments() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
+  const [showReassignModal, setShowReassignModal] = useState(false);
+  const [reassignItem, setReassignItem] = useState(null);
+  const [upgradeFilter, setUpgradeFilter] = useState('');
+
   const PHONE_STATUSES = [
     { value: 'Active', label: 'Active', badge: 'badge-available', color: 'var(--success-color)' },
     { value: 'Returned', label: 'Returned', badge: 'badge-checked-out', color: 'var(--text-secondary)' },
@@ -31,6 +35,53 @@ function CellphoneAssignments() {
     { value: 'Lost', label: 'Lost', badge: 'badge-overdue', color: 'var(--error-color)' },
     { value: 'Decommissioned', label: 'Decommissioned', badge: 'badge-checked-out', color: 'var(--text-secondary)' },
   ];
+
+  // Upgrade alert helpers
+  const UPGRADE_MONTHS = 24;
+  const APPROACHING_MONTHS = 18;
+
+  const getPhoneAgeDays = (dateAssigned) => {
+    if (!dateAssigned) return 0;
+    const assigned = new Date(dateAssigned);
+    const now = new Date();
+    return Math.floor((now - assigned) / (1000 * 60 * 60 * 24));
+  };
+
+  const getPhoneAgeMonths = (dateAssigned) => {
+    if (!dateAssigned) return 0;
+    const assigned = new Date(dateAssigned);
+    const now = new Date();
+    return (now.getFullYear() - assigned.getFullYear()) * 12 + (now.getMonth() - assigned.getMonth());
+  };
+
+  const getUpgradeStatus = (item) => {
+    if (!item.date_assigned || item.phone_status !== 'Active') return 'ok';
+    const months = getPhoneAgeMonths(item.date_assigned);
+    if (months >= UPGRADE_MONTHS) return 'due';
+    if (months >= APPROACHING_MONTHS) return 'approaching';
+    return 'ok';
+  };
+
+  const getPhoneAgeLabel = (dateAssigned) => {
+    if (!dateAssigned) return '-';
+    const months = getPhoneAgeMonths(dateAssigned);
+    const years = Math.floor(months / 12);
+    const remainingMonths = months % 12;
+    if (years > 0) return `${years}y ${remainingMonths}m`;
+    return `${remainingMonths}m`;
+  };
+
+  const getPhoneAgeColor = (dateAssigned, status) => {
+    if (!dateAssigned || status !== 'Active') return 'var(--text-secondary)';
+    const months = getPhoneAgeMonths(dateAssigned);
+    if (months >= UPGRADE_MONTHS) return '#e74c3c';
+    if (months >= APPROACHING_MONTHS) return '#e67e22';
+    if (months >= 12) return '#f39c12';
+    return 'var(--success-color)';
+  };
+
+  const upgradesDue = assignments.filter(a => getUpgradeStatus(a) === 'due');
+  const upgradesApproaching = assignments.filter(a => getUpgradeStatus(a) === 'approaching');
 
   useEffect(() => {
     fetchData();
@@ -92,6 +143,11 @@ function CellphoneAssignments() {
     }
     if (dateFrom && a.date_assigned < dateFrom) return false;
     if (dateTo && a.date_assigned > dateTo) return false;
+    // Upgrade filter
+    if (upgradeFilter === 'due' && getUpgradeStatus(a) !== 'due') return false;
+    if (upgradeFilter === 'approaching' && getUpgradeStatus(a) !== 'approaching') return false;
+    if (upgradeFilter === 'all-alerts' && getUpgradeStatus(a) === 'ok') return false;
+
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
@@ -201,8 +257,19 @@ function CellphoneAssignments() {
             <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>To:</label>
             <input type="date" className="form-input" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ width: '150px' }} />
           </div>
-          {(divisionFilter || brandFilter || dateFrom || dateTo || searchTerm || statusFilter) && (
-            <button className="btn btn-sm" style={{ fontSize: '0.8rem' }} onClick={() => { setDivisionFilter(''); setBrandFilter(''); setDateFrom(''); setDateTo(''); setSearchTerm(''); setStatusFilter(''); }}>Clear Filters</button>
+          <select
+            className="form-input"
+            value={upgradeFilter}
+            onChange={e => setUpgradeFilter(e.target.value)}
+            style={{ minWidth: '150px' }}
+          >
+            <option value="">All Upgrade Status</option>
+            <option value="due">Due for Upgrade ({upgradesDue.length})</option>
+            <option value="approaching">Approaching Upgrade ({upgradesApproaching.length})</option>
+            <option value="all-alerts">All Alerts ({upgradesDue.length + upgradesApproaching.length})</option>
+          </select>
+          {(divisionFilter || brandFilter || dateFrom || dateTo || searchTerm || statusFilter || upgradeFilter) && (
+            <button className="btn btn-sm" style={{ fontSize: '0.8rem' }} onClick={() => { setDivisionFilter(''); setBrandFilter(''); setDateFrom(''); setDateTo(''); setSearchTerm(''); setStatusFilter(''); setUpgradeFilter(''); }}>Clear Filters</button>
           )}
           <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 'auto' }}>{filtered.length} record{filtered.length !== 1 ? 's' : ''}</span>
         </div>
@@ -215,6 +282,18 @@ function CellphoneAssignments() {
             {assignments.filter(a => a.phone_status === 'Active').length}
           </div>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Active</div>
+        </div>
+        <div className="card" style={{ padding: '16px', textAlign: 'center', cursor: 'pointer', border: upgradeFilter === 'due' ? '2px solid #e74c3c' : undefined }} onClick={() => setUpgradeFilter(upgradeFilter === 'due' ? '' : 'due')}>
+          <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#e74c3c' }}>
+            {upgradesDue.length}
+          </div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Upgrade Due</div>
+        </div>
+        <div className="card" style={{ padding: '16px', textAlign: 'center', cursor: 'pointer', border: upgradeFilter === 'approaching' ? '2px solid #e67e22' : undefined }} onClick={() => setUpgradeFilter(upgradeFilter === 'approaching' ? '' : 'approaching')}>
+          <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#e67e22' }}>
+            {upgradesApproaching.length}
+          </div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Upgrade Soon</div>
         </div>
         <div className="card" style={{ padding: '16px', textAlign: 'center' }}>
           <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#f39c12' }}>
@@ -248,6 +327,102 @@ function CellphoneAssignments() {
         </div>
       </div>
 
+      {/* Upgrade Alert Banner */}
+      {(upgradesDue.length > 0 || upgradesApproaching.length > 0) && (
+        <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: upgradesDue.length > 0 ? '10px' : '0' }}>
+            <span style={{ fontSize: '1.1rem' }}>📱</span>
+            <strong style={{ fontSize: '0.95rem' }}>Upgrade Alerts</strong>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 'auto' }}>
+              Based on 2-year upgrade cycle
+            </span>
+          </div>
+
+          {upgradesDue.length > 0 && (
+            <div style={{
+              padding: '10px 14px',
+              border: '1px solid #e74c3c',
+              borderRadius: '8px',
+              background: 'rgba(231, 76, 60, 0.08)',
+              marginBottom: upgradesApproaching.length > 0 ? '8px' : '0',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                <span style={{ color: '#e74c3c', fontWeight: 600, fontSize: '0.9rem' }}>
+                  ⚠️ {upgradesDue.length} phone{upgradesDue.length !== 1 ? 's' : ''} due for upgrade
+                </span>
+                <button
+                  className="btn btn-sm"
+                  style={{ marginLeft: 'auto', fontSize: '0.75rem' }}
+                  onClick={() => setUpgradeFilter('due')}
+                >
+                  Show in table
+                </button>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {upgradesDue.slice(0, 8).map(a => (
+                  <span key={a.id} style={{
+                    fontSize: '0.75rem',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    background: 'rgba(231, 76, 60, 0.15)',
+                    color: '#c0392b',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {a.employee_name} — {a.phone_brand} {a.phone_model} ({getPhoneAgeLabel(a.date_assigned)})
+                  </span>
+                ))}
+                {upgradesDue.length > 8 && (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', alignSelf: 'center' }}>
+                    +{upgradesDue.length - 8} more
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {upgradesApproaching.length > 0 && (
+            <div style={{
+              padding: '10px 14px',
+              border: '1px solid #e67e22',
+              borderRadius: '8px',
+              background: 'rgba(230, 126, 34, 0.08)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                <span style={{ color: '#e67e22', fontWeight: 600, fontSize: '0.9rem' }}>
+                  🔶 {upgradesApproaching.length} phone{upgradesApproaching.length !== 1 ? 's' : ''} approaching upgrade (18-24 months)
+                </span>
+                <button
+                  className="btn btn-sm"
+                  style={{ marginLeft: 'auto', fontSize: '0.75rem' }}
+                  onClick={() => setUpgradeFilter('approaching')}
+                >
+                  Show in table
+                </button>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {upgradesApproaching.slice(0, 8).map(a => (
+                  <span key={a.id} style={{
+                    fontSize: '0.75rem',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    background: 'rgba(230, 126, 34, 0.15)',
+                    color: '#d35400',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {a.employee_name} — {a.phone_brand} {a.phone_model} ({getPhoneAgeLabel(a.date_assigned)})
+                  </span>
+                ))}
+                {upgradesApproaching.length > 8 && (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', alignSelf: 'center' }}>
+                    +{upgradesApproaching.length - 8} more
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Table */}
       <div className="card">
         {filtered.length === 0 ? (
@@ -261,10 +436,12 @@ function CellphoneAssignments() {
               <thead>
                 <tr>
                   <th>Employee</th>
+                  <th>Division</th>
                   <th>Phone</th>
                   <th>Serial / IMEI</th>
                   <th>Phone Number</th>
                   <th>Date Assigned</th>
+                  <th>Phone Age</th>
                   <th>Status</th>
                   <th>Actions</th>
                 </tr>
@@ -288,6 +465,11 @@ function CellphoneAssignments() {
                       </div>
                     </td>
                     <td>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        {personnelDivisionMap[item.employee_name?.toLowerCase()] || '-'}
+                      </span>
+                    </td>
+                    <td>
                       <div>
                         <strong>{item.phone_brand}</strong>
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
@@ -309,6 +491,50 @@ function CellphoneAssignments() {
                     <td>{item.date_assigned ? new Date(item.date_assigned).toLocaleDateString() : '-'}</td>
                     <td>
                       {(() => {
+                        const ageColor = getPhoneAgeColor(item.date_assigned, item.phone_status);
+                        const upgradeStatus = getUpgradeStatus(item);
+                        const ageLabel = getPhoneAgeLabel(item.date_assigned);
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
+                            <span style={{
+                              fontWeight: 600,
+                              color: ageColor,
+                              fontSize: '0.85rem',
+                            }}>
+                              {ageLabel}
+                            </span>
+                            {upgradeStatus === 'due' && (
+                              <span style={{
+                                fontSize: '0.65rem',
+                                padding: '1px 6px',
+                                borderRadius: '10px',
+                                background: 'rgba(231, 76, 60, 0.15)',
+                                color: '#e74c3c',
+                                fontWeight: 600,
+                                whiteSpace: 'nowrap',
+                              }}>
+                                UPGRADE DUE
+                              </span>
+                            )}
+                            {upgradeStatus === 'approaching' && (
+                              <span style={{
+                                fontSize: '0.65rem',
+                                padding: '1px 6px',
+                                borderRadius: '10px',
+                                background: 'rgba(230, 126, 34, 0.15)',
+                                color: '#e67e22',
+                                fontWeight: 600,
+                                whiteSpace: 'nowrap',
+                              }}>
+                                UPGRADE SOON
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </td>
+                    <td>
+                      {(() => {
                         const st = PHONE_STATUSES.find(s => s.value === item.phone_status) || PHONE_STATUSES[0];
                         return <span className={`badge ${st.badge}`}>{st.label}</span>;
                       })()}
@@ -323,6 +549,16 @@ function CellphoneAssignments() {
                         <button className="btn btn-sm btn-secondary" onClick={() => setHistoryItem(item)} title="View History">
                           <Icons.Clock size={14} />
                         </button>
+                        {isAdminOrManager && item.phone_status === 'Active' && (
+                          <button
+                            className="btn btn-sm"
+                            style={{ background: 'var(--primary-color)', color: 'white' }}
+                            onClick={() => { setReassignItem(item); setShowReassignModal(true); }}
+                            title="Reassign Phone"
+                          >
+                            <Icons.Users size={14} />
+                          </button>
+                        )}
                         {isAdminOrManager && (
                           <button className="btn btn-sm btn-secondary" onClick={() => handleEdit(item)} title="Edit">
                             <Icons.Edit size={14} />
@@ -351,6 +587,16 @@ function CellphoneAssignments() {
           allAssignments={assignments}
           onClose={() => { setShowModal(false); setEditItem(null); }}
           onSuccess={() => { setShowModal(false); setEditItem(null); fetchData(); }}
+        />
+      )}
+
+      {/* Reassign Modal */}
+      {showReassignModal && reassignItem && (
+        <ReassignModal
+          item={reassignItem}
+          personnel={personnel}
+          onClose={() => { setShowReassignModal(false); setReassignItem(null); }}
+          onSuccess={() => { setShowReassignModal(false); setReassignItem(null); fetchData(); }}
         />
       )}
 
@@ -734,6 +980,147 @@ function CellphoneModal({ item, personnel, allAssignments, onClose, onSuccess })
             )}
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function ReassignModal({ item, personnel, onClose, onSuccess }) {
+  const [selectedPerson, setSelectedPerson] = useState(null);
+  const [notes, setNotes] = useState('');
+  const [dateAssigned, setDateAssigned] = useState(new Date().toISOString().split('T')[0]);
+  const [saving, setSaving] = useState(false);
+
+  const handlePersonSelect = (e) => {
+    const personId = e.target.value;
+    const person = personnel.find(p => String(p.id) === personId);
+    setSelectedPerson(person || null);
+  };
+
+  const handleReassign = async () => {
+    if (!selectedPerson) {
+      alert('Please select an employee to reassign to');
+      return;
+    }
+    if (!window.confirm(
+      `Reassign ${item.phone_brand} ${item.phone_model} (S/N: ${item.serial_number}) from ${item.employee_name} to ${selectedPerson.full_name}?`
+    )) return;
+
+    try {
+      setSaving(true);
+      await cellphoneAssignmentsApi.reassign(item.id, {
+        employee_name: selectedPerson.full_name,
+        employee_id: selectedPerson.employee_id || '',
+        employee_email: selectedPerson.email || '',
+        date_assigned: dateAssigned,
+        notes: notes || null,
+      });
+      onSuccess();
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+        <div className="modal-header">
+          <h2>Reassign Cellphone</h2>
+          <button className="btn btn-sm btn-secondary" onClick={onClose}>
+            <Icons.Close size={16} />
+          </button>
+        </div>
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* Current assignment info */}
+          <div style={{
+            padding: '12px',
+            background: 'var(--bg-secondary, #f5f5f5)',
+            borderRadius: '8px',
+          }}>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>CURRENTLY ASSIGNED TO</div>
+            <strong>{item.employee_name}</strong>
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              {item.phone_brand} {item.phone_model} | S/N: {item.serial_number}
+            </div>
+            {item.phone_number && (
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Phone: {item.phone_number}
+              </div>
+            )}
+          </div>
+
+          <div style={{ textAlign: 'center', fontSize: '1.2rem', color: 'var(--text-secondary)' }}>↓</div>
+
+          {/* New assignment */}
+          <div className="form-group">
+            <label className="form-label">Reassign To *</label>
+            <select
+              className="form-input"
+              onChange={handlePersonSelect}
+              value={selectedPerson ? String(personnel.find(p => p.full_name === selectedPerson.full_name)?.id || '') : ''}
+            >
+              <option value="">-- Select Employee --</option>
+              {personnel
+                .filter(p => p.full_name !== item.employee_name)
+                .map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.full_name}{p.employee_id ? ` (${p.employee_id})` : ''}{p.division ? ` — ${p.division}` : ''}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          {selectedPerson && (
+            <div style={{
+              padding: '10px',
+              border: '1px solid var(--primary-color)',
+              borderRadius: '8px',
+              background: 'rgba(52, 152, 219, 0.05)',
+              fontSize: '0.85rem',
+            }}>
+              <strong>{selectedPerson.full_name}</strong>
+              {selectedPerson.employee_id && <span> ({selectedPerson.employee_id})</span>}
+              {selectedPerson.email && <div style={{ color: 'var(--text-secondary)' }}>{selectedPerson.email}</div>}
+              {selectedPerson.division && <div style={{ color: 'var(--text-secondary)' }}>Division: {selectedPerson.division}</div>}
+            </div>
+          )}
+
+          <div className="form-group">
+            <label className="form-label">New Assignment Date *</label>
+            <input
+              type="date"
+              className="form-input"
+              value={dateAssigned}
+              onChange={e => setDateAssigned(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Reassignment Notes</label>
+            <textarea
+              className="form-input"
+              rows="2"
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="Reason for reassignment (optional)"
+            />
+          </div>
+        </div>
+
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handleReassign}
+            disabled={saving || !selectedPerson}
+          >
+            {saving ? 'Reassigning...' : 'Reassign Phone'}
+          </button>
+        </div>
       </div>
     </div>
   );
