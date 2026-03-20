@@ -126,9 +126,23 @@ function CellphoneAssignments() {
     }
   };
 
-  // Build a lookup of employee_name -> division from personnel
+  // Build lookups for division from personnel (by name and by employee_id)
   const personnelDivisionMap = {}; // eslint-disable-line
-  personnel.forEach(p => { personnelDivisionMap[p.full_name?.toLowerCase()] = p.division || ''; });
+  const personnelDivisionByIdMap = {};
+  personnel.forEach(p => {
+    if (p.full_name) personnelDivisionMap[p.full_name.toLowerCase()] = p.division || '';
+    if (p.employee_id) personnelDivisionByIdMap[p.employee_id.toLowerCase()] = p.division || '';
+  });
+
+  const getDivision = (item) => {
+    const byName = personnelDivisionMap[item.employee_name?.toLowerCase()];
+    if (byName) return byName;
+    if (item.employee_id) {
+      const byId = personnelDivisionByIdMap[item.employee_id.toLowerCase()];
+      if (byId) return byId;
+    }
+    return '';
+  };
 
   // Get unique divisions and brands for filter dropdowns
   const divisions = [...new Set(personnel.map(p => p.division).filter(Boolean))].sort();
@@ -138,7 +152,7 @@ function CellphoneAssignments() {
     if (statusFilter && a.phone_status !== statusFilter) return false;
     if (brandFilter && a.phone_brand !== brandFilter) return false;
     if (divisionFilter) {
-      const empDiv = personnelDivisionMap[a.employee_name?.toLowerCase()] || '';
+      const empDiv = getDivision(a);
       if (empDiv !== divisionFilter) return false;
     }
     if (dateFrom && a.date_assigned < dateFrom) return false;
@@ -466,7 +480,7 @@ function CellphoneAssignments() {
                     </td>
                     <td>
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                        {personnelDivisionMap[item.employee_name?.toLowerCase()] || '-'}
+                        {getDivision(item) || '-'}
                       </span>
                     </td>
                     <td>
