@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { reportsApi } from '../services/api';
+import React, { useState, useEffect, useMemo } from 'react';
+import { reportsApi, personnelApi, vehicleFinesApi, vehicleServicesApi } from '../services/api';
 import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
 import { Icons } from '../components/Icons';
 
@@ -9,6 +9,7 @@ function Reports() {
   const [error, setError] = useState(null);
   const [data, setData] = useState([]);
   const [stats, setStats] = useState(null);
+  const [extraData, setExtraData] = useState({ personnel: [], fines: [], services: [] });
 
   useEffect(() => {
     fetchData();
@@ -51,16 +52,41 @@ function Reports() {
           setData([]);
           break;
         case 'vehicles':
-          response = await reportsApi.getVehicleReport();
-          setData(Array.isArray(response?.data) ? response.data : []);
+          const [vRes, fRes, sRes, pResV] = await Promise.all([
+            reportsApi.getVehicleReport(),
+            vehicleFinesApi.getAll(),
+            vehicleServicesApi.getAll(),
+            personnelApi.getAll(false),
+          ]);
+          setData(Array.isArray(vRes?.data) ? vRes.data : []);
+          setExtraData(prev => ({
+            ...prev,
+            fines: Array.isArray(fRes?.data) ? fRes.data : [],
+            services: Array.isArray(sRes?.data) ? sRes.data : [],
+            personnel: Array.isArray(pResV?.data) ? pResV.data : prev.personnel,
+          }));
           break;
         case 'cellphones':
-          response = await reportsApi.getCellphoneReport();
-          setData(Array.isArray(response?.data) ? response.data : []);
+          const [cRes, pResC] = await Promise.all([
+            reportsApi.getCellphoneReport(),
+            personnelApi.getAll(false),
+          ]);
+          setData(Array.isArray(cRes?.data) ? cRes.data : []);
+          setExtraData(prev => ({
+            ...prev,
+            personnel: Array.isArray(pResC?.data) ? pResC.data : prev.personnel,
+          }));
           break;
         case 'laptops':
-          response = await reportsApi.getLaptopReport();
-          setData(Array.isArray(response?.data) ? response.data : []);
+          const [lRes, pResL] = await Promise.all([
+            reportsApi.getLaptopReport(),
+            personnelApi.getAll(false),
+          ]);
+          setData(Array.isArray(lRes?.data) ? lRes.data : []);
+          setExtraData(prev => ({
+            ...prev,
+            personnel: Array.isArray(pResL?.data) ? pResL.data : prev.personnel,
+          }));
           break;
         case 'calibration-due':
           response = await reportsApi.getCalibrationDueReport();
@@ -124,11 +150,11 @@ function Reports() {
       case 'usage':
         return <UsageReport stats={stats} />;
       case 'vehicles':
-        return <VehicleReport data={data} />;
+        return <VehicleReport data={data} personnel={extraData.personnel} fines={extraData.fines} services={extraData.services} />;
       case 'cellphones':
-        return <CellphoneReport data={data} />;
+        return <CellphoneReport data={data} personnel={extraData.personnel} />;
       case 'laptops':
-        return <LaptopReport data={data} />;
+        return <LaptopReport data={data} personnel={extraData.personnel} />;
       case 'calibration-due':
         return <CalibrationDueReport data={data} />;
       default:
@@ -664,7 +690,11 @@ function UsageReport({ stats }) {
 }
 
 // Vehicle Report Component
-function VehicleReport({ data }) {
+function VehicleReport({ data, personnel, fines, services }) {
+  const [showMakeChart, setShowMakeChart] = useState(false);
+  const [showDivisionBreakdown, setShowDivisionBreakdown] = useState(false);
+  const [showCostSummary, setShowCostSummary] = useState(false);
+
   if (data.length === 0) {
     return (
       <div className="empty-state">
@@ -674,27 +704,234 @@ function VehicleReport({ data }) {
     );
   }
 
+  const getDivision = (v) => {
+    const driverName = v.assigned_to || v.assigned_driver || '';
+    if (!driverName || !personnel?.length) return '';
+    const p = personnel.find(p => p.full_name && p.full_name.toLowerCase() === driverName.toLowerCase());
+    return p?.division || '';
+  };
+
   const active = data.filter(v => v.is_active);
   const statusCounts = data.reduce((acc, v) => {
-    acc[v.vehicle_status] = (acc[v.vehicle_status] || 0) + 1;
+    acc[v.vehicle_status || 'Unknown'] = (acc[v.vehicle_status || 'Unknown'] || 0) + 1;
     return acc;
   }, {});
 
+  // Make distribution
+  const makeDistribution = (() => {
+    const counts = {};
+    data.forEach(v => { counts[v.make || 'Unknown'] = (counts[v.make || 'Unknown'] || 0) + 1; });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  })();
+  const makeColors = { Toyota: '#EB0A1E', Ford: '#003478', Volkswagen: '#001E50', Nissan: '#C3002F', Isuzu: '#DA291C', Mercedes: '#333', BMW: '#0066B1', Hyundai: '#002C5F' };
+
+  // Fuel type distribution
+  const fuelDistribution = (() => {
+    const counts = {};
+    data.forEach(v => { counts[v.fuel_type || 'Unknown'] = (counts[v.fuel_type || 'Unknown'] || 0) + 1; });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  })();
+
+  // Division breakdown
+  const divisionBreakdown = (() => {
+    const counts = {};
+    data.filter(v => v.is_active).forEach(v => {
+      const div = getDivision(v) || 'Unassigned';
+      counts[div] = (counts[div] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  })();
+
+  // Cost aggregations
+  const totalFines = (fines || []).reduce((s, f) => s + (Number(f.fine_amount) || 0), 0);
+  const unpaidFines = (fines || []).filter(f => f.status === 'Unpaid').reduce((s, f) => s + (Number(f.fine_amount) || 0), 0);
+  const totalServiceCost = (services || []).reduce((s, sv) => s + (Number(sv.cost) || 0), 0);
+
+  // Cost per division (fines + services grouped by vehicle -> driver -> division)
+  const costPerDivision = (() => {
+    const vehicleMap = {};
+    data.forEach(v => { vehicleMap[v.id] = v; });
+    const summary = {};
+    (fines || []).forEach(f => {
+      const v = vehicleMap[f.vehicle_id];
+      const div = v ? (getDivision(v) || 'Unassigned') : 'Unassigned';
+      if (!summary[div]) summary[div] = { count: 0, fines: 0, services: 0 };
+      summary[div].fines += Number(f.fine_amount) || 0;
+    });
+    (services || []).forEach(sv => {
+      const v = vehicleMap[sv.vehicle_id];
+      const div = v ? (getDivision(v) || 'Unassigned') : 'Unassigned';
+      if (!summary[div]) summary[div] = { count: 0, fines: 0, services: 0 };
+      summary[div].services += Number(sv.cost) || 0;
+    });
+    data.filter(v => v.is_active).forEach(v => {
+      const div = getDivision(v) || 'Unassigned';
+      if (!summary[div]) summary[div] = { count: 0, fines: 0, services: 0 };
+      summary[div].count++;
+    });
+    return Object.entries(summary).sort((a, b) => (b[1].fines + b[1].services) - (a[1].fines + a[1].services));
+  })();
+
+  const fmt = (n) => `R ${n.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`;
+
   return (
     <div>
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
-        <div className="badge badge-available" style={{ padding: '6px 12px', fontSize: '0.85rem' }}>
-          {active.length} Active
+      {/* Summary Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+        <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--primary-color)' }}>{data.length}</div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Total Vehicles</div>
         </div>
-        {Object.entries(statusCounts).map(([status, count]) => (
-          <div key={status} className="badge" style={{ padding: '6px 12px', fontSize: '0.85rem', background: 'var(--bg-secondary)' }}>
-            {status}: {count}
+        <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#27ae60' }}>{active.length}</div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Active</div>
+        </div>
+        {totalFines > 0 && (
+          <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#e74c3c' }}>{fmt(totalFines)}</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Total Fines ({(fines || []).length})</div>
           </div>
-        ))}
-        <div style={{ marginLeft: 'auto', color: 'var(--text-secondary)', fontSize: '0.85rem', alignSelf: 'center' }}>
-          {data.length} total vehicle{data.length !== 1 ? 's' : ''}
-        </div>
+        )}
+        {unpaidFines > 0 && (
+          <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#f39c12' }}>{fmt(unpaidFines)}</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Unpaid Fines</div>
+          </div>
+        )}
+        {totalServiceCost > 0 && (
+          <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#2980b9' }}>{fmt(totalServiceCost)}</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Service Costs ({(services || []).length})</div>
+          </div>
+        )}
       </div>
+
+      {/* Status Badges */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        {Object.entries(statusCounts).map(([status, count]) => (
+          <span key={status} className={`badge ${status === 'Active' ? 'badge-available' : status === 'In Service' ? 'badge-checked-out' : ''}`} style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
+            {status}: {count}
+          </span>
+        ))}
+        {fuelDistribution.map(([fuel, count]) => (
+          <span key={fuel} className="badge" style={{ padding: '4px 10px', fontSize: '0.8rem', background: 'var(--bg-secondary)' }}>
+            {fuel}: {count}
+          </span>
+        ))}
+      </div>
+
+      {/* Make Distribution */}
+      <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setShowMakeChart(!showMakeChart)}>
+          <Icons.BarChart size={16} />
+          <strong style={{ fontSize: '0.9rem' }}>Make Distribution</strong>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>({makeDistribution.length} makes)</span>
+          <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{showMakeChart ? '\u25BC' : '\u25B6'}</span>
+        </div>
+        {showMakeChart && (
+          <div style={{ marginTop: '12px' }}>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '12px' }}>
+              {makeDistribution.map(([make, count]) => {
+                const total = makeDistribution.reduce((s, [, c]) => s + c, 0);
+                const pct = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
+                const color = makeColors[make] || '#666';
+                return (
+                  <div key={make} style={{ textAlign: 'center', minWidth: '80px' }}>
+                    <div style={{ fontSize: '1.6rem', fontWeight: 700, color }}>{count}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{make}</div>
+                    <div style={{ fontSize: '0.7rem', color }}>{pct}%</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', height: '24px', borderRadius: '6px', overflow: 'hidden' }}>
+              {makeDistribution.map(([make, count]) => {
+                const total = makeDistribution.reduce((s, [, c]) => s + c, 0);
+                const pct = total > 0 ? (count / total) * 100 : 0;
+                const color = makeColors[make] || '#666';
+                return (
+                  <div key={make} title={`${make}: ${count} (${pct.toFixed(1)}%)`}
+                    style={{ width: `${pct}%`, background: color, minWidth: pct > 0 ? '2px' : '0', transition: 'width 0.3s ease' }} />
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Division Breakdown */}
+      {divisionBreakdown.length > 0 && (
+        <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setShowDivisionBreakdown(!showDivisionBreakdown)}>
+            <Icons.Building size={16} />
+            <strong style={{ fontSize: '0.9rem' }}>Division Breakdown</strong>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>({divisionBreakdown.length} divisions)</span>
+            <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{showDivisionBreakdown ? '\u25BC' : '\u25B6'}</span>
+          </div>
+          {showDivisionBreakdown && (
+            <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {divisionBreakdown.map(([div, count]) => {
+                const maxCount = divisionBreakdown[0]?.[1] || 1;
+                return (
+                  <div key={div} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '0.85rem', minWidth: '120px', textAlign: 'right' }}>{div}</span>
+                    <div style={{ flex: 1, background: 'var(--bg-secondary, #f0f0f0)', borderRadius: '4px', height: '20px', overflow: 'hidden' }}>
+                      <div style={{ width: `${(count / maxCount) * 100}%`, height: '100%', background: 'var(--primary-color)', borderRadius: '4px', transition: 'width 0.3s ease', minWidth: '2px' }} />
+                    </div>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600, minWidth: '30px' }}>{count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Cost Per Division */}
+      {costPerDivision.some(([, s]) => s.fines > 0 || s.services > 0) && (
+        <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setShowCostSummary(!showCostSummary)}>
+            <Icons.FileText size={16} />
+            <strong style={{ fontSize: '0.9rem' }}>Cost Per Division</strong>
+            <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{showCostSummary ? '\u25BC' : '\u25B6'}</span>
+          </div>
+          {showCostSummary && (
+            <div style={{ marginTop: '12px', overflowX: 'auto' }}>
+              <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
+                    <th style={{ textAlign: 'left', padding: '6px 8px' }}>Division</th>
+                    <th style={{ textAlign: 'right', padding: '6px 8px' }}>Vehicles</th>
+                    <th style={{ textAlign: 'right', padding: '6px 8px' }}>Fines (R)</th>
+                    <th style={{ textAlign: 'right', padding: '6px 8px' }}>Services (R)</th>
+                    <th style={{ textAlign: 'right', padding: '6px 8px' }}>Total (R)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {costPerDivision.map(([div, s]) => (
+                    <tr key={div} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td style={{ padding: '6px 8px' }}>{div}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{s.count}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{s.fines > 0 ? fmt(s.fines) : '-'}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{s.services > 0 ? fmt(s.services) : '-'}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600 }}>{(s.fines + s.services) > 0 ? fmt(s.fines + s.services) : '-'}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border-color)' }}>
+                    <td style={{ padding: '6px 8px' }}>Total</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{costPerDivision.reduce((s, [, d]) => s + d.count, 0)}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(costPerDivision.reduce((s, [, d]) => s + d.fines, 0))}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(costPerDivision.reduce((s, [, d]) => s + d.services, 0))}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(costPerDivision.reduce((s, [, d]) => s + d.fines + d.services, 0))}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Data Table */}
       <div className="table-container">
         <table>
           <thead>
@@ -705,6 +942,7 @@ function VehicleReport({ data }) {
               <th>VIN</th>
               <th>Assigned Driver</th>
               <th>Division</th>
+              <th>Fuel</th>
               <th>Odometer</th>
               <th>Status</th>
             </tr>
@@ -716,8 +954,9 @@ function VehicleReport({ data }) {
                 <td>{v.year || '-'}</td>
                 <td>{v.registration_number || '-'}</td>
                 <td style={{ fontSize: '0.8rem' }}>{v.vin_number || '-'}</td>
-                <td>{v.assigned_driver || '-'}</td>
-                <td>{v.division || '-'}</td>
+                <td>{v.assigned_to || v.assigned_driver || '-'}</td>
+                <td>{getDivision(v) || '-'}</td>
+                <td>{v.fuel_type || '-'}</td>
                 <td>{v.current_odometer ? v.current_odometer.toLocaleString() + ' km' : '-'}</td>
                 <td>
                   <span className={`badge ${v.vehicle_status === 'Active' ? 'badge-available' : v.vehicle_status === 'In Service' ? 'badge-checked-out' : ''}`}>
@@ -734,7 +973,11 @@ function VehicleReport({ data }) {
 }
 
 // Cellphone Report Component
-function CellphoneReport({ data }) {
+function CellphoneReport({ data, personnel }) {
+  const [showBrandChart, setShowBrandChart] = useState(false);
+  const [showDivisionBreakdown, setShowDivisionBreakdown] = useState(false);
+  const [showCostSummary, setShowCostSummary] = useState(false);
+
   if (data.length === 0) {
     return (
       <div className="empty-state">
@@ -744,36 +987,209 @@ function CellphoneReport({ data }) {
     );
   }
 
+  const getDivision = (c) => {
+    const empName = c.employee_name || '';
+    if (!empName || !personnel?.length) return c.notes || '';
+    const p = personnel.find(p => p.full_name && p.full_name.toLowerCase() === empName.toLowerCase());
+    return p?.division || c.notes || '';
+  };
+
   const active = data.filter(c => c.is_active);
-  const brandCounts = data.reduce((acc, c) => {
-    acc[c.phone_brand] = (acc[c.phone_brand] || 0) + 1;
-    return acc;
-  }, {});
   const statusCounts = data.reduce((acc, c) => {
-    acc[c.phone_status] = (acc[c.phone_status] || 0) + 1;
+    acc[c.phone_status || 'Unknown'] = (acc[c.phone_status || 'Unknown'] || 0) + 1;
     return acc;
   }, {});
 
+  // Brand distribution
+  const brandDistribution = (() => {
+    const counts = {};
+    data.forEach(c => { counts[c.phone_brand || 'Unknown'] = (counts[c.phone_brand || 'Unknown'] || 0) + 1; });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  })();
+  const brandColors = { Samsung: '#1428A0', Huawei: '#CF0A2C', 'Rugged SA': '#2d8659', Apple: '#555', Nokia: '#005EB8', Xiaomi: '#FF6900' };
+
+  // Division breakdown
+  const divisionBreakdown = (() => {
+    const counts = {};
+    data.filter(c => c.phone_status === 'Active').forEach(c => {
+      const div = getDivision(c) || 'Unassigned';
+      counts[div] = (counts[div] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  })();
+
+  // Cost summaries
+  const totalDeviceCost = data.filter(c => c.is_active).reduce((s, c) => s + (Number(c.device_cost) || 0), 0);
+  const totalMonthlyCost = data.filter(c => c.is_active).reduce((s, c) => s + (Number(c.monthly_cost) || 0), 0);
+
+  // Cost per division
+  const costPerDivision = (() => {
+    const summary = {};
+    data.filter(c => c.phone_status === 'Active').forEach(c => {
+      const div = getDivision(c) || 'Unassigned';
+      if (!summary[div]) summary[div] = { count: 0, totalDevice: 0, totalMonthly: 0 };
+      summary[div].count++;
+      if (c.device_cost) summary[div].totalDevice += Number(c.device_cost);
+      if (c.monthly_cost) summary[div].totalMonthly += Number(c.monthly_cost);
+    });
+    return Object.entries(summary).sort((a, b) => b[1].totalMonthly - a[1].totalMonthly);
+  })();
+
+  const fmt = (n) => `R ${n.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`;
+
   return (
     <div>
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
-        <div className="badge badge-available" style={{ padding: '6px 12px', fontSize: '0.85rem' }}>
-          {active.length} Active
+      {/* Summary Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+        <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--primary-color)' }}>{data.length}</div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Total Devices</div>
         </div>
-        {Object.entries(brandCounts).map(([brand, count]) => (
-          <div key={brand} className="badge" style={{ padding: '6px 12px', fontSize: '0.85rem', background: 'var(--bg-secondary)' }}>
-            {brand}: {count}
-          </div>
-        ))}
-        {Object.entries(statusCounts).filter(([s]) => s !== 'Active').map(([status, count]) => (
-          <div key={status} className="badge badge-checked-out" style={{ padding: '6px 12px', fontSize: '0.85rem' }}>
-            {status}: {count}
-          </div>
-        ))}
-        <div style={{ marginLeft: 'auto', color: 'var(--text-secondary)', fontSize: '0.85rem', alignSelf: 'center' }}>
-          {data.length} total device{data.length !== 1 ? 's' : ''}
+        <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#27ae60' }}>{active.length}</div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Active</div>
         </div>
+        {totalDeviceCost > 0 && (
+          <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#2980b9' }}>{fmt(totalDeviceCost)}</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Device Cost</div>
+          </div>
+        )}
+        {totalMonthlyCost > 0 && (
+          <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#8e44ad' }}>{fmt(totalMonthlyCost)}</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Monthly Cost</div>
+          </div>
+        )}
+        {totalMonthlyCost > 0 && (
+          <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#e67e22' }}>{fmt(totalMonthlyCost * 12)}</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Annual Cost</div>
+          </div>
+        )}
       </div>
+
+      {/* Status Badges */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        {Object.entries(statusCounts).map(([status, count]) => (
+          <span key={status} className={`badge ${status === 'Active' ? 'badge-available' : 'badge-checked-out'}`} style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
+            {status}: {count}
+          </span>
+        ))}
+      </div>
+
+      {/* Brand Distribution */}
+      <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setShowBrandChart(!showBrandChart)}>
+          <Icons.Phone size={16} />
+          <strong style={{ fontSize: '0.9rem' }}>Brand Distribution</strong>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>({brandDistribution.length} brands)</span>
+          <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{showBrandChart ? '\u25BC' : '\u25B6'}</span>
+        </div>
+        {showBrandChart && (
+          <div style={{ marginTop: '12px' }}>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '12px' }}>
+              {brandDistribution.map(([brand, count]) => {
+                const total = brandDistribution.reduce((s, [, c]) => s + c, 0);
+                const pct = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
+                const color = brandColors[brand] || '#666';
+                return (
+                  <div key={brand} style={{ textAlign: 'center', minWidth: '80px' }}>
+                    <div style={{ fontSize: '1.6rem', fontWeight: 700, color }}>{count}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{brand}</div>
+                    <div style={{ fontSize: '0.7rem', color }}>{pct}%</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', height: '24px', borderRadius: '6px', overflow: 'hidden' }}>
+              {brandDistribution.map(([brand, count]) => {
+                const total = brandDistribution.reduce((s, [, c]) => s + c, 0);
+                const pct = total > 0 ? (count / total) * 100 : 0;
+                const color = brandColors[brand] || '#666';
+                return (
+                  <div key={brand} title={`${brand}: ${count} (${pct.toFixed(1)}%)`}
+                    style={{ width: `${pct}%`, background: color, minWidth: pct > 0 ? '2px' : '0', transition: 'width 0.3s ease' }} />
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Division Breakdown */}
+      {divisionBreakdown.length > 0 && (
+        <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setShowDivisionBreakdown(!showDivisionBreakdown)}>
+            <Icons.Building size={16} />
+            <strong style={{ fontSize: '0.9rem' }}>Division Breakdown</strong>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>({divisionBreakdown.length} divisions)</span>
+            <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{showDivisionBreakdown ? '\u25BC' : '\u25B6'}</span>
+          </div>
+          {showDivisionBreakdown && (
+            <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {divisionBreakdown.map(([div, count]) => {
+                const maxCount = divisionBreakdown[0]?.[1] || 1;
+                return (
+                  <div key={div} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '0.85rem', minWidth: '120px', textAlign: 'right' }}>{div}</span>
+                    <div style={{ flex: 1, background: 'var(--bg-secondary, #f0f0f0)', borderRadius: '4px', height: '20px', overflow: 'hidden' }}>
+                      <div style={{ width: `${(count / maxCount) * 100}%`, height: '100%', background: 'var(--primary-color)', borderRadius: '4px', transition: 'width 0.3s ease', minWidth: '2px' }} />
+                    </div>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600, minWidth: '30px' }}>{count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Cost Per Division */}
+      {costPerDivision.some(([, s]) => s.totalMonthly > 0 || s.totalDevice > 0) && (
+        <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setShowCostSummary(!showCostSummary)}>
+            <Icons.FileText size={16} />
+            <strong style={{ fontSize: '0.9rem' }}>Cost Per Division</strong>
+            <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{showCostSummary ? '\u25BC' : '\u25B6'}</span>
+          </div>
+          {showCostSummary && (
+            <div style={{ marginTop: '12px', overflowX: 'auto' }}>
+              <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
+                    <th style={{ textAlign: 'left', padding: '6px 8px' }}>Division</th>
+                    <th style={{ textAlign: 'right', padding: '6px 8px' }}>Phones</th>
+                    <th style={{ textAlign: 'right', padding: '6px 8px' }}>Device Cost (R)</th>
+                    <th style={{ textAlign: 'right', padding: '6px 8px' }}>Monthly (R)</th>
+                    <th style={{ textAlign: 'right', padding: '6px 8px' }}>Annual (R)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {costPerDivision.map(([div, s]) => (
+                    <tr key={div} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td style={{ padding: '6px 8px' }}>{div}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{s.count}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{s.totalDevice > 0 ? fmt(s.totalDevice) : '-'}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{s.totalMonthly > 0 ? fmt(s.totalMonthly) : '-'}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600 }}>{s.totalMonthly > 0 ? fmt(s.totalMonthly * 12) : '-'}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border-color)' }}>
+                    <td style={{ padding: '6px 8px' }}>Total</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{costPerDivision.reduce((s, [, d]) => s + d.count, 0)}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(costPerDivision.reduce((s, [, d]) => s + d.totalDevice, 0))}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(costPerDivision.reduce((s, [, d]) => s + d.totalMonthly, 0))}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(costPerDivision.reduce((s, [, d]) => s + d.totalMonthly, 0) * 12)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Data Table */}
       <div className="table-container">
         <table>
           <thead>
@@ -783,8 +1199,10 @@ function CellphoneReport({ data }) {
               <th>Model</th>
               <th>IMEI</th>
               <th>Phone Number</th>
-              <th>Date Assigned</th>
               <th>Division</th>
+              <th>Device Cost</th>
+              <th>Monthly</th>
+              <th>Date Assigned</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -796,8 +1214,10 @@ function CellphoneReport({ data }) {
                 <td>{c.phone_model}</td>
                 <td style={{ fontSize: '0.8rem' }}>{c.imei_number || '-'}</td>
                 <td>{c.phone_number || '-'}</td>
+                <td>{getDivision(c) || '-'}</td>
+                <td>{c.device_cost ? `R ${Number(c.device_cost).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}` : '-'}</td>
+                <td>{c.monthly_cost ? `R ${Number(c.monthly_cost).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}` : '-'}</td>
                 <td style={{ fontSize: '0.8rem' }}>{c.date_assigned ? new Date(c.date_assigned).toLocaleDateString() : '-'}</td>
-                <td>{c.notes || '-'}</td>
                 <td>
                   <span className={`badge ${c.phone_status === 'Active' ? 'badge-available' : 'badge-checked-out'}`}>
                     {c.phone_status}
@@ -813,7 +1233,11 @@ function CellphoneReport({ data }) {
 }
 
 // Laptop Report Component
-function LaptopReport({ data }) {
+function LaptopReport({ data, personnel }) {
+  const [showBrandChart, setShowBrandChart] = useState(false);
+  const [showDivisionBreakdown, setShowDivisionBreakdown] = useState(false);
+  const [showCostSummary, setShowCostSummary] = useState(false);
+
   if (data.length === 0) {
     return (
       <div className="empty-state">
@@ -823,36 +1247,209 @@ function LaptopReport({ data }) {
     );
   }
 
+  const getDivision = (l) => {
+    const empName = l.employee_name || '';
+    if (!empName || !personnel?.length) return '';
+    const p = personnel.find(p => p.full_name && p.full_name.toLowerCase() === empName.toLowerCase());
+    return p?.division || '';
+  };
+
   const active = data.filter(l => l.is_active);
-  const brandCounts = data.reduce((acc, l) => {
-    acc[l.laptop_brand] = (acc[l.laptop_brand] || 0) + 1;
-    return acc;
-  }, {});
   const statusCounts = data.reduce((acc, l) => {
-    acc[l.laptop_status] = (acc[l.laptop_status] || 0) + 1;
+    acc[l.laptop_status || 'Unknown'] = (acc[l.laptop_status || 'Unknown'] || 0) + 1;
     return acc;
   }, {});
 
+  // Brand distribution
+  const brandDistribution = (() => {
+    const counts = {};
+    data.forEach(l => { counts[l.laptop_brand || 'Unknown'] = (counts[l.laptop_brand || 'Unknown'] || 0) + 1; });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  })();
+  const brandColors = { Dell: '#007DB8', HP: '#0096D6', Lenovo: '#E2231A', Apple: '#555', Asus: '#00539F', Acer: '#83B81A', Microsoft: '#737373' };
+
+  // Division breakdown
+  const divisionBreakdown = (() => {
+    const counts = {};
+    data.filter(l => l.laptop_status === 'Active').forEach(l => {
+      const div = getDivision(l) || 'Unassigned';
+      counts[div] = (counts[div] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  })();
+
+  // Cost summaries
+  const totalDeviceCost = data.filter(l => l.is_active).reduce((s, l) => s + (Number(l.device_cost) || 0), 0);
+  const totalMonthlyCost = data.filter(l => l.is_active).reduce((s, l) => s + (Number(l.monthly_cost) || 0), 0);
+
+  // Cost per division
+  const costPerDivision = (() => {
+    const summary = {};
+    data.filter(l => l.laptop_status === 'Active').forEach(l => {
+      const div = getDivision(l) || 'Unassigned';
+      if (!summary[div]) summary[div] = { count: 0, totalDevice: 0, totalMonthly: 0 };
+      summary[div].count++;
+      if (l.device_cost) summary[div].totalDevice += Number(l.device_cost);
+      if (l.monthly_cost) summary[div].totalMonthly += Number(l.monthly_cost);
+    });
+    return Object.entries(summary).sort((a, b) => b[1].totalMonthly - a[1].totalMonthly);
+  })();
+
+  const fmt = (n) => `R ${n.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`;
+
   return (
     <div>
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
-        <div className="badge badge-available" style={{ padding: '6px 12px', fontSize: '0.85rem' }}>
-          {active.length} Active
+      {/* Summary Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+        <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--primary-color)' }}>{data.length}</div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Total Laptops</div>
         </div>
-        {Object.entries(brandCounts).map(([brand, count]) => (
-          <div key={brand} className="badge" style={{ padding: '6px 12px', fontSize: '0.85rem', background: 'var(--bg-secondary)' }}>
-            {brand}: {count}
-          </div>
-        ))}
-        {Object.entries(statusCounts).filter(([s]) => s !== 'Active').map(([status, count]) => (
-          <div key={status} className="badge badge-checked-out" style={{ padding: '6px 12px', fontSize: '0.85rem' }}>
-            {status}: {count}
-          </div>
-        ))}
-        <div style={{ marginLeft: 'auto', color: 'var(--text-secondary)', fontSize: '0.85rem', alignSelf: 'center' }}>
-          {data.length} total laptop{data.length !== 1 ? 's' : ''}
+        <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#27ae60' }}>{active.length}</div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Active</div>
         </div>
+        {totalDeviceCost > 0 && (
+          <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#2980b9' }}>{fmt(totalDeviceCost)}</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Device Cost</div>
+          </div>
+        )}
+        {totalMonthlyCost > 0 && (
+          <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#8e44ad' }}>{fmt(totalMonthlyCost)}</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Monthly Cost</div>
+          </div>
+        )}
+        {totalMonthlyCost > 0 && (
+          <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#e67e22' }}>{fmt(totalMonthlyCost * 12)}</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Annual Cost</div>
+          </div>
+        )}
       </div>
+
+      {/* Status Badges */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        {Object.entries(statusCounts).map(([status, count]) => (
+          <span key={status} className={`badge ${status === 'Active' ? 'badge-available' : 'badge-checked-out'}`} style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
+            {status}: {count}
+          </span>
+        ))}
+      </div>
+
+      {/* Brand Distribution */}
+      <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setShowBrandChart(!showBrandChart)}>
+          <Icons.BarChart size={16} />
+          <strong style={{ fontSize: '0.9rem' }}>Brand Distribution</strong>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>({brandDistribution.length} brands)</span>
+          <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{showBrandChart ? '\u25BC' : '\u25B6'}</span>
+        </div>
+        {showBrandChart && (
+          <div style={{ marginTop: '12px' }}>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '12px' }}>
+              {brandDistribution.map(([brand, count]) => {
+                const total = brandDistribution.reduce((s, [, c]) => s + c, 0);
+                const pct = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
+                const color = brandColors[brand] || '#666';
+                return (
+                  <div key={brand} style={{ textAlign: 'center', minWidth: '80px' }}>
+                    <div style={{ fontSize: '1.6rem', fontWeight: 700, color }}>{count}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{brand}</div>
+                    <div style={{ fontSize: '0.7rem', color }}>{pct}%</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', height: '24px', borderRadius: '6px', overflow: 'hidden' }}>
+              {brandDistribution.map(([brand, count]) => {
+                const total = brandDistribution.reduce((s, [, c]) => s + c, 0);
+                const pct = total > 0 ? (count / total) * 100 : 0;
+                const color = brandColors[brand] || '#666';
+                return (
+                  <div key={brand} title={`${brand}: ${count} (${pct.toFixed(1)}%)`}
+                    style={{ width: `${pct}%`, background: color, minWidth: pct > 0 ? '2px' : '0', transition: 'width 0.3s ease' }} />
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Division Breakdown */}
+      {divisionBreakdown.length > 0 && (
+        <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setShowDivisionBreakdown(!showDivisionBreakdown)}>
+            <Icons.Building size={16} />
+            <strong style={{ fontSize: '0.9rem' }}>Division Breakdown</strong>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>({divisionBreakdown.length} divisions)</span>
+            <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{showDivisionBreakdown ? '\u25BC' : '\u25B6'}</span>
+          </div>
+          {showDivisionBreakdown && (
+            <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {divisionBreakdown.map(([div, count]) => {
+                const maxCount = divisionBreakdown[0]?.[1] || 1;
+                return (
+                  <div key={div} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '0.85rem', minWidth: '120px', textAlign: 'right' }}>{div}</span>
+                    <div style={{ flex: 1, background: 'var(--bg-secondary, #f0f0f0)', borderRadius: '4px', height: '20px', overflow: 'hidden' }}>
+                      <div style={{ width: `${(count / maxCount) * 100}%`, height: '100%', background: 'var(--primary-color)', borderRadius: '4px', transition: 'width 0.3s ease', minWidth: '2px' }} />
+                    </div>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600, minWidth: '30px' }}>{count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Cost Per Division */}
+      {costPerDivision.some(([, s]) => s.totalMonthly > 0 || s.totalDevice > 0) && (
+        <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setShowCostSummary(!showCostSummary)}>
+            <Icons.FileText size={16} />
+            <strong style={{ fontSize: '0.9rem' }}>Cost Per Division</strong>
+            <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{showCostSummary ? '\u25BC' : '\u25B6'}</span>
+          </div>
+          {showCostSummary && (
+            <div style={{ marginTop: '12px', overflowX: 'auto' }}>
+              <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
+                    <th style={{ textAlign: 'left', padding: '6px 8px' }}>Division</th>
+                    <th style={{ textAlign: 'right', padding: '6px 8px' }}>Laptops</th>
+                    <th style={{ textAlign: 'right', padding: '6px 8px' }}>Device Cost (R)</th>
+                    <th style={{ textAlign: 'right', padding: '6px 8px' }}>Monthly (R)</th>
+                    <th style={{ textAlign: 'right', padding: '6px 8px' }}>Annual (R)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {costPerDivision.map(([div, s]) => (
+                    <tr key={div} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td style={{ padding: '6px 8px' }}>{div}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{s.count}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{s.totalDevice > 0 ? fmt(s.totalDevice) : '-'}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{s.totalMonthly > 0 ? fmt(s.totalMonthly) : '-'}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600 }}>{s.totalMonthly > 0 ? fmt(s.totalMonthly * 12) : '-'}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border-color)' }}>
+                    <td style={{ padding: '6px 8px' }}>Total</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{costPerDivision.reduce((s, [, d]) => s + d.count, 0)}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(costPerDivision.reduce((s, [, d]) => s + d.totalDevice, 0))}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(costPerDivision.reduce((s, [, d]) => s + d.totalMonthly, 0))}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(costPerDivision.reduce((s, [, d]) => s + d.totalMonthly, 0) * 12)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Data Table */}
       <div className="table-container">
         <table>
           <thead>
@@ -862,6 +1459,9 @@ function LaptopReport({ data }) {
               <th>Model</th>
               <th>Serial Number</th>
               <th>Asset Tag</th>
+              <th>Division</th>
+              <th>Device Cost</th>
+              <th>Monthly</th>
               <th>Date Assigned</th>
               <th>Status</th>
             </tr>
@@ -874,6 +1474,9 @@ function LaptopReport({ data }) {
                 <td>{l.laptop_model}</td>
                 <td style={{ fontSize: '0.8rem' }}>{l.serial_number || '-'}</td>
                 <td>{l.asset_tag || '-'}</td>
+                <td>{getDivision(l) || '-'}</td>
+                <td>{l.device_cost ? `R ${Number(l.device_cost).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}` : '-'}</td>
+                <td>{l.monthly_cost ? `R ${Number(l.monthly_cost).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}` : '-'}</td>
                 <td style={{ fontSize: '0.8rem' }}>{l.date_assigned ? new Date(l.date_assigned).toLocaleDateString() : '-'}</td>
                 <td>
                   <span className={`badge ${l.laptop_status === 'Active' ? 'badge-available' : 'badge-checked-out'}`}>
