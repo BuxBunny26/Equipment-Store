@@ -2204,6 +2204,24 @@ function ImportModal({ onClose, onSuccess }) {
   const [parseError, setParseError] = useState('');
 
   const EXPECTED_HEADERS = ['employee_name', 'phone_brand', 'phone_model', 'serial_number'];
+  const ALL_HEADERS = [
+    'employee_name', 'phone_brand', 'phone_model', 'serial_number',
+    'employee_id', 'employee_email', 'phone_number', 'imei_number', 'asset_tag',
+    'date_assigned', 'phone_status', 'network_provider', 'sim_number',
+    'device_cost', 'monthly_cost', 'contract_end_date', 'warranty_end_date',
+    'data_plan', 'device_condition', 'accessories', 'insurance_policy', 'insurance_expiry'
+  ];
+
+  const downloadTemplate = () => {
+    const csv = ALL_HEADERS.join(',') + '\n';
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'cellphone_assignments_template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const handleFileChange = (e) => {
     const f = e.target.files[0];
@@ -2297,6 +2315,11 @@ function ImportModal({ onClose, onSuccess }) {
           <div style={{ marginBottom: '12px', padding: '10px', background: 'rgba(52,152,219,0.08)', borderRadius: '8px', fontSize: '0.83rem' }}>
             <strong>CSV Format:</strong> File must include headers. Required columns: <code>employee_name</code>, <code>phone_brand</code>, <code>phone_model</code>, <code>serial_number</code>.
             <br />Optional: employee_id, employee_email, phone_number, imei_number, asset_tag, date_assigned, phone_status, network_provider, sim_number, device_cost, monthly_cost, contract_end_date, warranty_end_date, data_plan, device_condition, accessories, insurance_policy, insurance_expiry
+            <div style={{ marginTop: '8px' }}>
+              <button type="button" className="btn btn-sm btn-secondary" onClick={downloadTemplate} style={{ fontSize: '0.8rem' }}>
+                <Icons.Download size={14} /> Download Template
+              </button>
+            </div>
           </div>
 
           <div className="form-group">

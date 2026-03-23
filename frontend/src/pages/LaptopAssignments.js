@@ -1717,6 +1717,24 @@ function ImportModal({ onClose, onSuccess }) {
   const [parseError, setParseError] = useState('');
 
   const EXPECTED_HEADERS = ['employee_name', 'laptop_brand', 'laptop_model', 'serial_number'];
+  const ALL_HEADERS = [
+    'employee_name', 'laptop_brand', 'laptop_model', 'serial_number',
+    'employee_id', 'employee_email', 'asset_tag', 'date_assigned', 'laptop_status',
+    'device_cost', 'monthly_cost', 'warranty_end_date', 'contract_start_date', 'contract_end_date',
+    'device_condition', 'accessories', 'insurance_policy', 'insurance_expiry', 'notes',
+    'setup_laptop', 'setup_m365', 'setup_adobe', 'setup_zoho', 'setup_smartsheet', 'setup_distribution_lists'
+  ];
+
+  const downloadTemplate = () => {
+    const csv = ALL_HEADERS.join(',') + '\n';
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'laptop_assignments_template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const handleFileChange = (e) => {
     const f = e.target.files[0];
@@ -1812,6 +1830,11 @@ function ImportModal({ onClose, onSuccess }) {
           <div style={{ marginBottom: '12px', padding: '10px', background: 'rgba(52,152,219,0.08)', borderRadius: '8px', fontSize: '0.83rem' }}>
             <strong>CSV Format:</strong> File must include headers. Required columns: <code>employee_name</code>, <code>laptop_brand</code>, <code>laptop_model</code>, <code>serial_number</code>.
             <br />Optional: employee_id, employee_email, asset_tag, date_assigned, laptop_status, device_cost, monthly_cost, warranty_end_date, contract_start_date, contract_end_date, device_condition, accessories, insurance_policy, insurance_expiry, notes, setup_laptop, setup_m365, setup_adobe, setup_zoho, setup_smartsheet, setup_distribution_lists
+            <div style={{ marginTop: '8px' }}>
+              <button type="button" className="btn btn-sm btn-secondary" onClick={downloadTemplate} style={{ fontSize: '0.8rem' }}>
+                <Icons.Download size={14} /> Download Template
+              </button>
+            </div>
           </div>
 
           <div className="form-group">
