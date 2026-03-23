@@ -16,7 +16,7 @@ function Reservations() {
   const [selectedCategory, setSelectedCategory] = useState('');
   
   const [filters, setFilters] = useState({
-    status: 'active_upcoming',
+    status: '',
     equipment_id: '',
     start_date: '',
     end_date: '',
@@ -65,18 +65,48 @@ function Reservations() {
     }
   }, [filters]);
 
+  // Compute summary from all reservations (independent of table filters)
+  const computeSummary = useCallback(async () => {
+    try {
+      const allRes = await reservationsApi.getAll({});
+      const all = allRes.data || [];
+      const today = new Date().toISOString().split('T')[0];
+      const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      const upcoming = all.filter(r =>
+        ['pending', 'approved'].includes(r.status?.toLowerCase()) &&
+        r.start_date >= today && r.start_date <= nextWeek
+      ).length;
+
+      const statusCounts = {};
+      all.forEach(r => {
+        const s = r.status?.toLowerCase();
+        if (!s) return;
+        // Approved/pending: only count upcoming ones (end_date not yet passed)
+        if (['approved', 'pending'].includes(s) && r.end_date < today) return;
+        statusCounts[s] = (statusCounts[s] || 0) + 1;
+      });
+
+      setSummary({
+        upcoming_week: upcoming,
+        by_status: Object.entries(statusCounts).map(([status, count]) => ({ status, count })),
+      });
+    } catch (err) {
+      console.error('Error computing summary:', err);
+    }
+  }, []);
+
   const fetchData = async () => {
     try {
-      const [equipmentRes, personnelRes, customersRes, summaryRes] = await Promise.all([
+      const [equipmentRes, personnelRes, customersRes] = await Promise.all([
         equipmentApi.getAll({ status: 'Available' }),
         personnelApi.getAll(true),
         customersApi.getAll(),
-        reservationsApi.getSummary(),
       ]);
       setEquipment(equipmentRes.data);
       setPersonnel(personnelRes.data);
       setCustomers(customersRes.data);
-      setSummary(summaryRes.data);
+      computeSummary();
     } catch (err) {
       console.error('Error fetching data:', err);
     }
@@ -162,7 +192,7 @@ function Reservations() {
       }
       setShowModal(false);
       fetchReservations();
-      fetchData();
+      computeSummary();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -174,7 +204,7 @@ function Reservations() {
     try {
       await reservationsApi.updateStatus(id, newStatus);
       fetchReservations();
-      fetchData();
+      computeSummary();
     } catch (err) {
       setError(err.message);
     }
@@ -186,7 +216,7 @@ function Reservations() {
     try {
       await reservationsApi.delete(id);
       fetchReservations();
-      fetchData();
+      computeSummary();
     } catch (err) {
       setError(err.message);
     }
@@ -264,8 +294,8 @@ function Reservations() {
               value={filters.status}
               onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
             >
-              <option value="active_upcoming">Active & Upcoming</option>
               <option value="">All</option>
+              <option value="active_upcoming">Active & Upcoming</option>
               <option value="pending">Pending</option>
               <option value="approved">Approved</option>
               <option value="active">Active</option>

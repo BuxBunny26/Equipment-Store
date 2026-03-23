@@ -770,9 +770,16 @@ DECLARE
     v_by_status JSONB;
     v_upcoming INTEGER;
 BEGIN
+    -- Status counts: for approved/pending only count upcoming ones (end_date not passed)
     SELECT COALESCE(jsonb_agg(row_to_json(t)::jsonb), '[]'::jsonb) INTO v_by_status
-    FROM (SELECT status, COUNT(*) as count FROM reservations
-          WHERE start_date >= CURRENT_DATE - INTERVAL '7 days' GROUP BY status) t;
+    FROM (
+      SELECT status, COUNT(*) as count FROM reservations
+      WHERE CASE
+        WHEN status IN ('approved', 'pending') THEN end_date >= CURRENT_DATE
+        ELSE TRUE
+      END
+      GROUP BY status
+    ) t;
 
     SELECT COUNT(*) INTO v_upcoming FROM reservations
     WHERE status IN ('pending', 'approved')
