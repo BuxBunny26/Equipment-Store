@@ -4,19 +4,19 @@ const pool = require('../database/db');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const XLSX = require('xlsx');
 
 // ============================================
 // SHAREPOINT CERTIFICATE URL CONFIGURATION
 // ============================================
 
-// Shared folder link for all certificates (fallback)
-const SHAREPOINT_FOLDER_URL = 'https://wearcheckrs-my.sharepoint.com/:f:/p/nadhira/IgB6x1TbBtpITZdiTDhf6_JfAWh3dPLS_2N4rxvWB8b4wWk?e=8YWAWg';
+// Shared folder link for all certificates
+const SHAREPOINT_FOLDER_URL = 'https://wearcheckrs-my.sharepoint.com/:f:/p/nadhira/IgB6x1TbBtpITZdiTDhf6_JfAWh3dPLS_2N4rxvWB8b4wWk?e=V3z8D6';
 
-// Base path for direct file download
-const SHAREPOINT_FILE_BASE = 'https://wearcheckrs-my.sharepoint.com/personal/nadhira_wearcheckrs_com/_layouts/15/download.aspx?share=';
+// Path for direct file access (download format)
+const SHAREPOINT_DOWNLOAD_BASE = 'https://wearcheckrs-my.sharepoint.com/personal/nadhira_wearcheckrs_com/_layouts/15/download.aspx?SourceUrl=/personal/nadhira_wearcheckrs_com/Documents/WearCheck%20ARC%20Documents/RS/Calibration%20Certificates';
 
-// Generate certificate filename: {serial} Exp. {MM}.{YYYY}.pdf
+// Generate certificate filename based on serial number and expiry date
+// Format: {serial} Exp.{MM}.{YYYY}.pdf
 function generateCertificateFileName(serialNumber, expiryDate) {
     if (!serialNumber || !expiryDate) return null;
     
@@ -24,14 +24,16 @@ function generateCertificateFileName(serialNumber, expiryDate) {
     const month = String(expiry.getMonth() + 1).padStart(2, '0');
     const year = expiry.getFullYear();
     
-    return `${serialNumber} Exp. ${month}.${year}.pdf`;
+    return `${serialNumber} Exp.${month}.${year}.pdf`;
 }
 
-// Generate certificate URL - links to shared folder (user finds file by serial number)
+// Generate full SharePoint URL for certificate using download.aspx format
 function generateCertificateUrl(serialNumber, expiryDate) {
-    // Return folder URL - user can search for their file by serial number
-    // Direct file linking requires individual share links per file
-    return SHAREPOINT_FOLDER_URL;
+    const fileName = generateCertificateFileName(serialNumber, expiryDate);
+    if (!fileName) return null;
+    
+    const encodedFileName = encodeURIComponent(fileName);
+    return `${SHAREPOINT_DOWNLOAD_BASE}/${encodedFileName}`;
 }
 
 // Add certificate URL to calibration record (uses stored URL only)
@@ -85,16 +87,13 @@ router.get('/', async (req, res) => {
             SELECT 
                 cr.id,
                 cr.equipment_id,
-                e.serial_number,
+                cr.serial_number,
                 cr.calibration_date,
                 cr.expiry_date,
                 cr.certificate_number,
-                CASE 
-                    WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
-                    WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
-                    ELSE 'Valid'
-                END AS calibration_status,
+                cr.calibration_status,
                 cr.calibration_provider,
+                cr.certificate_file_url,
                 cr.notes,
                 cr.created_at,
                 e.equipment_id AS equipment_code,
@@ -104,115 +103,18 @@ router.get('/', async (req, res) => {
             FROM calibration_records cr
             LEFT JOIN equipment e ON cr.equipment_id = e.id
             LEFT JOIN categories c ON e.category_id = c.id
+            WHERE 1=1
         `;
         const params = [];
         let paramCount = 0;
-        const conditions = [];
 
         if (status) {
-            // Filter by computed status using CASE expression
-            conditions.push(`CASE 
-                WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
-                WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
-                ELSE 'Valid'
-            END = $${++paramCount}`);
+            paramCount++;
+            query += ` AND cr.calibration_status = $${paramCount}`;
             params.push(status);
         }
 
         if (category) {
-            paramCount++;
-            conditions.push(`c.name = $${paramCount}`);
-            params.push(category);
-        }
-
-        if (search) {
-            paramCount++;
-            conditions.push(`(
-                e.equipment_name ILIKE $${paramCount} 
-                OR e.serial_number ILIKE $${paramCount}
-                OR e.manufacturer ILIKE $${paramCount}
-                OR e.equipment_id ILIKE $${paramCount}
-            )`);
-            params.push(`%${search}%`);
-        }
-
-        if (conditions.length > 0) {
-            query += ' WHERE ' + conditions.join(' AND ');
-        }
-
-        query += ` ORDER BY 
-            CASE 
-                WHEN cr.expiry_date < CURRENT_DATE THEN 1
-                WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 2
-                ELSE 3
-            END,
-            cr.expiry_date ASC NULLS LAST`;
-
-        const result = await pool.query(query, params);
-        res.json(result.rows || []);
-    } catch (err) {
-        console.error('Error fetching calibration records:', err.message);
-        res.status(500).json({ error: 'Failed to fetch calibration records', details: err.message });
-    }
-});
-
-// ============================================
-// GET EQUIPMENT CALIBRATION STATUS (for Calibration Management page)
-// ============================================
-
-router.get('/status', async (req, res) => {
-    try {
-        const { status, category, search } = req.query;
-        
-        // Get all calibration records with latest expiry per equipment
-        let query = `
-            SELECT 
-                e.id,
-                e.equipment_id AS equipment_code,
-                e.equipment_name,
-                e.serial_number,
-                e.manufacturer,
-                c.name AS category,
-                cr.id AS calibration_record_id,
-                cr.calibration_date AS last_calibration_date,
-                cr.expiry_date AS calibration_expiry_date,
-                cr.certificate_number,
-                CASE 
-                    WHEN cr.expiry_date IS NULL THEN 'Not Calibrated'
-                    WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
-                    WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
-                    ELSE 'Valid'
-                END AS calibration_status,
-                CASE 
-                    WHEN cr.expiry_date IS NULL THEN NULL
-                    ELSE cr.expiry_date - CURRENT_DATE
-                END AS days_until_expiry
-            FROM calibration_records cr
-            JOIN equipment e ON cr.equipment_id = e.id
-            LEFT JOIN categories c ON e.category_id = c.id
-            WHERE cr.id = (
-                SELECT cr2.id FROM calibration_records cr2 
-                WHERE cr2.equipment_id = cr.equipment_id 
-                ORDER BY cr2.expiry_date DESC NULLS LAST 
-                LIMIT 1
-            )
-        `;
-        
-        const params = [];
-        let paramCount = 0;
-
-        if (status && status !== 'All Statuses') {
-            paramCount++;
-            query += ` AND CASE 
-                WHEN cr.expiry_date IS NULL THEN 'Not Calibrated'
-                WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
-                WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
-                ELSE 'Valid'
-            END = $${paramCount}`;
-            params.push(status);
-        }
-
-        if (category && category !== 'All Categories') {
             paramCount++;
             query += ` AND c.name = $${paramCount}`;
             params.push(category);
@@ -222,7 +124,7 @@ router.get('/status', async (req, res) => {
             paramCount++;
             query += ` AND (
                 e.equipment_name ILIKE $${paramCount} 
-                OR e.serial_number ILIKE $${paramCount}
+                OR cr.serial_number ILIKE $${paramCount}
                 OR e.manufacturer ILIKE $${paramCount}
                 OR e.equipment_id ILIKE $${paramCount}
             )`;
@@ -230,107 +132,22 @@ router.get('/status', async (req, res) => {
         }
 
         query += ` ORDER BY 
-            CASE 
-                WHEN cr.expiry_date IS NULL THEN 4
-                WHEN cr.expiry_date < CURRENT_DATE THEN 1
-                WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 2
-                ELSE 3
+            CASE cr.calibration_status 
+                WHEN 'Expired' THEN 1 
+                WHEN 'Due Soon' THEN 2 
+                WHEN 'Valid' THEN 3
+                ELSE 4
             END,
             cr.expiry_date ASC NULLS LAST`;
 
         const result = await pool.query(query, params);
-        res.json(result.rows || []);
+        
+        // Add certificate URLs to each record
+        const recordsWithUrls = result.rows.map(addCertificateUrl);
+        res.json(recordsWithUrls);
     } catch (err) {
-        console.error('Error fetching calibration status:', err.message);
-        res.status(500).json({ error: 'Failed to fetch calibration status', details: err.message });
-    }
-});
-
-// ============================================
-// EXPORT CALIBRATION DATA TO EXCEL
-// ============================================
-
-router.get('/export', async (req, res) => {
-    try {
-        // Get all calibration data
-        const result = await pool.query(`
-            SELECT 
-                e.equipment_id AS "Equipment ID",
-                e.equipment_name AS "Equipment Name",
-                c.name AS "Category",
-                e.serial_number AS "Serial Number",
-                e.manufacturer AS "Manufacturer",
-                cr.calibration_date AS "Last Calibration",
-                cr.expiry_date AS "Expiry Date",
-                cr.expiry_date - CURRENT_DATE AS "Days Until Expiry",
-                CASE 
-                    WHEN cr.expiry_date IS NULL THEN 'Not Calibrated'
-                    WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
-                    WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
-                    ELSE 'Valid'
-                END AS "Status",
-                cr.certificate_number AS "Certificate Number",
-                cr.calibration_provider AS "Calibration Provider"
-            FROM calibration_records cr
-            JOIN equipment e ON cr.equipment_id = e.id
-            LEFT JOIN categories c ON e.category_id = c.id
-            WHERE cr.id = (
-                SELECT cr2.id FROM calibration_records cr2 
-                WHERE cr2.equipment_id = cr.equipment_id 
-                ORDER BY cr2.expiry_date DESC NULLS LAST 
-                LIMIT 1
-            )
-            ORDER BY 
-                CASE 
-                    WHEN cr.expiry_date IS NULL THEN 4
-                    WHEN cr.expiry_date < CURRENT_DATE THEN 1
-                    WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 2
-                    ELSE 3
-                END,
-                cr.expiry_date ASC NULLS LAST
-        `);
-        
-        // Format dates for Excel
-        const data = result.rows.map(row => ({
-            ...row,
-            'Last Calibration': row['Last Calibration'] ? new Date(row['Last Calibration']).toLocaleDateString('en-ZA') : '-',
-            'Expiry Date': row['Expiry Date'] ? new Date(row['Expiry Date']).toLocaleDateString('en-ZA') : '-',
-            'Days Until Expiry': row['Days Until Expiry'] !== null ? parseInt(row['Days Until Expiry']) : '-'
-        }));
-        
-        // Create workbook
-        const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.json_to_sheet(data);
-        
-        // Set column widths
-        ws['!cols'] = [
-            { wch: 12 },  // Equipment ID
-            { wch: 25 },  // Equipment Name
-            { wch: 20 },  // Category
-            { wch: 15 },  // Serial Number
-            { wch: 25 },  // Manufacturer
-            { wch: 15 },  // Last Calibration
-            { wch: 15 },  // Expiry Date
-            { wch: 15 },  // Days Until Expiry
-            { wch: 12 },  // Status
-            { wch: 20 },  // Certificate Number
-            { wch: 30 },  // Calibration Provider
-        ];
-        
-        XLSX.utils.book_append_sheet(wb, ws, 'Calibration Status');
-        
-        // Generate buffer
-        const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-        
-        // Set headers for download
-        const filename = `Calibration_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        
-        res.send(buffer);
-    } catch (err) {
-        console.error('Error exporting calibration data:', err);
-        res.status(500).json({ error: 'Failed to export calibration data', details: err.message });
+        console.error('Error fetching calibration records:', err);
+        res.status(500).json({ error: 'Failed to fetch calibration records' });
     }
 });
 
@@ -342,26 +159,24 @@ router.get('/summary', async (req, res) => {
     try {
         const result = await pool.query(`
             SELECT 
-                CASE 
-                    WHEN cr.expiry_date IS NULL THEN 'Not Calibrated'
-                    WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
-                    WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
-                    ELSE 'Valid'
-                END as calibration_status,
+                calibration_status,
                 COUNT(*) as count
-            FROM (
-                SELECT DISTINCT ON (equipment_id) equipment_id, expiry_date
-                FROM calibration_records
-                ORDER BY equipment_id, expiry_date DESC NULLS LAST
-            ) cr
-            GROUP BY 1
+            FROM calibration_records
+            GROUP BY calibration_status
+            ORDER BY 
+                CASE calibration_status 
+                    WHEN 'Expired' THEN 1 
+                    WHEN 'Due Soon' THEN 2 
+                    WHEN 'Valid' THEN 3
+                    ELSE 4
+                END
         `);
         
-        const totalResult = await pool.query(`SELECT COUNT(DISTINCT equipment_id) as total FROM calibration_records`);
+        const totalResult = await pool.query(`SELECT COUNT(*) as total FROM calibration_records`);
 
         res.json({
-            summary: Array.isArray(result.rows) ? result.rows : [],
-            total: parseInt(totalResult.rows[0]?.total || 0)
+            summary: result.rows,
+            total: parseInt(totalResult.rows[0].total)
         });
     } catch (err) {
         console.error('Error fetching calibration summary:', err);
@@ -378,14 +193,9 @@ router.get('/due', async (req, res) => {
         const result = await pool.query(`
             SELECT 
                 cr.id,
-                e.serial_number,
+                cr.serial_number,
                 cr.expiry_date,
-                CASE 
-                    WHEN cr.expiry_date IS NULL THEN 'N/A'
-                    WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
-                    WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
-                    ELSE 'Valid'
-                END as calibration_status,
+                cr.calibration_status,
                 cr.certificate_number,
                 e.equipment_id AS equipment_code,
                 e.equipment_name,
@@ -395,8 +205,8 @@ router.get('/due', async (req, res) => {
             FROM calibration_records cr
             JOIN equipment e ON cr.equipment_id = e.id
             LEFT JOIN categories c ON e.category_id = c.id
-            WHERE cr.expiry_date IS NOT NULL 
-              AND cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days'
+            WHERE cr.calibration_status IN ('Expired', 'Due Soon')
+               OR cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days'
             ORDER BY cr.expiry_date ASC
         `);
         res.json(result.rows);
@@ -429,31 +239,22 @@ router.get('/history/:equipmentId', async (req, res) => {
         const result = await pool.query(`
             SELECT 
                 cr.id,
-                e.serial_number,
+                cr.serial_number,
                 cr.calibration_date,
                 cr.expiry_date,
                 cr.certificate_number,
                 cr.calibration_provider,
-                CASE 
-                    WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
-                    WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
-                    ELSE 'Valid'
-                END AS calibration_status,
+                cr.calibration_status,
+                cr.certificate_file_url,
                 cr.notes,
                 cr.created_at
             FROM calibration_records cr
-            LEFT JOIN equipment e ON cr.equipment_id = e.id
             WHERE cr.equipment_id = $1
             ORDER BY cr.calibration_date DESC
         `, [dbEquipmentId]);
 
-        // Add certificate URLs and filenames to each record
-        const recordsWithUrls = result.rows.map(record => ({
-            ...record,
-            certificate_file_url: generateCertificateUrl(record.serial_number, record.expiry_date),
-            certificate_filename: generateCertificateFileName(record.serial_number, record.expiry_date)
-        }));
-
+        // Add certificate URLs to each record
+        const recordsWithUrls = result.rows.map(addCertificateUrl);
         res.json(recordsWithUrls);
     } catch (err) {
         console.error('Error fetching calibration history:', err);
@@ -470,20 +271,7 @@ router.get('/:id', async (req, res) => {
         const { id } = req.params;
         const result = await pool.query(`
             SELECT 
-                cr.id,
-                cr.equipment_id,
-                e.serial_number,
-                cr.calibration_date,
-                cr.expiry_date,
-                cr.certificate_number,
-                cr.calibration_provider,
-                CASE 
-                    WHEN cr.expiry_date < CURRENT_DATE THEN 'Expired'
-                    WHEN cr.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
-                    ELSE 'Valid'
-                END AS calibration_status,
-                cr.notes,
-                cr.created_at,
+                cr.*,
                 e.equipment_id AS equipment_code,
                 e.equipment_name,
                 e.manufacturer,
@@ -498,7 +286,7 @@ router.get('/:id', async (req, res) => {
             return res.status(404).json({ error: 'Calibration record not found' });
         }
 
-        res.json(result.rows[0]);
+        res.json(addCertificateUrl(result.rows[0]));
     } catch (err) {
         console.error('Error fetching calibration record:', err);
         res.status(500).json({ error: 'Failed to fetch calibration record' });
@@ -518,6 +306,7 @@ router.post('/', upload.single('certificate'), async (req, res) => {
             expiry_date,
             certificate_number,
             calibration_provider,
+            calibration_status,
             notes
         } = req.body;
 
@@ -540,30 +329,28 @@ router.post('/', upload.single('certificate'), async (req, res) => {
             }
         }
 
+        // Calculate status if not provided
+        const today = new Date();
+        const expiry = new Date(expiry_date);
+        const daysUntilExpiry = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
+        
+        let status = calibration_status;
+        if (!status) {
+            if (daysUntilExpiry < 0) status = 'Expired';
+            else if (daysUntilExpiry <= 30) status = 'Due Soon';
+            else status = 'Valid';
+        }
+
         const result = await pool.query(`
             INSERT INTO calibration_records (
                 equipment_id, serial_number, calibration_date, expiry_date,
-                certificate_number, calibration_provider, notes
+                certificate_number, calibration_provider, calibration_status, notes
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            RETURNING 
-                id,
-                equipment_id,
-                serial_number,
-                calibration_date,
-                expiry_date,
-                certificate_number,
-                calibration_provider,
-                notes,
-                created_at,
-                CASE 
-                    WHEN expiry_date < CURRENT_DATE THEN 'Expired'
-                    WHEN expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
-                    ELSE 'Valid'
-                END AS calibration_status
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING *
         `, [
             equipmentInternalId, serial_number, calibration_date, expiry_date,
-            certificate_number, calibration_provider, notes
+            certificate_number, calibration_provider, status, notes
         ]);
 
         res.status(201).json(result.rows[0]);
@@ -585,6 +372,7 @@ router.put('/:id', async (req, res) => {
             expiry_date,
             certificate_number,
             calibration_provider,
+            calibration_status,
             notes
         } = req.body;
 
@@ -594,26 +382,12 @@ router.put('/:id', async (req, res) => {
                 expiry_date = COALESCE($2, expiry_date),
                 certificate_number = COALESCE($3, certificate_number),
                 calibration_provider = COALESCE($4, calibration_provider),
-                notes = COALESCE($5, notes),
+                calibration_status = COALESCE($5, calibration_status),
+                notes = COALESCE($6, notes),
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = $6
-            RETURNING 
-                id,
-                equipment_id,
-                serial_number,
-                calibration_date,
-                expiry_date,
-                certificate_number,
-                calibration_provider,
-                notes,
-                created_at,
-                updated_at,
-                CASE 
-                    WHEN expiry_date < CURRENT_DATE THEN 'Expired'
-                    WHEN expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
-                    ELSE 'Valid'
-                END AS calibration_status
-        `, [calibration_date, expiry_date, certificate_number, calibration_provider, notes, id]);
+            WHERE id = $7
+            RETURNING *
+        `, [calibration_date, expiry_date, certificate_number, calibration_provider, calibration_status, notes, id]);
 
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Calibration record not found' });
@@ -655,45 +429,70 @@ router.delete('/:id', async (req, res) => {
 
 router.post('/update-statuses', async (req, res) => {
     try {
-        // Status is now computed dynamically from expiry_date in all queries
-        // This endpoint is kept for backwards compatibility but doesn't need to update anything
+        // Update all calibration statuses based on expiry dates
         const result = await pool.query(`
-            SELECT COUNT(*) as count FROM calibration_records WHERE expiry_date IS NOT NULL
+            UPDATE calibration_records SET
+                calibration_status = CASE
+                    WHEN expiry_date < CURRENT_DATE THEN 'Expired'
+                    WHEN expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                    ELSE 'Valid'
+                END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE expiry_date IS NOT NULL
+            RETURNING id, calibration_status
         `);
 
         res.json({
-            message: 'Calibration statuses are computed dynamically',
-            count: parseInt(result.rows[0].count)
+            message: 'Calibration statuses updated',
+            updated: result.rows.length
         });
     } catch (err) {
-        console.error('Error fetching calibration count:', err);
-        res.status(500).json({ error: 'Failed to process request' });
+        console.error('Error updating calibration statuses:', err);
+        res.status(500).json({ error: 'Failed to update calibration statuses' });
     }
 });
 
 // ============================================
-// SERVE CERTIFICATE FILE - Redirects to SharePoint folder
+// SERVE CERTIFICATE FILE
 // ============================================
 
 router.get('/:id/certificate', async (req, res) => {
     try {
         const { id } = req.params;
         
-        // Get the calibration record to find the serial number
-        const result = await pool.query(`
-            SELECT cr.*, e.serial_number 
-            FROM calibration_records cr 
-            JOIN equipment e ON cr.equipment_id = e.id 
-            WHERE cr.id = $1
-        `, [id]);
+        const result = await pool.query(
+            'SELECT certificate_file_url FROM calibration_records WHERE id = $1',
+            [id]
+        );
         
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Calibration record not found' });
         }
         
-        // Redirect to SharePoint folder where certificates are stored
-        // User can search for their certificate by serial number
-        res.redirect(SHAREPOINT_FOLDER_URL);
+        const fileUrl = result.rows[0].certificate_file_url;
+        
+        if (!fileUrl) {
+            return res.status(404).json({ error: 'No certificate file linked' });
+        }
+        
+        // If it's a web URL (SharePoint, etc.), redirect to it
+        if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+            return res.redirect(fileUrl);
+        }
+        
+        // Convert file:// URL to local path
+        let filePath = fileUrl;
+        if (fileUrl.startsWith('file:///')) {
+            filePath = decodeURIComponent(fileUrl.replace('file:///', ''));
+        }
+        
+        // Check if file exists
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ error: 'Certificate file not found on disk' });
+        }
+        
+        // Serve the file
+        res.sendFile(filePath);
     } catch (err) {
         console.error('Error serving certificate:', err);
         res.status(500).json({ error: 'Failed to serve certificate' });

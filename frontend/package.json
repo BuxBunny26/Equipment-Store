@@ -4,12 +4,11 @@
   "description": "Equipment Store Inventory Management UI",
   "private": true,
   "dependencies": {
-    "@supabase/supabase-js": "^2.98.0",
-    "axios": "^1.6.2",
+    "@supabase/supabase-js": "^2.47.10",
+    "eslint-plugin-react-hooks": "^4.6.0",
     "file-saver": "^2.0.5",
-    "http-proxy-middleware": "^3.0.5",
-    "jspdf": "^4.2.0",
-    "jspdf-autotable": "^5.0.7",
+    "jspdf": "^2.5.2",
+    "jspdf-autotable": "^3.8.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.1",
@@ -22,7 +21,6 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
-  "proxy": "http://localhost:3001",
   "browserslist": {
     "production": [
       ">0.2%",

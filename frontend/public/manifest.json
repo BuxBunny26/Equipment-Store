@@ -6,8 +6,19 @@
     {
       "src": "favicon.ico",
       "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon",
-      "purpose": "any"
+      "type": "image/x-icon"
+    },
+    {
+      "src": "logo192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "logo512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ],
   "start_url": ".",
@@ -26,28 +37,28 @@
       "short_name": "Check Out",
       "description": "Check out equipment to personnel",
       "url": "/check-out",
-      "icons": [{ "src": "favicon.ico", "sizes": "64x64" }]
+      "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
     },
     {
       "name": "Check In Equipment",
       "short_name": "Check In",
       "description": "Return equipment to storage",
       "url": "/check-in",
-      "icons": [{ "src": "favicon.ico", "sizes": "64x64" }]
+      "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
     },
     {
       "name": "Equipment List",
       "short_name": "Equipment",
       "description": "View all equipment",
       "url": "/equipment",
-      "icons": [{ "src": "favicon.ico", "sizes": "64x64" }]
+      "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
     },
     {
       "name": "Reservations",
       "short_name": "Reservations",
       "description": "Manage equipment reservations",
       "url": "/reservations",
-      "icons": [{ "src": "favicon.ico", "sizes": "64x64" }]
+      "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
     }
   ]
 }
