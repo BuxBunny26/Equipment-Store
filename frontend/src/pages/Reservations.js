@@ -16,7 +16,7 @@ function Reservations() {
   const [selectedCategory, setSelectedCategory] = useState('');
   
   const [filters, setFilters] = useState({
-    status: '',
+    status: 'active_upcoming',
     equipment_id: '',
     start_date: '',
     end_date: '',
@@ -41,13 +41,22 @@ function Reservations() {
     try {
       setLoading(true);
       const params = {};
-      if (filters.status) params.status = filters.status;
+      if (filters.status && filters.status !== 'active_upcoming') params.status = filters.status;
       if (filters.equipment_id) params.equipment_id = filters.equipment_id;
       if (filters.start_date) params.start_date = filters.start_date;
       if (filters.end_date) params.end_date = filters.end_date;
       
       const response = await reservationsApi.getAll(params);
-      setReservations(response.data);
+      let data = response.data;
+      // Default filter: show only active/upcoming reservations
+      if (filters.status === 'active_upcoming') {
+        const today = new Date().toISOString().split('T')[0];
+        data = data.filter(r =>
+          ['pending', 'approved', 'active'].includes(r.status?.toLowerCase()) &&
+          r.end_date >= today
+        );
+      }
+      setReservations(data);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -97,7 +106,8 @@ function Reservations() {
         const checkedOut = (checkedOutRes.data || []).find(
           eq => eq.id === parseInt(formData.equipment_id) &&
             eq.expected_return_date &&
-            eq.expected_return_date >= formData.start_date
+            eq.expected_return_date >= formData.start_date &&
+            eq.checked_out_at <= formData.end_date
         );
         setCheckoutConflict(checkedOut || null);
       } catch (err) {
@@ -254,6 +264,7 @@ function Reservations() {
               value={filters.status}
               onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
             >
+              <option value="active_upcoming">Active & Upcoming</option>
               <option value="">All</option>
               <option value="pending">Pending</option>
               <option value="approved">Approved</option>
@@ -467,6 +478,7 @@ function Reservations() {
                       type="date"
                       className="form-input"
                       value={formData.start_date}
+                      min={new Date().toISOString().split('T')[0]}
                       onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value }))}
                       required
                     />
@@ -477,11 +489,18 @@ function Reservations() {
                       type="date"
                       className="form-input"
                       value={formData.end_date}
+                      min={formData.start_date || new Date().toISOString().split('T')[0]}
                       onChange={(e) => setFormData(prev => ({ ...prev, end_date: e.target.value }))}
                       required
                     />
                   </div>
                 </div>
+
+                {formData.start_date && formData.end_date && formData.end_date < formData.start_date && (
+                  <div className="alert alert-error" style={{ marginBottom: '1rem' }}>
+                    End date must be on or after the start date.
+                  </div>
+                )}
 
                 {availability && !availability.available && (
                   <div className="alert alert-error" style={{ marginBottom: '1rem' }}>
@@ -576,7 +595,7 @@ function Reservations() {
                 <button 
                   type="submit" 
                   className="btn btn-primary"
-                  disabled={submitting || (availability && !availability.available) || !!checkoutConflict}
+                  disabled={submitting || (availability && !availability.available) || !!checkoutConflict || (formData.start_date && formData.end_date && formData.end_date < formData.start_date)}
                 >
                   {submitting ? 'Saving...' : (editingReservation ? 'Update' : 'Create Reservation')}
                 </button>

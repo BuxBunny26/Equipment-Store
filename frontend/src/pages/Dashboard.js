@@ -75,10 +75,12 @@ function Dashboard() {
       const todayReservations = approvedRes.data.filter(r => 
         r.start_date <= today && r.end_date >= today
       );
+      // Only count approved reservations that haven't expired
+      const activeApproved = approvedRes.data.filter(r => r.end_date >= today);
       
       setReservationStats({
         pending: pendingRes.data.length,
-        approved: approvedRes.data.length,
+        approved: activeApproved.length,
         today: todayReservations.slice(0, 5),
       });
     } catch (err) {

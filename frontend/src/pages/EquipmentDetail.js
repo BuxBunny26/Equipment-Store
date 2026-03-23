@@ -178,6 +178,21 @@ function EquipmentDetail() {
             </div>
           )}
 
+          {equipment.status === 'Checked Out' && history.length > 0 && (() => {
+            const latestOut = history.find(m => m.action === 'OUT');
+            if (!latestOut?.expected_return_date) return null;
+            const isOverdue = new Date() > new Date(latestOut.expected_return_date);
+            return (
+              <div>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Expected Return</p>
+                <p style={{ fontWeight: 500, color: isOverdue ? 'var(--error-color)' : 'inherit' }}>
+                  {formatDateOnly(latestOut.expected_return_date)}
+                  {isOverdue && ' (Overdue)'}
+                </p>
+              </div>
+            );
+          })()}
+
           {equipment.last_action_timestamp && (
             <div>
               <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Last Action</p>

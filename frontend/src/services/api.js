@@ -212,7 +212,7 @@ export const equipmentApi = {
 
     getHistory: (id, limit = 50) => wrap(
         supabase.from('equipment_movements')
-            .select(`id, action, quantity, notes, photo_url, created_at, created_by, locations(name), personnel(full_name, employee_id)`)
+            .select(`id, action, quantity, notes, photo_url, created_at, created_by, expected_checkout_date, expected_return_date, locations(name), personnel(full_name, employee_id)`)
             .eq('equipment_id', id)
             .order('created_at', { ascending: false })
             .limit(limit)

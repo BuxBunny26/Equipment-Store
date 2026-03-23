@@ -276,6 +276,7 @@ function OverdueReport({ data, formatDate }) {
               <th>Checked Out To</th>
               <th>Location</th>
               <th>Checked Out</th>
+              <th>Expected Return</th>
               <th>Days Overdue</th>
             </tr>
           </thead>
@@ -301,6 +302,11 @@ function OverdueReport({ data, formatDate }) {
                 </td>
                 <td>{item.current_location}</td>
                 <td style={{ fontSize: '0.8rem' }}>{formatDate(item.checked_out_at)}</td>
+                <td style={{ fontSize: '0.8rem' }}>
+                  {item.expected_return_date
+                    ? new Date(item.expected_return_date).toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' })
+                    : '-'}
+                </td>
                 <td>
                   <span className="badge badge-overdue">{item.days_overdue} days</span>
                 </td>
@@ -336,6 +342,7 @@ function CheckedOutReport({ data, formatDate }) {
             <th>Checked Out To</th>
             <th>Location</th>
             <th>Checked Out</th>
+            <th>Expected Return</th>
             <th>Days Out</th>
             <th>Status</th>
           </tr>
@@ -350,6 +357,11 @@ function CheckedOutReport({ data, formatDate }) {
               <td>{item.checked_out_to}</td>
               <td>{item.current_location}</td>
               <td style={{ fontSize: '0.8rem' }}>{formatDate(item.checked_out_at)}</td>
+              <td style={{ fontSize: '0.8rem' }}>
+                {item.expected_return_date
+                  ? new Date(item.expected_return_date).toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' })
+                  : '-'}
+              </td>
               <td>{item.days_out}</td>
               <td>
                 {item.is_overdue ? (

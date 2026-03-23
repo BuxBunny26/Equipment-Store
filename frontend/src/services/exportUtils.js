@@ -139,6 +139,7 @@ export const EXPORT_COLUMNS = {
         { label: 'Employee ID', accessor: 'holder_employee_id' },
         { label: 'Location', accessor: 'current_location' },
         { label: 'Checked Out', accessor: r => r.checked_out_at ? new Date(r.checked_out_at).toLocaleDateString() : '' },
+        { label: 'Expected Return', accessor: r => r.expected_return_date ? new Date(r.expected_return_date).toLocaleDateString() : '' },
         { label: 'Days Out', accessor: 'days_out' },
         { label: 'Overdue', accessor: r => r.is_overdue ? 'Yes' : 'No' },
     ],
@@ -152,6 +153,7 @@ export const EXPORT_COLUMNS = {
         { label: 'Employee ID', accessor: 'holder_employee_id' },
         { label: 'Email', accessor: 'holder_email' },
         { label: 'Checked Out', accessor: r => r.checked_out_at ? new Date(r.checked_out_at).toLocaleDateString() : '' },
+        { label: 'Expected Return', accessor: r => r.expected_return_date ? new Date(r.expected_return_date).toLocaleDateString() : '' },
         { label: 'Days Overdue', accessor: 'days_overdue' },
     ],
 
