@@ -54,6 +54,8 @@ function CheckOut() {
     from_site_id: '',
     to_site_id: '',
     quantity: '',
+    expected_checkout_date: new Date().toISOString().split('T')[0],
+    expected_return_date: '',
   });
     // Helper: Should show reason field?
     const shouldShowReason = () => {
@@ -210,6 +212,8 @@ function CheckOut() {
               : null,
             personnel_id: parseInt(formData.personnel_id),
             is_transfer: formData.destination_type === 'transfer',
+            expected_checkout_date: formData.expected_checkout_date || null,
+            expected_return_date: formData.expected_return_date || null,
             notes: sanitize([
               formData.condition ? `Condition: ${formData.condition}` : null,
               formData.reason ? `Reason: ${formData.reason}` : null,
@@ -268,6 +272,8 @@ function CheckOut() {
         from_site_id: '',
         to_site_id: '',
         quantity: '',
+        expected_checkout_date: new Date().toISOString().split('T')[0],
+        expected_return_date: '',
       });
       setPhotoFile(null);
       setPhotoPreview(null);
@@ -884,6 +890,30 @@ function CheckOut() {
               )}
             </div>
 
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="form-group">
+                <label className="form-label">Expected Checkout Date</label>
+                <input
+                  type="date"
+                  name="expected_checkout_date"
+                  className="form-input"
+                  value={formData.expected_checkout_date}
+                  onChange={handleChange}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Expected Return Date</label>
+                <input
+                  type="date"
+                  name="expected_return_date"
+                  className="form-input"
+                  value={formData.expected_return_date}
+                  onChange={handleChange}
+                  min={formData.expected_checkout_date || undefined}
+                />
+              </div>
+            </div>
+
             <div className="form-group">
               <label className="form-label">Notes (Optional)</label>
               <textarea
@@ -892,7 +922,7 @@ function CheckOut() {
                 value={formData.notes}
                 onChange={handleChange}
                 rows={3}
-                placeholder="Purpose, expected return date, special instructions..."
+                placeholder="Purpose, special instructions..."
               />
             </div>
 

@@ -301,6 +301,15 @@ function CheckIn() {
                     <strong>At:</strong> {eq.current_location}
                     <br />
                     <strong>Since:</strong> {formatDate(eq.checked_out_at)}
+                    {eq.expected_return_date && (
+                      <>
+                        <br />
+                        <strong>Expected Return:</strong>{' '}
+                        <span style={{ color: eq.is_overdue ? 'var(--error-color)' : 'inherit', fontWeight: eq.is_overdue ? 600 : 'normal' }}>
+                          {formatDate(eq.expected_return_date)}
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
               ))
@@ -329,7 +338,15 @@ function CheckIn() {
                 </div>
                 {selectedEquipment.is_overdue && (
                   <div style={{ marginTop: '8px', color: 'var(--error-color)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Icons.Warning size={16} /> This item is overdue by {selectedEquipment.days_out - 14} days
+                    <Icons.Warning size={16} /> This item is overdue
+                    {selectedEquipment.expected_return_date
+                      ? ` — was due back ${formatDate(selectedEquipment.expected_return_date)}`
+                      : ` by ${selectedEquipment.days_out - 14} days`}
+                  </div>
+                )}
+                {selectedEquipment.expected_return_date && !selectedEquipment.is_overdue && (
+                  <div style={{ marginTop: '8px', fontSize: '0.875rem' }}>
+                    <strong>Expected Return:</strong> {formatDate(selectedEquipment.expected_return_date)}
                   </div>
                 )}
               </div>

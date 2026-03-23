@@ -232,6 +232,7 @@ export const movementsApi = {
             .select(`
                 id, equipment_id, action, quantity, location_id, customer_id,
                 personnel_id, photo_url, notes, created_at, created_by,
+                expected_checkout_date, expected_return_date,
                 equipment(equipment_id, equipment_name),
                 locations(name), customers(display_name),
                 personnel(full_name, employee_id)
@@ -271,6 +272,8 @@ export const movementsApi = {
                 p_notes: data.notes || null,
                 p_created_by: data.created_by || null,
                 p_is_transfer: data.is_transfer || false,
+                p_expected_checkout_date: data.expected_checkout_date || null,
+                p_expected_return_date: data.expected_return_date || null,
             })
         );
         if (photoFile) {

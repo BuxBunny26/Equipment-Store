@@ -230,12 +230,15 @@ CREATE TABLE equipment_movements (
     personnel_id INTEGER REFERENCES personnel(id),
     customer_id INTEGER REFERENCES customers(id),
     notes TEXT,
+    expected_checkout_date DATE,
+    expected_return_date DATE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(100)
 );
 
 CREATE INDEX idx_movements_equipment ON equipment_movements(equipment_id);
 CREATE INDEX idx_movements_created ON equipment_movements(created_at DESC);
+CREATE INDEX idx_movements_expected_return ON equipment_movements(expected_return_date);
 
 -- ============================================
 -- RESERVATIONS
