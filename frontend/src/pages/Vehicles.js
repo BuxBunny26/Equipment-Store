@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { vehiclesApi, vehicleCheckoutsApi, vehicleFinesApi, vehicleServicesApi, personnelApi } from '../services/api';
+import * as XLSX from 'xlsx';
 import { useOperator } from '../context/OperatorContext';
 import { Icons } from '../components/Icons';
 import { getAssetConfig } from './Settings';
+import { exportData } from '../services/exportUtils';
 
 const VEHICLE_STATUSES = [
   { value: 'Active', label: 'Active', badge: 'badge-available' },
@@ -47,17 +49,50 @@ function Vehicles() {
   const [fines, setFines] = useState([]);
   const [showFineModal, setShowFineModal] = useState(false);
   const [editFine, setEditFine] = useState(null);
+  const [fineSearch, setFineSearch] = useState('');
+  const [fineStatusFilter, setFineStatusFilter] = useState('');
+  const [fineVehicleFilter, setFineVehicleFilter] = useState('');
 
   // Services data
   const [services, setServices] = useState([]);
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [editService, setEditService] = useState(null);
+  const [serviceSearch, setServiceSearch] = useState('');
+  const [serviceTypeFilter, setServiceTypeFilter] = useState('');
+  const [serviceVehicleFilter, setServiceVehicleFilter] = useState('');
 
   // Return modal
   const [returnCheckout, setReturnCheckout] = useState(null);
 
   // Detail view
   const [detailVehicle, setDetailVehicle] = useState(null);
+
+  // Sorting
+  const [sortCol, setSortCol] = useState('make');
+  const [sortDir, setSortDir] = useState('asc');
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  // Column visibility
+  const [hiddenColumns, setHiddenColumns] = useState(new Set());
+  const [showColumnToggle, setShowColumnToggle] = useState(false);
+
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [showBulkStatusModal, setShowBulkStatusModal] = useState(false);
+
+  // Import
+  const [showImportModal, setShowImportModal] = useState(false);
+
+  // Analytics
+  const [showFleetChart, setShowFleetChart] = useState(false);
+  const [showCostSummary, setShowCostSummary] = useState(false);
+
+  // Make filter
+  const [makeFilter, setMakeFilter] = useState('');
+  const [fuelFilter, setFuelFilter] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -134,6 +169,8 @@ function Vehicles() {
   // ---------- Filtering ----------
   const filteredVehicles = vehicles.filter(v => {
     if (statusFilter && v.vehicle_status !== statusFilter) return false;
+    if (makeFilter && v.make !== makeFilter) return false;
+    if (fuelFilter && v.fuel_type !== fuelFilter) return false;
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
@@ -159,6 +196,275 @@ function Vehicles() {
       c.destination?.toLowerCase().includes(term)
     );
   });
+
+  const filteredFines = fines.filter(f => {
+    if (fineStatusFilter && f.status !== fineStatusFilter) return false;
+    if (fineVehicleFilter && String(f.vehicle_id) !== fineVehicleFilter) return false;
+    if (!fineSearch) return true;
+    const term = fineSearch.toLowerCase();
+    return (
+      f.driver_name?.toLowerCase().includes(term) ||
+      f.vehicles?.registration_number?.toLowerCase().includes(term) ||
+      f.fine_type?.toLowerCase().includes(term) ||
+      f.fine_reference?.toLowerCase().includes(term)
+    );
+  });
+
+  const filteredServices = services.filter(s => {
+    if (serviceTypeFilter && s.service_type !== serviceTypeFilter) return false;
+    if (serviceVehicleFilter && String(s.vehicle_id) !== serviceVehicleFilter) return false;
+    if (!serviceSearch) return true;
+    const term = serviceSearch.toLowerCase();
+    return (
+      s.vehicles?.registration_number?.toLowerCase().includes(term) ||
+      s.vehicles?.make?.toLowerCase().includes(term) ||
+      s.service_provider?.toLowerCase().includes(term) ||
+      s.description?.toLowerCase().includes(term)
+    );
+  });
+
+  // ---------- Sorting ----------
+  const handleSort = (col) => {
+    if (sortCol === col) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
+  };
+
+  const sortedFiltered = useMemo(() => {
+    const sorted = [...filteredVehicles];
+    sorted.sort((a, b) => {
+      let av = a[sortCol], bv = b[sortCol];
+      if (av == null) av = '';
+      if (bv == null) bv = '';
+      if (typeof av === 'number' && typeof bv === 'number') return sortDir === 'asc' ? av - bv : bv - av;
+      return sortDir === 'asc' ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
+    });
+    return sorted;
+  }, [filteredVehicles, sortCol, sortDir]);
+
+  // ---------- Pagination ----------
+  const totalPages = Math.max(1, Math.ceil(sortedFiltered.length / pageSize));
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return sortedFiltered.slice(start, start + pageSize);
+  }, [sortedFiltered, currentPage, pageSize]);
+
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, statusFilter, makeFilter, fuelFilter]);
+
+  // ---------- Bulk Selection ----------
+  const toggleSelect = useCallback((id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    if (selectedIds.size === paginatedData.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(paginatedData.map(r => r.id)));
+    }
+  }, [paginatedData, selectedIds]);
+
+  // ---------- Column Visibility ----------
+  const FLEET_COLUMNS = [
+    { key: 'vehicle', label: 'Vehicle' },
+    { key: 'registration', label: 'Registration' },
+    { key: 'fuel', label: 'Fuel' },
+    { key: 'assigned_to', label: 'Assigned To' },
+    { key: 'odometer', label: 'Odometer' },
+    { key: 'license_disk', label: 'License Disk' },
+    { key: 'next_service', label: 'Next Service' },
+    { key: 'status', label: 'Status' },
+    { key: 'actions', label: 'Actions' },
+  ];
+  const isColVisible = (key) => !hiddenColumns.has(key);
+  const toggleColumn = (key) => {
+    setHiddenColumns(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  // ---------- Analytics ----------
+  const makes = useMemo(() => [...new Set(vehicles.map(v => v.make).filter(Boolean))].sort(), [vehicles]);
+  const fuelTypes = useMemo(() => [...new Set(vehicles.map(v => v.fuel_type).filter(Boolean))].sort(), [vehicles]);
+
+  const statusBreakdown = useMemo(() => {
+    const counts = {};
+    vehicles.forEach(v => {
+      const s = v.vehicle_status || 'Unknown';
+      counts[s] = (counts[s] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [vehicles]);
+
+  const makeBreakdown = useMemo(() => {
+    const counts = {};
+    vehicles.filter(v => v.is_active).forEach(v => {
+      const m = v.make || 'Unknown';
+      counts[m] = (counts[m] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [vehicles]);
+
+  const fuelBreakdown = useMemo(() => {
+    const counts = {};
+    vehicles.filter(v => v.is_active).forEach(v => {
+      const f = v.fuel_type || 'Unknown';
+      counts[f] = (counts[f] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [vehicles]);
+
+  const costSummaryData = useMemo(() => {
+    const totalFines = fines.reduce((sum, f) => sum + (parseFloat(f.fine_amount) || 0), 0);
+    const unpaidFines = fines.filter(f => f.status === 'Unpaid').reduce((sum, f) => sum + (parseFloat(f.fine_amount) || 0), 0);
+    const totalServiceCost = services.reduce((sum, s) => sum + (parseFloat(s.cost) || 0), 0);
+    const vehicleCosts = {};
+    fines.forEach(f => {
+      const key = f.vehicles?.registration_number || 'Unknown';
+      if (!vehicleCosts[key]) vehicleCosts[key] = { fines: 0, services: 0, make: f.vehicles?.make, model: f.vehicles?.model };
+      vehicleCosts[key].fines += (parseFloat(f.fine_amount) || 0);
+    });
+    services.forEach(s => {
+      const key = s.vehicles?.registration_number || 'Unknown';
+      if (!vehicleCosts[key]) vehicleCosts[key] = { fines: 0, services: 0, make: s.vehicles?.make, model: s.vehicles?.model };
+      vehicleCosts[key].services += (parseFloat(s.cost) || 0);
+    });
+    return { totalFines, unpaidFines, totalServiceCost, vehicleCosts };
+  }, [fines, services]);
+
+  // ---------- Export ----------
+  const handleExport = (format) => {
+    const exportColumns = [
+      { label: 'Make', accessor: 'make' },
+      { label: 'Model', accessor: 'model' },
+      { label: 'Year', accessor: 'year' },
+      { label: 'Registration', accessor: 'registration_number' },
+      { label: 'Color', accessor: 'color' },
+      { label: 'Fuel Type', accessor: 'fuel_type' },
+      { label: 'VIN', accessor: 'vin_number' },
+      { label: 'QR Code', accessor: 'qr_code' },
+      { label: 'Assigned To', accessor: 'assigned_to' },
+      { label: 'Status', accessor: 'vehicle_status' },
+      { label: 'Odometer (km)', accessor: 'current_odometer' },
+      { label: 'License Disk Expiry', accessor: r => r.license_disk_expiry ? new Date(r.license_disk_expiry).toLocaleDateString() : '' },
+      { label: 'Registration Expiry', accessor: r => r.registration_expiry ? new Date(r.registration_expiry).toLocaleDateString() : '' },
+      { label: 'Next Service Date', accessor: r => r.next_service_date ? new Date(r.next_service_date).toLocaleDateString() : '' },
+      { label: 'Next Service Odometer', accessor: 'next_service_odometer' },
+      { label: 'Active', accessor: r => r.is_active ? 'Yes' : 'No' },
+      { label: 'Notes', accessor: 'notes' },
+    ];
+    exportData(format, sortedFiltered, exportColumns, 'vehicle_fleet', 'Vehicle Fleet Report');
+  };
+
+  const handleExportCheckouts = (format) => {
+    const exportColumns = [
+      { label: 'Vehicle', accessor: r => `${r.vehicles?.make || ''} ${r.vehicles?.model || ''}`.trim() },
+      { label: 'Registration', accessor: r => r.vehicles?.registration_number || '' },
+      { label: 'Driver', accessor: 'driver_name' },
+      { label: 'Supervisor', accessor: 'supervisor' },
+      { label: 'Date', accessor: r => r.checkout_date ? new Date(r.checkout_date).toLocaleDateString() : '' },
+      { label: 'Destination', accessor: 'destination' },
+      { label: 'Reason', accessor: 'reason_for_use' },
+      { label: 'Start Odometer', accessor: 'start_odometer' },
+      { label: 'End Odometer', accessor: 'end_odometer' },
+      { label: 'Distance (km)', accessor: r => r.end_odometer && r.start_odometer ? r.end_odometer - r.start_odometer : '' },
+      { label: 'Condition', accessor: 'vehicle_condition' },
+      { label: 'Status', accessor: r => r.is_returned ? (r.handed_over_to ? 'Handed Over' : 'Returned') : 'Out' },
+      { label: 'Return Location', accessor: 'return_location' },
+    ];
+    exportData(format, filteredCheckouts, exportColumns, 'vehicle_checkouts', 'Vehicle Checkouts Report');
+  };
+
+  const handleExportFines = (format) => {
+    const exportColumns = [
+      { label: 'Vehicle', accessor: r => `${r.vehicles?.make || ''} ${r.vehicles?.model || ''}`.trim() },
+      { label: 'Registration', accessor: r => r.vehicles?.registration_number || '' },
+      { label: 'Driver', accessor: 'driver_name' },
+      { label: 'Date', accessor: r => r.fine_date ? new Date(r.fine_date).toLocaleDateString() : '' },
+      { label: 'Type', accessor: 'fine_type' },
+      { label: 'Amount (R)', accessor: r => r.fine_amount ? parseFloat(r.fine_amount).toFixed(2) : '' },
+      { label: 'Reference', accessor: 'fine_reference' },
+      { label: 'Status', accessor: 'status' },
+      { label: 'Description', accessor: 'description' },
+    ];
+    exportData(format, filteredFines, exportColumns, 'vehicle_fines', 'Vehicle Fines Report');
+  };
+
+  const handleExportServices = (format) => {
+    const exportColumns = [
+      { label: 'Vehicle', accessor: r => `${r.vehicles?.make || ''} ${r.vehicles?.model || ''}`.trim() },
+      { label: 'Registration', accessor: r => r.vehicles?.registration_number || '' },
+      { label: 'Type', accessor: 'service_type' },
+      { label: 'Date', accessor: r => r.service_date ? new Date(r.service_date).toLocaleDateString() : '' },
+      { label: 'Odometer', accessor: 'odometer_at_service' },
+      { label: 'Provider', accessor: 'service_provider' },
+      { label: 'Cost (R)', accessor: r => r.cost ? parseFloat(r.cost).toFixed(2) : '' },
+      { label: 'Next Service Date', accessor: r => r.next_service_date ? new Date(r.next_service_date).toLocaleDateString() : '' },
+      { label: 'Description', accessor: 'description' },
+      { label: 'Status', accessor: 'status' },
+    ];
+    exportData(format, filteredServices, exportColumns, 'vehicle_services', 'Vehicle Services Report');
+  };
+
+  // ---------- Print ----------
+  const handlePrint = () => {
+    const rows = sortedFiltered.map(v => ({
+      vehicle: `${v.make} ${v.model}`,
+      reg: v.registration_number || '',
+      year: v.year || '',
+      fuel: v.fuel_type || '',
+      assigned: v.assigned_to || '',
+      odometer: v.current_odometer ? v.current_odometer.toLocaleString() + ' km' : '-',
+      license: v.license_disk_expiry ? new Date(v.license_disk_expiry).toLocaleDateString() : '-',
+      service: v.next_service_date ? new Date(v.next_service_date).toLocaleDateString() : '-',
+      status: v.vehicle_status || '',
+    }));
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html><head><title>Vehicle Fleet Report</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        h1 { font-size: 18px; margin-bottom: 4px; }
+        .subtitle { font-size: 12px; color: #666; margin-bottom: 16px; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        th { background: #333; color: white; padding: 6px 8px; text-align: left; }
+        td { padding: 5px 8px; border-bottom: 1px solid #ddd; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        .footer { margin-top: 16px; font-size: 10px; color: #999; }
+        @media print { body { padding: 0; } }
+      </style></head><body>
+      <h1>Vehicle Fleet Report</h1>
+      <div class="subtitle">Generated: ${new Date().toLocaleDateString()} | Records: ${rows.length}</div>
+      <table>
+        <thead><tr>
+          <th>Vehicle</th><th>Registration</th><th>Year</th><th>Fuel</th><th>Assigned To</th><th>Odometer</th><th>License Expiry</th><th>Next Service</th><th>Status</th>
+        </tr></thead>
+        <tbody>${rows.map(r => `
+          <tr><td>${r.vehicle}</td><td style="font-family:monospace">${r.reg}</td><td>${r.year}</td><td>${r.fuel}</td><td>${r.assigned}</td><td>${r.odometer}</td><td>${r.license}</td><td>${r.service}</td><td>${r.status}</td></tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="footer">Equipment Store - Vehicle Fleet</div>
+      </body></html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 300);
+  };
+
+  const SortHeader = ({ col, label }) => (
+    <th onClick={() => handleSort(col)} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+      {label} {sortCol === col ? (sortDir === 'asc' ? '\u25B2' : '\u25BC') : <span style={{ opacity: 0.3 }}>{'\u25B2'}</span>}
+    </th>
+  );
 
   // ---------- Alerts ----------
   const licenseDiskAlerts = vehicles.filter(v => {
@@ -198,7 +504,63 @@ function Vehicles() {
           <h1 className="page-title">Vehicles</h1>
           <p className="page-subtitle">Manage company vehicles, checkouts, fines, and services</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {activeTab === 'fleet' && (
+            <>
+              <button className="btn btn-secondary" onClick={() => handleExport('csv')} title="Export CSV">
+                <Icons.Download size={14} /> CSV
+              </button>
+              <button className="btn btn-secondary" onClick={() => handleExport('excel')} title="Export Excel">
+                <Icons.Download size={14} /> Excel
+              </button>
+              <button className="btn btn-secondary" onClick={() => handleExport('pdf')} title="Export PDF">
+                <Icons.Download size={14} /> PDF
+              </button>
+              <button className="btn btn-secondary" onClick={handlePrint} title="Print">
+                <Icons.Printer size={14} /> Print
+              </button>
+              {isAdminOrManager && (
+                <button className="btn btn-secondary" onClick={() => setShowImportModal(true)} title="Bulk Import">
+                  <Icons.Upload size={14} /> Import
+                </button>
+              )}
+              {isAdminOrManager && selectedIds.size > 0 && (
+                <button className="btn btn-secondary" onClick={() => setShowBulkStatusModal(true)} title="Bulk Status Update" style={{ borderColor: 'var(--primary-color)' }}>
+                  <Icons.Check size={14} /> Update {selectedIds.size} selected
+                </button>
+              )}
+            </>
+          )}
+          {activeTab === 'checkouts' && (
+            <>
+              <button className="btn btn-secondary" onClick={() => handleExportCheckouts('csv')} title="Export CSV">
+                <Icons.Download size={14} /> CSV
+              </button>
+              <button className="btn btn-secondary" onClick={() => handleExportCheckouts('excel')} title="Export Excel">
+                <Icons.Download size={14} /> Excel
+              </button>
+            </>
+          )}
+          {activeTab === 'fines' && (
+            <>
+              <button className="btn btn-secondary" onClick={() => handleExportFines('csv')} title="Export CSV">
+                <Icons.Download size={14} /> CSV
+              </button>
+              <button className="btn btn-secondary" onClick={() => handleExportFines('excel')} title="Export Excel">
+                <Icons.Download size={14} /> Excel
+              </button>
+            </>
+          )}
+          {activeTab === 'services' && (
+            <>
+              <button className="btn btn-secondary" onClick={() => handleExportServices('csv')} title="Export CSV">
+                <Icons.Download size={14} /> CSV
+              </button>
+              <button className="btn btn-secondary" onClick={() => handleExportServices('excel')} title="Export Excel">
+                <Icons.Download size={14} /> Excel
+              </button>
+            </>
+          )}
           {isAdminOrManager && activeTab === 'fleet' && (
             <button className="btn btn-primary" onClick={() => { setEditVehicle(null); setShowVehicleModal(true); }}>
               + Add Vehicle
@@ -326,7 +688,7 @@ function Vehicles() {
               <input
                 type="text"
                 className="form-input"
-                placeholder="Search by make, model, registration..."
+                placeholder="Search by make, model, registration, VIN..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 style={{ flex: 1, minWidth: '200px' }}
@@ -342,96 +704,319 @@ function Vehicles() {
                   <option key={s.value} value={s.value}>{s.label}</option>
                 ))}
               </select>
+              <select
+                className="form-input"
+                value={makeFilter}
+                onChange={e => setMakeFilter(e.target.value)}
+                style={{ minWidth: '130px' }}
+              >
+                <option value="">All Makes</option>
+                {makes.map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+              <select
+                className="form-input"
+                value={fuelFilter}
+                onChange={e => setFuelFilter(e.target.value)}
+                style={{ minWidth: '130px' }}
+              >
+                <option value="">All Fuel Types</option>
+                {fuelTypes.map(f => (
+                  <option key={f} value={f}>{f}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginTop: '10px' }}>
+              <button className={`btn btn-sm ${showFleetChart ? '' : 'btn-secondary'}`}
+                style={showFleetChart ? { background: 'var(--primary-color)', color: 'white' } : undefined}
+                onClick={() => { setShowFleetChart(!showFleetChart); setShowCostSummary(false); }}>
+                <Icons.BarChart size={14} /> Fleet Analytics
+              </button>
+              <button className={`btn btn-sm ${showCostSummary ? '' : 'btn-secondary'}`}
+                style={showCostSummary ? { background: 'var(--primary-color)', color: 'white' } : undefined}
+                onClick={() => { setShowCostSummary(!showCostSummary); setShowFleetChart(false); }}>
+                Cost Summary
+              </button>
+              <div style={{ position: 'relative', marginLeft: 'auto' }}>
+                <button className="btn btn-sm btn-secondary" onClick={() => setShowColumnToggle(!showColumnToggle)}>
+                  <Icons.Eye size={14} /> Columns
+                </button>
+                {showColumnToggle && (
+                  <div style={{
+                    position: 'absolute', right: 0, top: '100%', marginTop: '4px', background: 'var(--bg-primary, white)',
+                    border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px', zIndex: 100, minWidth: '180px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                  }}>
+                    {FLEET_COLUMNS.map(col => (
+                      <label key={col.key} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 0', cursor: 'pointer', fontSize: '0.85rem' }}>
+                        <input type="checkbox" checked={isColVisible(col.key)} onChange={() => toggleColumn(col.key)} />
+                        {col.label}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <select className="form-input" value={pageSize} onChange={e => setPageSize(Number(e.target.value))} style={{ width: '80px' }}>
+                {[10, 25, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{sortedFiltered.length} vehicle{sortedFiltered.length !== 1 ? 's' : ''}</span>
             </div>
           </div>
 
+          {/* Fleet Analytics */}
+          {showFleetChart && (
+            <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+              <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '1rem' }}>Fleet Analytics</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
+                {/* Status Distribution */}
+                <div>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Status Distribution</h4>
+                  {statusBreakdown.map(([status, count]) => {
+                    const pct = vehicles.length > 0 ? (count / vehicles.length * 100) : 0;
+                    const st = VEHICLE_STATUSES.find(s => s.value === status);
+                    const color = st ? (st.badge === 'badge-available' ? 'var(--success-color)' : st.badge === 'badge-checked-out' ? 'var(--primary-color)' : st.badge === 'badge-low-stock' ? '#f39c12' : 'var(--error-color)') : '#999';
+                    return (
+                      <div key={status} style={{ marginBottom: '6px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '2px' }}>
+                          <span>{status}</span><span style={{ fontWeight: 600 }}>{count} ({pct.toFixed(0)}%)</span>
+                        </div>
+                        <div style={{ height: '8px', background: 'var(--bg-secondary, #eee)', borderRadius: '4px', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: '4px', transition: 'width 0.3s' }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Make Distribution */}
+                <div>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Make Distribution (Active)</h4>
+                  {makeBreakdown.map(([make, count], i) => {
+                    const activeCount = vehicles.filter(v => v.is_active).length;
+                    const pct = activeCount > 0 ? (count / activeCount * 100) : 0;
+                    const colors = ['#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'];
+                    return (
+                      <div key={make} style={{ marginBottom: '6px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '2px' }}>
+                          <span>{make}</span><span style={{ fontWeight: 600 }}>{count}</span>
+                        </div>
+                        <div style={{ height: '8px', background: 'var(--bg-secondary, #eee)', borderRadius: '4px', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: colors[i % colors.length], borderRadius: '4px', transition: 'width 0.3s' }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Fuel Type Distribution */}
+                <div>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Fuel Type (Active)</h4>
+                  {fuelBreakdown.map(([fuel, count], i) => {
+                    const activeCount = vehicles.filter(v => v.is_active).length;
+                    const pct = activeCount > 0 ? (count / activeCount * 100) : 0;
+                    const colors = ['#2ecc71', '#3498db', '#e67e22', '#9b59b6', '#e74c3c'];
+                    return (
+                      <div key={fuel} style={{ marginBottom: '6px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '2px' }}>
+                          <span>{fuel}</span><span style={{ fontWeight: 600 }}>{count}</span>
+                        </div>
+                        <div style={{ height: '8px', background: 'var(--bg-secondary, #eee)', borderRadius: '4px', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: colors[i % colors.length], borderRadius: '4px', transition: 'width 0.3s' }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Cost Summary */}
+          {showCostSummary && (
+            <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+              <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '1rem' }}>Cost Summary</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+                <div style={{ padding: '12px', background: 'var(--bg-secondary, #f5f5f5)', borderRadius: '8px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--error-color)' }}>R {costSummaryData.totalFines.toFixed(2)}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Total Fines</div>
+                </div>
+                <div style={{ padding: '12px', background: 'var(--bg-secondary, #f5f5f5)', borderRadius: '8px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#e67e22' }}>R {costSummaryData.unpaidFines.toFixed(2)}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Unpaid Fines</div>
+                </div>
+                <div style={{ padding: '12px', background: 'var(--bg-secondary, #f5f5f5)', borderRadius: '8px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--primary-color)' }}>R {costSummaryData.totalServiceCost.toFixed(2)}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Total Service Costs</div>
+                </div>
+                <div style={{ padding: '12px', background: 'var(--bg-secondary, #f5f5f5)', borderRadius: '8px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 700 }}>R {(costSummaryData.totalFines + costSummaryData.totalServiceCost).toFixed(2)}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Grand Total</div>
+                </div>
+              </div>
+              {Object.keys(costSummaryData.vehicleCosts).length > 0 && (
+                <>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Cost per Vehicle</h4>
+                  <div className="table-container">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Vehicle</th>
+                          <th>Fines (R)</th>
+                          <th>Services (R)</th>
+                          <th>Total (R)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(costSummaryData.vehicleCosts)
+                          .sort((a, b) => (b[1].fines + b[1].services) - (a[1].fines + a[1].services))
+                          .map(([reg, data]) => (
+                            <tr key={reg}>
+                              <td><strong>{reg}</strong>{data.make ? <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{data.make} {data.model}</div> : null}</td>
+                              <td style={{ color: data.fines > 0 ? 'var(--error-color)' : 'inherit' }}>{data.fines.toFixed(2)}</td>
+                              <td>{data.services.toFixed(2)}</td>
+                              <td style={{ fontWeight: 600 }}>{(data.fines + data.services).toFixed(2)}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Fleet Table */}
           <div className="card">
-            {filteredVehicles.length === 0 ? (
+            {sortedFiltered.length === 0 ? (
               <div className="empty-state">
                 <h3>No vehicles found</h3>
                 <p>{searchTerm ? 'Try a different search term' : 'Click "Add Vehicle" to register the first vehicle'}</p>
               </div>
             ) : (
+              <>
               <div className="table-container">
                 <table>
                   <thead>
                     <tr>
-                      <th>Vehicle</th>
-                      <th>Registration</th>
-                      <th>Fuel</th>
-                      <th>Assigned To</th>
-                      <th>Odometer</th>
-                      <th>License Disk Expiry</th>
-                      <th>Next Service</th>
-                      <th>Status</th>
-                      <th>Actions</th>
+                      {isAdminOrManager && <th style={{ width: '32px' }}><input type="checkbox" checked={selectedIds.size === paginatedData.length && paginatedData.length > 0} onChange={toggleSelectAll} /></th>}
+                      {isColVisible('vehicle') && <SortHeader col="make" label="Vehicle" />}
+                      {isColVisible('registration') && <SortHeader col="registration_number" label="Registration" />}
+                      {isColVisible('fuel') && <SortHeader col="fuel_type" label="Fuel" />}
+                      {isColVisible('assigned_to') && <SortHeader col="assigned_to" label="Assigned To" />}
+                      {isColVisible('odometer') && <SortHeader col="current_odometer" label="Odometer" />}
+                      {isColVisible('license_disk') && <SortHeader col="license_disk_expiry" label="License Disk Expiry" />}
+                      {isColVisible('next_service') && <SortHeader col="next_service_date" label="Next Service" />}
+                      {isColVisible('status') && <SortHeader col="vehicle_status" label="Status" />}
+                      {isColVisible('actions') && <th>Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredVehicles.map(v => {
+                    {paginatedData.map(v => {
                       const licenseExpired = v.license_disk_expiry && new Date(v.license_disk_expiry) < new Date();
                       const licenseSoon = v.license_disk_expiry && !licenseExpired && (new Date(v.license_disk_expiry) - new Date()) / (1000*60*60*24) <= 30;
                       const serviceDue = v.next_service_date && (new Date(v.next_service_date) - new Date()) / (1000*60*60*24) <= 30;
                       return (
-                        <tr key={v.id}>
-                          <td>
-                            <div>
-                              <strong>{v.make} {v.model}</strong>
-                              {v.year && <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{v.year}</div>}
-                              {v.vin_number && <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>VIN: {v.vin_number}</div>}
-                              {v.qr_code && <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>QR: {v.qr_code}</div>}
-                            </div>
-                          </td>
-                          <td><strong style={{ fontFamily: 'monospace' }}>{v.registration_number}</strong></td>
-                          <td>{v.fuel_type || '-'}</td>
-                          <td>{v.assigned_to || '-'}</td>
-                          <td>{v.current_odometer ? v.current_odometer.toLocaleString() + ' km' : '-'}</td>
-                          <td>
-                            {v.license_disk_expiry ? (
-                              <span style={{ color: licenseExpired ? 'var(--error-color)' : licenseSoon ? '#f39c12' : 'inherit', fontWeight: licenseExpired || licenseSoon ? 600 : 400 }}>
-                                {new Date(v.license_disk_expiry).toLocaleDateString()}
-                                {licenseExpired && ' ⚠ EXPIRED'}
-                                {licenseSoon && ' ⚠ Soon'}
-                              </span>
-                            ) : '-'}
-                          </td>
-                          <td>
-                            {v.next_service_date ? (
-                              <span style={{ color: serviceDue ? '#f39c12' : 'inherit', fontWeight: serviceDue ? 600 : 400 }}>
-                                {new Date(v.next_service_date).toLocaleDateString()}
-                              </span>
-                            ) : '-'}
-                          </td>
-                          <td>
-                            {(() => {
-                              const st = VEHICLE_STATUSES.find(s => s.value === v.vehicle_status) || VEHICLE_STATUSES[0];
-                              return <span className={`badge ${st.badge}`}>{st.label}</span>;
-                            })()}
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                              <button className="btn btn-sm btn-secondary" onClick={() => setDetailVehicle(v)} title="View Details">
-                                <Icons.Clock size={14} />
-                              </button>
-                              {isAdminOrManager && (
-                                <button className="btn btn-sm btn-secondary" onClick={() => { setEditVehicle(v); setShowVehicleModal(true); }} title="Edit">
-                                  <Icons.Edit size={14} />
+                        <tr key={v.id} style={selectedIds.has(v.id) ? { background: 'rgba(52,152,219,0.08)' } : undefined}>
+                          {isAdminOrManager && <td><input type="checkbox" checked={selectedIds.has(v.id)} onChange={() => toggleSelect(v.id)} /></td>}
+                          {isColVisible('vehicle') && (
+                            <td>
+                              <div>
+                                <strong>{v.make} {v.model}</strong>
+                                {v.year && <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{v.year}{v.color ? ` - ${v.color}` : ''}</div>}
+                                {v.vin_number && <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>VIN: {v.vin_number}</div>}
+                                {v.qr_code && <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>QR: {v.qr_code}</div>}
+                              </div>
+                            </td>
+                          )}
+                          {isColVisible('registration') && <td><strong style={{ fontFamily: 'monospace' }}>{v.registration_number}</strong></td>}
+                          {isColVisible('fuel') && <td>{v.fuel_type || '-'}</td>}
+                          {isColVisible('assigned_to') && <td>{v.assigned_to || '-'}</td>}
+                          {isColVisible('odometer') && <td>{v.current_odometer ? v.current_odometer.toLocaleString() + ' km' : '-'}</td>}
+                          {isColVisible('license_disk') && (
+                            <td>
+                              {v.license_disk_expiry ? (
+                                <span style={{ color: licenseExpired ? 'var(--error-color)' : licenseSoon ? '#f39c12' : 'inherit', fontWeight: licenseExpired || licenseSoon ? 600 : 400 }}>
+                                  {new Date(v.license_disk_expiry).toLocaleDateString()}
+                                  {licenseExpired && ' EXPIRED'}
+                                  {licenseSoon && ' Soon'}
+                                </span>
+                              ) : '-'}
+                            </td>
+                          )}
+                          {isColVisible('next_service') && (
+                            <td>
+                              {v.next_service_date ? (
+                                <span style={{ color: serviceDue ? '#f39c12' : 'inherit', fontWeight: serviceDue ? 600 : 400 }}>
+                                  {new Date(v.next_service_date).toLocaleDateString()}
+                                </span>
+                              ) : '-'}
+                            </td>
+                          )}
+                          {isColVisible('status') && (
+                            <td>
+                              {(() => {
+                                const st = VEHICLE_STATUSES.find(s => s.value === v.vehicle_status) || VEHICLE_STATUSES[0];
+                                return <span className={`badge ${st.badge}`}>{st.label}</span>;
+                              })()}
+                            </td>
+                          )}
+                          {isColVisible('actions') && (
+                            <td>
+                              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                <button className="btn btn-sm btn-secondary" onClick={() => setDetailVehicle(v)} title="View Details">
+                                  <Icons.Clock size={14} />
                                 </button>
-                              )}
-                              {isAdminOrManager && (
-                                <button className="btn btn-sm btn-danger" onClick={() => handleDeleteVehicle(v)} title="Delete">
-                                  <Icons.Trash size={14} />
-                                </button>
-                              )}
-                            </div>
-                          </td>
+                                {isAdminOrManager && (
+                                  <button className="btn btn-sm btn-secondary" onClick={() => { setEditVehicle(v); setShowVehicleModal(true); }} title="Edit">
+                                    <Icons.Edit size={14} />
+                                  </button>
+                                )}
+                                {isAdminOrManager && (
+                                  <button className="btn btn-sm btn-danger" onClick={() => handleDeleteVehicle(v)} title="Delete">
+                                    <Icons.Trash size={14} />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '12px 16px', borderTop: '1px solid var(--border-color)', flexWrap: 'wrap', gap: '8px',
+                }}>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    Showing {((currentPage - 1) * pageSize) + 1}&ndash;{Math.min(currentPage * pageSize, sortedFiltered.length)} of {sortedFiltered.length}
+                  </span>
+                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    <button className="btn btn-sm btn-secondary" disabled={currentPage === 1} onClick={() => setCurrentPage(1)} title="First">&laquo;</button>
+                    <button className="btn btn-sm btn-secondary" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} title="Previous">&lsaquo;</button>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1)
+                      .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 2)
+                      .reduce((acc, p, idx, arr) => {
+                        if (idx > 0 && p - arr[idx - 1] > 1) acc.push('...');
+                        acc.push(p);
+                        return acc;
+                      }, [])
+                      .map((p, i) =>
+                        p === '...' ? <span key={`dot-${i}`} style={{ padding: '0 4px', color: 'var(--text-secondary)' }}>&hellip;</span> :
+                        <button key={p} className={`btn btn-sm ${p === currentPage ? '' : 'btn-secondary'}`}
+                          style={p === currentPage ? { background: 'var(--primary-color)', color: 'white' } : undefined}
+                          onClick={() => setCurrentPage(p)}>{p}</button>
+                      )}
+                    <button className="btn btn-sm btn-secondary" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} title="Next">&rsaquo;</button>
+                    <button className="btn btn-sm btn-secondary" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)} title="Last">&raquo;</button>
+                  </div>
+                </div>
+              )}
+              </>
             )}
           </div>
         </>
@@ -587,130 +1172,211 @@ function Vehicles() {
 
       {/* Fines Tab */}
       {activeTab === 'fines' && (
-        <div className="card">
-          {fines.length === 0 ? (
-            <div className="empty-state">
-              <h3>No fines recorded</h3>
-              <p>Click "Record Fine" to add a fine</p>
+        <>
+          <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Search by driver, vehicle, type, reference..."
+                value={fineSearch}
+                onChange={e => setFineSearch(e.target.value)}
+                style={{ flex: 1, minWidth: '200px' }}
+              />
+              <select
+                className="form-input"
+                value={fineVehicleFilter}
+                onChange={e => setFineVehicleFilter(e.target.value)}
+                style={{ minWidth: '180px' }}
+              >
+                <option value="">All Vehicles</option>
+                {vehicles.sort((a, b) => (a.registration_number || '').localeCompare(b.registration_number || '')).map(v => (
+                  <option key={v.id} value={v.id}>{v.registration_number} - {v.make} {v.model}</option>
+                ))}
+              </select>
+              <select
+                className="form-input"
+                value={fineStatusFilter}
+                onChange={e => setFineStatusFilter(e.target.value)}
+                style={{ minWidth: '120px' }}
+              >
+                <option value="">All Statuses</option>
+                <option value="Unpaid">Unpaid</option>
+                <option value="Paid">Paid</option>
+                <option value="Disputed">Disputed</option>
+                <option value="Written Off">Written Off</option>
+              </select>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 'auto' }}>
+                {filteredFines.length} fine{filteredFines.length !== 1 ? 's' : ''}
+                {filteredFines.length > 0 && ` | Total: R ${filteredFines.reduce((sum, f) => sum + (parseFloat(f.fine_amount) || 0), 0).toFixed(2)}`}
+              </span>
             </div>
-          ) : (
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Vehicle</th>
-                    <th>Driver</th>
-                    <th>Date</th>
-                    <th>Type</th>
-                    <th>Amount</th>
-                    <th>Reference</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {fines.map(f => (
-                    <tr key={f.id}>
-                      <td>
-                        <strong>{f.vehicles?.make} {f.vehicles?.model}</strong>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
-                          {f.vehicles?.registration_number}
-                        </div>
-                      </td>
-                      <td><strong>{f.driver_name}</strong></td>
-                      <td>{new Date(f.fine_date).toLocaleDateString()}</td>
-                      <td>{f.fine_type || '-'}</td>
-                      <td style={{ fontWeight: 600 }}>{f.fine_amount ? `R ${parseFloat(f.fine_amount).toFixed(2)}` : '-'}</td>
-                      <td style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>{f.fine_reference || '-'}</td>
-                      <td>
-                        <span className={`badge ${f.status === 'Paid' ? 'badge-available' : 'badge-overdue'}`}>{f.status}</span>
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                          {isAdminOrManager && (
-                            <button className="btn btn-sm btn-secondary" onClick={() => { setEditFine(f); setShowFineModal(true); }}>
-                              <Icons.Edit size={14} />
-                            </button>
-                          )}
-                          {isAdminOrManager && (
-                            <button className="btn btn-sm btn-danger" onClick={() => handleDeleteFine(f)}>
-                              <Icons.Trash size={14} />
-                            </button>
-                          )}
-                        </div>
-                      </td>
+          </div>
+          <div className="card">
+            {filteredFines.length === 0 ? (
+              <div className="empty-state">
+                <h3>No fines recorded</h3>
+                <p>Click "Record Fine" to add a fine</p>
+              </div>
+            ) : (
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Vehicle</th>
+                      <th>Driver</th>
+                      <th>Date</th>
+                      <th>Type</th>
+                      <th>Amount</th>
+                      <th>Reference</th>
+                      <th>Status</th>
+                      <th>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                  </thead>
+                  <tbody>
+                    {filteredFines.map(f => (
+                      <tr key={f.id}>
+                        <td>
+                          <strong>{f.vehicles?.make} {f.vehicles?.model}</strong>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                            {f.vehicles?.registration_number}
+                          </div>
+                        </td>
+                        <td><strong>{f.driver_name}</strong></td>
+                        <td>{new Date(f.fine_date).toLocaleDateString()}</td>
+                        <td>{f.fine_type || '-'}</td>
+                        <td style={{ fontWeight: 600 }}>{f.fine_amount ? `R ${parseFloat(f.fine_amount).toFixed(2)}` : '-'}</td>
+                        <td style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>{f.fine_reference || '-'}</td>
+                        <td>
+                          <span className={`badge ${f.status === 'Paid' ? 'badge-available' : 'badge-overdue'}`}>{f.status}</span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            {isAdminOrManager && (
+                              <button className="btn btn-sm btn-secondary" onClick={() => { setEditFine(f); setShowFineModal(true); }}>
+                                <Icons.Edit size={14} />
+                              </button>
+                            )}
+                            {isAdminOrManager && (
+                              <button className="btn btn-sm btn-danger" onClick={() => handleDeleteFine(f)}>
+                                <Icons.Trash size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       {/* Services Tab */}
       {activeTab === 'services' && (
-        <div className="card">
-          {services.length === 0 ? (
-            <div className="empty-state">
-              <h3>No service records</h3>
-              <p>Click "Record Service" to log a service or repair</p>
+        <>
+          <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Search by vehicle, provider, description..."
+                value={serviceSearch}
+                onChange={e => setServiceSearch(e.target.value)}
+                style={{ flex: 1, minWidth: '200px' }}
+              />
+              <select
+                className="form-input"
+                value={serviceVehicleFilter}
+                onChange={e => setServiceVehicleFilter(e.target.value)}
+                style={{ minWidth: '180px' }}
+              >
+                <option value="">All Vehicles</option>
+                {vehicles.sort((a, b) => (a.registration_number || '').localeCompare(b.registration_number || '')).map(v => (
+                  <option key={v.id} value={v.id}>{v.registration_number} - {v.make} {v.model}</option>
+                ))}
+              </select>
+              <select
+                className="form-input"
+                value={serviceTypeFilter}
+                onChange={e => setServiceTypeFilter(e.target.value)}
+                style={{ minWidth: '120px' }}
+              >
+                <option value="">All Types</option>
+                {['Service', 'Repair', 'Tyres', 'Body Work', 'Electrical', 'Inspection', 'Other'].map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 'auto' }}>
+                {filteredServices.length} record{filteredServices.length !== 1 ? 's' : ''}
+                {filteredServices.length > 0 && ` | Total: R ${filteredServices.reduce((sum, s) => sum + (parseFloat(s.cost) || 0), 0).toFixed(2)}`}
+              </span>
             </div>
-          ) : (
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Vehicle</th>
-                    <th>Type</th>
-                    <th>Date</th>
-                    <th>Odometer</th>
-                    <th>Provider</th>
-                    <th>Cost</th>
-                    <th>Next Service</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {services.map(s => (
-                    <tr key={s.id}>
-                      <td>
-                        <strong>{s.vehicles?.make} {s.vehicles?.model}</strong>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
-                          {s.vehicles?.registration_number}
-                        </div>
-                      </td>
-                      <td>
-                        <span className={`badge ${s.service_type === 'Service' ? 'badge-available' : 'badge-low-stock'}`}>
-                          {s.service_type}
-                        </span>
-                      </td>
-                      <td>{new Date(s.service_date).toLocaleDateString()}</td>
-                      <td>{s.odometer_at_service ? s.odometer_at_service.toLocaleString() + ' km' : '-'}</td>
-                      <td>{s.service_provider || '-'}</td>
-                      <td style={{ fontWeight: 600 }}>{s.cost ? `R ${parseFloat(s.cost).toFixed(2)}` : '-'}</td>
-                      <td>{s.next_service_date ? new Date(s.next_service_date).toLocaleDateString() : '-'}</td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                          {isAdminOrManager && (
-                            <button className="btn btn-sm btn-secondary" onClick={() => { setEditService(s); setShowServiceModal(true); }}>
-                              <Icons.Edit size={14} />
-                            </button>
-                          )}
-                          {isAdminOrManager && (
-                            <button className="btn btn-sm btn-danger" onClick={() => handleDeleteService(s)}>
-                              <Icons.Trash size={14} />
-                            </button>
-                          )}
-                        </div>
-                      </td>
+          </div>
+          <div className="card">
+            {filteredServices.length === 0 ? (
+              <div className="empty-state">
+                <h3>No service records</h3>
+                <p>Click "Record Service" to log a service or repair</p>
+              </div>
+            ) : (
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Vehicle</th>
+                      <th>Type</th>
+                      <th>Date</th>
+                      <th>Odometer</th>
+                      <th>Provider</th>
+                      <th>Cost</th>
+                      <th>Next Service</th>
+                      <th>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                  </thead>
+                  <tbody>
+                    {filteredServices.map(s => (
+                      <tr key={s.id}>
+                        <td>
+                          <strong>{s.vehicles?.make} {s.vehicles?.model}</strong>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                            {s.vehicles?.registration_number}
+                          </div>
+                        </td>
+                        <td>
+                          <span className={`badge ${s.service_type === 'Service' ? 'badge-available' : 'badge-low-stock'}`}>
+                            {s.service_type}
+                          </span>
+                        </td>
+                        <td>{new Date(s.service_date).toLocaleDateString()}</td>
+                        <td>{s.odometer_at_service ? s.odometer_at_service.toLocaleString() + ' km' : '-'}</td>
+                        <td>{s.service_provider || '-'}</td>
+                        <td style={{ fontWeight: 600 }}>{s.cost ? `R ${parseFloat(s.cost).toFixed(2)}` : '-'}</td>
+                        <td>{s.next_service_date ? new Date(s.next_service_date).toLocaleDateString() : '-'}</td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            {isAdminOrManager && (
+                              <button className="btn btn-sm btn-secondary" onClick={() => { setEditService(s); setShowServiceModal(true); }}>
+                                <Icons.Edit size={14} />
+                              </button>
+                            )}
+                            {isAdminOrManager && (
+                              <button className="btn btn-sm btn-danger" onClick={() => handleDeleteService(s)}>
+                                <Icons.Trash size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       {/* ===== MODALS ===== */}
@@ -765,6 +1431,22 @@ function Vehicles() {
         <VehicleDetailModal
           vehicle={detailVehicle}
           onClose={() => setDetailVehicle(null)}
+        />
+      )}
+
+      {showImportModal && (
+        <ImportModal
+          onClose={() => setShowImportModal(false)}
+          onSuccess={() => { setShowImportModal(false); fetchData(); }}
+        />
+      )}
+
+      {showBulkStatusModal && (
+        <BulkStatusModal
+          selectedIds={selectedIds}
+          vehicles={vehicles}
+          onClose={() => setShowBulkStatusModal(false)}
+          onSuccess={() => { setShowBulkStatusModal(false); setSelectedIds(new Set()); fetchData(); }}
         />
       )}
     </div>
@@ -1162,8 +1844,8 @@ function CheckoutModal({ item, vehicles, personnel, onClose, onSuccess }) {
               </div>
             </div>
             {licenseWarning && (
-              <div style={{ padding: '8px 12px', background: 'rgba(231, 76, 60, 0.1)', border: '1px solid var(--error-color)', borderRadius: '6px', color: 'var(--error-color)', fontWeight: 600, fontSize: '0.85rem' }}>
-                ⚠ {licenseWarning}
+              <div style={{ padding: '8px 12px', background: 'rgba(231, 76, 60, 0.1)', border: '1px solid var(--error-color)', borderRadius: '6px', color: 'var(--error-color)', fontWeight: 600, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Icons.Warning size={14} /> {licenseWarning}
               </div>
             )}
 
@@ -1855,3 +2537,208 @@ function VehicleDetailModal({ vehicle, onClose }) {
 }
 
 export default Vehicles;
+
+
+// ============================================
+// Bulk Import Modal
+// ============================================
+function ImportModal({ onClose, onSuccess }) {
+  const [importData, setImportData] = useState([]);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+
+  const TEMPLATE_COLUMNS = ['Make', 'Model', 'Registration Number', 'Year', 'Color', 'Fuel Type', 'VIN Number', 'Assigned To', 'Status', 'Current Odometer', 'License Disk Expiry', 'Next Service Date', 'Notes'];
+
+  const handleDownloadTemplate = () => {
+    const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_COLUMNS, ['Toyota', 'Hilux (D/C)', 'BR 02 GL ZN', '2023', 'White', 'Diesel', 'ABC123456789', 'Pool Vehicle', 'Active', '45000', '2025-12-31', '2025-06-15', '']]);
+    ws['!cols'] = TEMPLATE_COLUMNS.map(h => ({ wch: Math.max(h.length + 4, 16) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Vehicles');
+    XLSX.writeFile(wb, 'vehicle_import_template.xlsx');
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    const isXlsx = file.name.match(/\.xlsx?$/i);
+    reader.onload = (evt) => {
+      try {
+        let rows;
+        if (isXlsx) {
+          const wb = XLSX.read(evt.target.result, { type: 'array' });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        } else {
+          const text = evt.target.result;
+          rows = text.split('\n').filter(l => l.trim()).map(l => l.split(',').map(c => c.trim().replace(/^"|"$/g, '')));
+        }
+        if (rows.length < 2) { alert('No data rows found'); return; }
+        const headers = rows[0].map(h => String(h).trim().toLowerCase());
+        const dataRows = rows.slice(1).filter(r => r.some(c => c && String(c).trim()));
+        const parsed = dataRows.map(row => {
+          const obj = {};
+          headers.forEach((h, i) => { obj[h] = row[i] ? String(row[i]).trim() : ''; });
+          return {
+            make: obj['make'] || '',
+            model: obj['model'] || '',
+            registration_number: obj['registration number'] || obj['registration_number'] || obj['reg'] || '',
+            year: obj['year'] ? parseInt(obj['year'], 10) : null,
+            color: obj['color'] || obj['colour'] || null,
+            fuel_type: obj['fuel type'] || obj['fuel_type'] || null,
+            vin_number: obj['vin number'] || obj['vin_number'] || obj['vin'] || null,
+            assigned_to: obj['assigned to'] || obj['assigned_to'] || null,
+            vehicle_status: obj['status'] || 'Active',
+            current_odometer: obj['current odometer'] || obj['current_odometer'] || obj['odometer'] ? parseInt(obj['current odometer'] || obj['current_odometer'] || obj['odometer'], 10) || null : null,
+            license_disk_expiry: obj['license disk expiry'] || obj['license_disk_expiry'] || null,
+            next_service_date: obj['next service date'] || obj['next_service_date'] || null,
+            notes: obj['notes'] || null,
+          };
+        }).filter(r => r.make && r.model && r.registration_number);
+        setImportData(parsed);
+        setImportResult(null);
+      } catch (err) {
+        alert('Error parsing file: ' + err.message);
+      }
+    };
+    if (isXlsx) reader.readAsArrayBuffer(file); else reader.readAsText(file);
+  };
+
+  const handleImport = async () => {
+    if (importData.length === 0) return;
+    setImporting(true);
+    let success = 0, failed = 0, errors = [];
+    for (const row of importData) {
+      try {
+        const payload = { ...row };
+        payload.is_active = !['Decommissioned', 'Sold', 'Written Off'].includes(payload.vehicle_status);
+        Object.keys(payload).forEach(k => { if (payload[k] === '' || payload[k] === undefined) payload[k] = null; });
+        await vehiclesApi.create(payload);
+        success++;
+      } catch (err) {
+        failed++;
+        errors.push(`${row.registration_number}: ${err.message}`);
+      }
+    }
+    setImportResult({ success, failed, errors });
+    if (success > 0) setTimeout(() => onSuccess(), 1500);
+    setImporting(false);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+        <div className="modal-header">
+          <h2>Import Vehicles</h2>
+          <button className="btn btn-sm btn-secondary" onClick={onClose}><Icons.Close size={16} /></button>
+        </div>
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button className="btn btn-secondary" onClick={handleDownloadTemplate}>
+              <Icons.Download size={14} /> Download Template
+            </button>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>XLSX Format</span>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Select File</label>
+            <input type="file" accept=".csv,.xlsx,.xls" onChange={handleFileChange} className="form-input" />
+          </div>
+          {importData.length > 0 && (
+            <div style={{ padding: '10px', background: 'var(--bg-secondary, #f5f5f5)', borderRadius: '8px' }}>
+              <strong>{importData.length} vehicle{importData.length !== 1 ? 's' : ''} ready to import</strong>
+              <div style={{ maxHeight: '200px', overflowY: 'auto', marginTop: '8px', fontSize: '0.8rem' }}>
+                {importData.slice(0, 20).map((r, i) => (
+                  <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid var(--border-color)' }}>
+                    {r.make} {r.model} - {r.registration_number} {r.year ? `(${r.year})` : ''}
+                  </div>
+                ))}
+                {importData.length > 20 && <div style={{ padding: '4px 0', color: 'var(--text-secondary)' }}>...and {importData.length - 20} more</div>}
+              </div>
+            </div>
+          )}
+          {importResult && (
+            <div style={{ padding: '10px', background: importResult.failed > 0 ? 'rgba(231,76,60,0.1)' : 'rgba(46,204,113,0.1)', borderRadius: '8px', border: `1px solid ${importResult.failed > 0 ? 'var(--error-color)' : 'var(--success-color)'}` }}>
+              <strong>{importResult.success} imported successfully</strong>
+              {importResult.failed > 0 && <div style={{ color: 'var(--error-color)' }}>{importResult.failed} failed</div>}
+              {importResult.errors.length > 0 && (
+                <div style={{ fontSize: '0.8rem', marginTop: '4px', maxHeight: '100px', overflowY: 'auto' }}>
+                  {importResult.errors.map((e, i) => <div key={i}>{e}</div>)}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleImport} disabled={importing || importData.length === 0}>
+            {importing ? 'Importing...' : `Import ${importData.length} Vehicle${importData.length !== 1 ? 's' : ''}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ============================================
+// Bulk Status Update Modal
+// ============================================
+function BulkStatusModal({ selectedIds, vehicles, onClose, onSuccess }) {
+  const [newStatus, setNewStatus] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const selected = vehicles.filter(v => selectedIds.has(v.id));
+
+  const handleSubmit = async () => {
+    if (!newStatus) { alert('Please select a status'); return; }
+    if (!window.confirm(`Update ${selected.length} vehicle(s) to "${newStatus}"?`)) return;
+    setSaving(true);
+    try {
+      for (const v of selected) {
+        const isActive = !['Decommissioned', 'Sold', 'Written Off'].includes(newStatus);
+        await vehiclesApi.update(v.id, { vehicle_status: newStatus, is_active: isActive });
+      }
+      onSuccess();
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+        <div className="modal-header">
+          <h2>Bulk Status Update</h2>
+          <button className="btn btn-sm btn-secondary" onClick={onClose}><Icons.Close size={16} /></button>
+        </div>
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ padding: '10px', background: 'var(--bg-secondary, #f5f5f5)', borderRadius: '8px' }}>
+            <strong>{selected.length} vehicle{selected.length !== 1 ? 's' : ''} selected</strong>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px', maxHeight: '120px', overflowY: 'auto' }}>
+              {selected.map(v => (
+                <div key={v.id}>{v.make} {v.model} - {v.registration_number}</div>
+              ))}
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">New Status</label>
+            <select value={newStatus} onChange={e => setNewStatus(e.target.value)} className="form-input">
+              <option value="">-- Select Status --</option>
+              {VEHICLE_STATUSES.map(s => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleSubmit} disabled={saving || !newStatus}>
+            {saving ? 'Updating...' : `Update ${selected.length} Vehicle${selected.length !== 1 ? 's' : ''}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
