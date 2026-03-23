@@ -151,8 +151,10 @@ function CheckOut() {
 
       setAvailableEquipment(equipmentRes.data);
       setCheckedOutEquipment(checkedOutRes.data || []);
+      const today = new Date().toISOString().split('T')[0];
       setActiveReservations((reservationsRes.data || []).filter(r =>
-        ['pending', 'approved', 'active'].includes(r.status?.toLowerCase())
+        ['pending', 'approved', 'active'].includes(r.status?.toLowerCase()) &&
+        r.end_date >= today
       ));
       setLocations(locationsRes.data);
       setPersonnel(personnelRes.data);
