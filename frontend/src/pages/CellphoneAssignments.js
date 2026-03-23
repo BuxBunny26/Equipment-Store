@@ -404,7 +404,7 @@ function CellphoneAssignments() {
             <Icons.Download size={14} /> PDF
           </button>
           <button className="btn btn-secondary" onClick={handlePrint} title="Print">
-            🖨️ Print
+            <Icons.Printer size={14} /> Print
           </button>
           {isAdminOrManager && (
             <button className="btn btn-primary" onClick={handleAdd}>
@@ -575,7 +575,7 @@ function CellphoneAssignments() {
       {(upgradesDue.length > 0 || upgradesApproaching.length > 0) && (
         <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: upgradesDue.length > 0 ? '10px' : '0' }}>
-            <span style={{ fontSize: '1.1rem' }}>📱</span>
+            <Icons.Phone size={18} />
             <strong style={{ fontSize: '0.95rem' }}>Upgrade Alerts</strong>
             <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 'auto' }}>
               Based on 2-year upgrade cycle
@@ -591,8 +591,8 @@ function CellphoneAssignments() {
               marginBottom: upgradesApproaching.length > 0 ? '8px' : '0',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                <span style={{ color: '#e74c3c', fontWeight: 600, fontSize: '0.9rem' }}>
-                  ⚠️ {upgradesDue.length} phone{upgradesDue.length !== 1 ? 's' : ''} due for upgrade
+                <span style={{ color: '#e74c3c', fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Icons.Warning size={14} /> {upgradesDue.length} phone{upgradesDue.length !== 1 ? 's' : ''} due for upgrade
                 </span>
                 <button
                   className="btn btn-sm"
@@ -671,14 +671,14 @@ function CellphoneAssignments() {
       {(contractAlerts.length > 0 || warrantyAlerts.length > 0) && (
         <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-            <span style={{ fontSize: '1.1rem' }}>📋</span>
+            <Icons.Clipboard size={18} />
             <strong style={{ fontSize: '0.95rem' }}>Contract & Warranty Alerts</strong>
           </div>
 
           {contractAlerts.length > 0 && (
             <div style={{ padding: '10px 14px', border: '1px solid #8e44ad', borderRadius: '8px', background: 'rgba(142, 68, 173, 0.08)', marginBottom: warrantyAlerts.length > 0 ? '8px' : '0' }}>
               <div style={{ color: '#8e44ad', fontWeight: 600, fontSize: '0.9rem', marginBottom: '6px' }}>
-                📝 {contractAlerts.length} contract{contractAlerts.length !== 1 ? 's' : ''} expiring/expired
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Icons.FileText size={14} /> {contractAlerts.length} contract{contractAlerts.length !== 1 ? 's' : ''} expiring/expired</span>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                 {contractAlerts.slice(0, 6).map(a => (
@@ -694,7 +694,7 @@ function CellphoneAssignments() {
           {warrantyAlerts.length > 0 && (
             <div style={{ padding: '10px 14px', border: '1px solid #2980b9', borderRadius: '8px', background: 'rgba(41, 128, 185, 0.08)' }}>
               <div style={{ color: '#2980b9', fontWeight: 600, fontSize: '0.9rem', marginBottom: '6px' }}>
-                🛡️ {warrantyAlerts.length} warrant{warrantyAlerts.length !== 1 ? 'ies' : 'y'} expiring/expired
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Icons.Shield size={14} /> {warrantyAlerts.length} warrant{warrantyAlerts.length !== 1 ? 'ies' : 'y'} expiring/expired</span>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                 {warrantyAlerts.slice(0, 6).map(a => (
@@ -713,7 +713,7 @@ function CellphoneAssignments() {
       {duplicatePhoneEmployees.length > 0 && (
         <div className="card" style={{ marginBottom: '16px', padding: '16px', border: '1px solid #f39c12' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-            <span style={{ fontSize: '1rem' }}>⚠️</span>
+            <Icons.Warning size={16} style={{ color: '#e67e22' }} />
             <strong style={{ fontSize: '0.9rem', color: '#e67e22' }}>Duplicate Active Phones Detected</strong>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -729,7 +729,7 @@ function CellphoneAssignments() {
       {/* Division Breakdown */}
       <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setShowDivisionBreakdown(!showDivisionBreakdown)}>
-          <span style={{ fontSize: '1rem' }}>🏢</span>
+          <Icons.Building size={16} />
           <strong style={{ fontSize: '0.9rem' }}>Division Breakdown</strong>
           <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>({divisionBreakdown.length} divisions)</span>
           <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{showDivisionBreakdown ? '▼' : '▶'}</span>
