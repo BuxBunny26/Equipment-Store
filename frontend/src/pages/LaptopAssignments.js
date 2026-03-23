@@ -652,17 +652,17 @@ function LaptopAssignments() {
                   <tr key={div}>
                     <td><strong>{div}</strong></td>
                     <td style={{ textAlign: 'right' }}>{data.count}</td>
-                    <td style={{ textAlign: 'right' }}>{data.totalDevice ? `R ${data.totalDevice.toFixed(2)}` : '-'}</td>
-                    <td style={{ textAlign: 'right' }}>{data.totalMonthly ? `R ${data.totalMonthly.toFixed(2)}` : '-'}</td>
-                    <td style={{ textAlign: 'right' }}>{data.totalMonthly ? `R ${(data.totalMonthly * 12).toFixed(2)}` : '-'}</td>
+                    <td style={{ textAlign: 'right' }}>{data.totalDevice ? `R ${data.totalDevice.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}` : '-'}</td>
+                    <td style={{ textAlign: 'right' }}>{data.totalMonthly ? `R ${data.totalMonthly.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}` : '-'}</td>
+                    <td style={{ textAlign: 'right' }}>{data.totalMonthly ? `R ${(data.totalMonthly * 12).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}` : '-'}</td>
                   </tr>
                 ))}
                 <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border-color)' }}>
                   <td>Total</td>
                   <td style={{ textAlign: 'right' }}>{costPerDivision.reduce((s, [, d]) => s + d.count, 0)}</td>
-                  <td style={{ textAlign: 'right' }}>R {costPerDivision.reduce((s, [, d]) => s + d.totalDevice, 0).toFixed(2)}</td>
-                  <td style={{ textAlign: 'right' }}>R {costPerDivision.reduce((s, [, d]) => s + d.totalMonthly, 0).toFixed(2)}</td>
-                  <td style={{ textAlign: 'right' }}>R {(costPerDivision.reduce((s, [, d]) => s + d.totalMonthly, 0) * 12).toFixed(2)}</td>
+                  <td style={{ textAlign: 'right' }}>R {costPerDivision.reduce((s, [, d]) => s + d.totalDevice, 0).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
+                  <td style={{ textAlign: 'right' }}>R {costPerDivision.reduce((s, [, d]) => s + d.totalMonthly, 0).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
+                  <td style={{ textAlign: 'right' }}>R {(costPerDivision.reduce((s, [, d]) => s + d.totalMonthly, 0) * 12).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
                 </tr>
               </tbody>
             </table>

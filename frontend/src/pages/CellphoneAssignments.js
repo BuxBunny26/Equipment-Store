@@ -1391,6 +1391,10 @@ function CellphoneModal({ item, personnel, allAssignments, onClose, onSuccess })
       alert('Please fill in all required fields');
       return;
     }
+    if (imeiError) {
+      alert('Please fix the IMEI number before saving');
+      return;
+    }
     try {
       setSaving(true);
       const payload = { ...form };
