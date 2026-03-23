@@ -160,6 +160,19 @@ function CellphoneAssignments() {
     return div;
   };
 
+  // Simple edit distance for fuzzy name matching
+  const editDist = (a, b) => {
+    if (Math.abs(a.length - b.length) > 2) return 99;
+    const m = a.length, n = b.length;
+    const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++)
+      for (let j = 1; j <= n; j++)
+        dp[i][j] = Math.min(dp[i-1][j] + 1, dp[i][j-1] + 1, dp[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+    return dp[m][n];
+  };
+
   const getDivision = (item) => {
     // 1. Exact name match
     const byName = personnelDivisionMap[item.employee_name?.toLowerCase()];
@@ -169,23 +182,36 @@ function CellphoneAssignments() {
       const byId = personnelDivisionByIdMap[item.employee_id.toLowerCase()];
       if (byId) return standardiseDivision(byId);
     }
-    // 3. Partial name match (e.g. "Arnold van Zyl" matches "Arnoldus van Zyl")
+    // 3. Multi-strategy fuzzy name matching
     if (item.employee_name) {
       const nameLower = item.employee_name.toLowerCase();
-      const partialMatch = personnel.find(p => {
+      const nameParts = nameLower.split(/\s+/);
+      const searchSurname = nameParts[nameParts.length - 1];
+      const searchFirst = nameParts[0];
+
+      const match = personnel.find(p => {
         if (!p.full_name) return false;
-        const pName = p.full_name.toLowerCase();
-        // Check if last name matches and first name starts similarly
-        const nameParts = nameLower.split(' ');
-        const pParts = pName.split(' ');
-        if (nameParts.length >= 2 && pParts.length >= 2) {
-          const lastName = nameParts.slice(1).join(' ');
-          const pLastName = pParts.slice(1).join(' ');
-          return lastName === pLastName && (pParts[0].startsWith(nameParts[0]) || nameParts[0].startsWith(pParts[0]));
+        const pParts = p.full_name.toLowerCase().split(/\s+/);
+        const pSurname = pParts[pParts.length - 1];
+
+        // Strategy A: All search words found in personnel name
+        if (nameParts.length >= 2 && nameParts.every(w =>
+          pParts.some(pw => pw === w || (w.length >= 3 && pw.startsWith(w)) || (pw.length >= 3 && w.startsWith(pw)))
+        )) return true;
+
+        // Strategy B: Surname match (exact or fuzzy) + first name related
+        const surnameMatch = pSurname === searchSurname || editDist(pSurname, searchSurname) <= 2;
+        if (surnameMatch) {
+          if (pParts.some(pw =>
+            pw === searchFirst ||
+            (searchFirst.length >= 3 && pw.startsWith(searchFirst)) ||
+            (pw.length >= 3 && searchFirst.startsWith(pw)) ||
+            (pw.length >= 3 && searchFirst.length >= 3 && editDist(pw, searchFirst) <= 2)
+          )) return true;
         }
         return false;
       });
-      if (partialMatch?.division) return standardiseDivision(partialMatch.division);
+      if (match?.division) return standardiseDivision(match.division);
     }
     // 4. Fall back to notes field if it contains a known division abbreviation
     if (item.notes) {
