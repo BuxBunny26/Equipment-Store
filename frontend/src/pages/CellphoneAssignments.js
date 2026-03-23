@@ -142,7 +142,7 @@ function CellphoneAssignments() {
   };
 
   // Build lookups for division from personnel (by name, partial name, and employee_id)
-  const personnelDivisionMap = {}; // eslint-disable-line
+  const personnelDivisionMap = {};
   const personnelDivisionByIdMap = {};
   personnel.forEach(p => {
     if (p.full_name) personnelDivisionMap[p.full_name.toLowerCase()] = p.division || '';
@@ -2101,7 +2101,9 @@ function BulkStatusModal({ selectedIds, assignments, onClose, onSuccess }) {
 
     for (const item of selected) {
       try {
-        await cellphoneAssignmentsApi.updateStatus(item.id, {
+        await cellphoneAssignmentsApi.updateStatus(item.id, newStatus);
+        await cellphoneAssignmentsApi.update(item.id, {
+          ...item,
           phone_status: newStatus,
           device_condition: condition,
           notes: notes || `Bulk status update to ${newStatus}`,
@@ -2192,7 +2194,6 @@ function BulkStatusModal({ selectedIds, assignments, onClose, onSuccess }) {
 
 // ── Import Modal ──
 function ImportModal({ onClose, onSuccess }) {
-  const [file, setFile] = useState(null);
   const [parsedRows, setParsedRows] = useState([]);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0, errors: [] });
@@ -2203,7 +2204,6 @@ function ImportModal({ onClose, onSuccess }) {
   const handleFileChange = (e) => {
     const f = e.target.files[0];
     if (!f) return;
-    setFile(f);
     setParseError('');
     setParsedRows([]);
 

@@ -1711,7 +1711,6 @@ function BulkStatusModal({ selectedIds, assignments, onClose, onSuccess }) {
 
 // ── Import Modal ──
 function ImportModal({ onClose, onSuccess }) {
-  const [file, setFile] = useState(null);
   const [parsedRows, setParsedRows] = useState([]);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0, errors: [] });
@@ -1722,7 +1721,6 @@ function ImportModal({ onClose, onSuccess }) {
   const handleFileChange = (e) => {
     const f = e.target.files[0];
     if (!f) return;
-    setFile(f);
     setParseError('');
     setParsedRows([]);
 
