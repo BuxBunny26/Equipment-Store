@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { reportsApi, personnelApi, vehicleFinesApi, vehicleServicesApi } from '../services/api';
 import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
 import { Icons } from '../components/Icons';
+import { buildDivisionLookup, lookupDivision } from '../utils/divisionUtils';
 
 function Reports() {
   const [activeTab, setActiveTab] = useState('overdue');
@@ -687,98 +688,6 @@ function UsageReport({ stats }) {
       </div>
     </div>
   );
-}
-
-// Division lookup helper used by all asset report components
-const DIVISION_ABBREVS = { 'rs': 'RS', 'afs': 'AFS', 'gp': 'GP Consult', 'gp consult': 'GP Consult', 'wearcheck': 'RS' };
-
-function standardiseDivision(div) {
-  if (!div) return '';
-  if (div === 'GP') return 'GP Consult';
-  return div;
-}
-
-function buildDivisionLookup(personnel) {
-  const byName = {};
-  const byId = {};
-  (personnel || []).forEach(p => {
-    if (p.full_name) byName[p.full_name.toLowerCase()] = p.division || '';
-    if (p.employee_id) byId[p.employee_id.toLowerCase()] = p.division || '';
-  });
-  return { byName, byId, personnel: personnel || [] };
-}
-
-// Simple edit distance for fuzzy surname matching (handles typos like Thlou/Tlou, Sergent/Sergant)
-function editDist(a, b) {
-  if (Math.abs(a.length - b.length) > 2) return 99;
-  const m = a.length, n = b.length;
-  const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
-  for (let i = 0; i <= m; i++) dp[i][0] = i;
-  for (let j = 0; j <= n; j++) dp[0][j] = j;
-  for (let i = 1; i <= m; i++)
-    for (let j = 1; j <= n; j++)
-      dp[i][j] = Math.min(dp[i-1][j] + 1, dp[i][j-1] + 1, dp[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1));
-  return dp[m][n];
-}
-
-function lookupDivision(lookup, item, nameField) {
-  const empName = item[nameField] || '';
-  // 1. Exact name match
-  if (empName) {
-    const d = lookup.byName[empName.toLowerCase()];
-    if (d) return standardiseDivision(d);
-  }
-  // 2. Employee ID match
-  if (item.employee_id) {
-    const d = lookup.byId[item.employee_id.toLowerCase()];
-    if (d) return standardiseDivision(d);
-  }
-  // 3. Multi-strategy fuzzy name matching
-  if (empName) {
-    const nameLower = empName.toLowerCase();
-    const nameParts = nameLower.split(/\s+/);
-    const searchSurname = nameParts[nameParts.length - 1];
-    const searchFirst = nameParts[0];
-
-    const match = lookup.personnel.find(p => {
-      if (!p.full_name) return false;
-      const pName = p.full_name.toLowerCase();
-      const pParts = pName.split(/\s+/);
-      const pSurname = pParts[pParts.length - 1];
-
-      // Strategy A: All search words found in personnel name
-      // Handles "Daniel Molapo" matching "Tshegofatsho Daniel Molapo"
-      // Uses startsWith for abbreviations like "Jaco" matching "Jacobus"
-      if (nameParts.length >= 2 && nameParts.every(w =>
-        pParts.some(pw => pw === w || (w.length >= 3 && pw.startsWith(w)) || (pw.length >= 3 && w.startsWith(pw)))
-      )) return true;
-
-      // Strategy B: Surname match (exact or fuzzy) + first name related
-      const surnameExact = pSurname === searchSurname;
-      const surnameFuzzy = !surnameExact && editDist(pSurname, searchSurname) <= 2;
-
-      if (surnameExact || surnameFuzzy) {
-        // Check if first name matches any word in personnel name
-        if (pParts.some(pw =>
-          pw === searchFirst ||
-          (searchFirst.length >= 3 && pw.startsWith(searchFirst)) ||
-          (pw.length >= 3 && searchFirst.startsWith(pw))
-        )) return true;
-        // Check if any personnel word fuzzy-matches the first name
-        if (pParts.some(pw => pw.length >= 3 && searchFirst.length >= 3 && editDist(pw, searchFirst) <= 2))
-          return true;
-      }
-
-      return false;
-    });
-    if (match?.division) return standardiseDivision(match.division);
-  }
-  // 4. Fall back to notes field if it contains a known division abbreviation
-  if (item.notes) {
-    const notesLower = item.notes.toLowerCase().trim();
-    if (DIVISION_ABBREVS[notesLower]) return DIVISION_ABBREVS[notesLower];
-  }
-  return '';
 }
 
 // Vehicle Report Component

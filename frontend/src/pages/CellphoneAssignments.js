@@ -3,6 +3,7 @@ import { cellphoneAssignmentsApi, personnelApi } from '../services/api';
 import * as XLSX from 'xlsx';
 import { useOperator } from '../context/OperatorContext';
 import { Icons } from '../components/Icons';
+import { buildDivisionLookup, lookupDivision } from '../utils/divisionUtils';
 import { getAssetConfig } from './Settings';
 import { exportData } from '../services/exportUtils';
 
@@ -142,84 +143,8 @@ function CellphoneAssignments() {
     }
   };
 
-  // Build lookups for division from personnel (by name, partial name, and employee_id)
-  const personnelDivisionMap = {};
-  const personnelDivisionByIdMap = {};
-  personnel.forEach(p => {
-    if (p.full_name) personnelDivisionMap[p.full_name.toLowerCase()] = p.division || '';
-    if (p.employee_id) personnelDivisionByIdMap[p.employee_id.toLowerCase()] = p.division || '';
-  });
-
-  // Known division abbreviations used in cellphone assignment notes
-  const DIVISION_ABBREVS = { 'rs': 'RS', 'afs': 'AFS', 'gp': 'GP Consult', 'gp consult': 'GP Consult', 'wearcheck': 'RS' };
-
-  // Standardise division names
-  const standardiseDivision = (div) => {
-    if (!div) return '';
-    if (div === 'GP') return 'GP Consult';
-    return div;
-  };
-
-  // Simple edit distance for fuzzy name matching
-  const editDist = (a, b) => {
-    if (Math.abs(a.length - b.length) > 2) return 99;
-    const m = a.length, n = b.length;
-    const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
-    for (let i = 0; i <= m; i++) dp[i][0] = i;
-    for (let j = 0; j <= n; j++) dp[0][j] = j;
-    for (let i = 1; i <= m; i++)
-      for (let j = 1; j <= n; j++)
-        dp[i][j] = Math.min(dp[i-1][j] + 1, dp[i][j-1] + 1, dp[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1));
-    return dp[m][n];
-  };
-
-  const getDivision = (item) => {
-    // 1. Exact name match
-    const byName = personnelDivisionMap[item.employee_name?.toLowerCase()];
-    if (byName) return standardiseDivision(byName);
-    // 2. Employee ID match
-    if (item.employee_id) {
-      const byId = personnelDivisionByIdMap[item.employee_id.toLowerCase()];
-      if (byId) return standardiseDivision(byId);
-    }
-    // 3. Multi-strategy fuzzy name matching
-    if (item.employee_name) {
-      const nameLower = item.employee_name.toLowerCase();
-      const nameParts = nameLower.split(/\s+/);
-      const searchSurname = nameParts[nameParts.length - 1];
-      const searchFirst = nameParts[0];
-
-      const match = personnel.find(p => {
-        if (!p.full_name) return false;
-        const pParts = p.full_name.toLowerCase().split(/\s+/);
-        const pSurname = pParts[pParts.length - 1];
-
-        // Strategy A: All search words found in personnel name
-        if (nameParts.length >= 2 && nameParts.every(w =>
-          pParts.some(pw => pw === w || (w.length >= 3 && pw.startsWith(w)) || (pw.length >= 3 && w.startsWith(pw)))
-        )) return true;
-
-        // Strategy B: Surname match (exact or fuzzy) + first name related
-        const surnameMatch = pSurname === searchSurname || editDist(pSurname, searchSurname) <= 2;
-        if (surnameMatch) {
-          if (pParts.some(pw =>
-            pw === searchFirst ||
-            (searchFirst.length >= 3 && pw.startsWith(searchFirst)) ||
-            (pw.length >= 3 && searchFirst.startsWith(pw)) ||
-            (pw.length >= 3 && searchFirst.length >= 3 && editDist(pw, searchFirst) <= 2)
-          )) return true;
-        }
-        return false;
-      });
-      if (match?.division) return standardiseDivision(match.division);
-    }
-    // 4. Fall back to notes field if it contains a known division abbreviation
-    if (item.notes) {
-      const notesLower = item.notes.toLowerCase().trim();
-      if (DIVISION_ABBREVS[notesLower]) return DIVISION_ABBREVS[notesLower];
-    }
-    return '';
-  };
+  const divLookup = buildDivisionLookup(personnel);
+  const getDivision = (item) => lookupDivision(divLookup, item, 'employee_name');
 
   // Get unique divisions and brands for filter dropdowns
   // Include divisions from both personnel and assignment notes
