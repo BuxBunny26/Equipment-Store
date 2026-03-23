@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { reservationsApi, equipmentApi, personnelApi, customersApi } from '../services/api';
+import { reservationsApi, equipmentApi, personnelApi, customersApi, reportsApi } from '../services/api';
 import { useOperator } from '../context/OperatorContext';
 import { Icons } from '../components/Icons';
 
@@ -35,6 +35,7 @@ function Reservations() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [availability, setAvailability] = useState(null);
+  const [checkoutConflict, setCheckoutConflict] = useState(null);
 
   const fetchReservations = useCallback(async () => {
     try {
@@ -90,6 +91,15 @@ function Reservations() {
           editingReservation?.id
         );
         setAvailability(response.data);
+
+        // Also check if equipment is currently checked out with overlapping return date
+        const checkedOutRes = await reportsApi.getCheckedOut();
+        const checkedOut = (checkedOutRes.data || []).find(
+          eq => eq.id === parseInt(formData.equipment_id) &&
+            eq.expected_return_date &&
+            eq.expected_return_date >= formData.start_date
+        );
+        setCheckoutConflict(checkedOut || null);
       } catch (err) {
         console.error('Error checking availability:', err);
       }
@@ -126,6 +136,7 @@ function Reservations() {
     }
     setSelectedCategory('');
     setAvailability(null);
+    setCheckoutConflict(null);
     setShowModal(true);
   };
 
@@ -491,6 +502,19 @@ function Reservations() {
                   </div>
                 )}
 
+                {checkoutConflict && (
+                  <div className="alert alert-error" style={{ marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <Icons.Warning size={16} /> <strong>Equipment is currently checked out</strong>
+                    </div>
+                    <div style={{ fontSize: '0.85rem' }}>
+                      Checked out to <strong>{checkoutConflict.checked_out_to}</strong> with expected return on{' '}
+                      <strong>{new Date(checkoutConflict.expected_return_date).toLocaleDateString('en-GB')}</strong>,
+                      which overlaps your reservation start date.
+                    </div>
+                  </div>
+                )}
+
                 <div className="form-group">
                   <label className="form-label">Personnel *</label>
                   <select
@@ -552,7 +576,7 @@ function Reservations() {
                 <button 
                   type="submit" 
                   className="btn btn-primary"
-                  disabled={submitting || (availability && !availability.available)}
+                  disabled={submitting || (availability && !availability.available) || !!checkoutConflict}
                 >
                   {submitting ? 'Saving...' : (editingReservation ? 'Update' : 'Create Reservation')}
                 </button>

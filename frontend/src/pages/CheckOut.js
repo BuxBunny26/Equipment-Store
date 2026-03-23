@@ -902,7 +902,9 @@ function CheckOut() {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Expected Return Date</label>
+                <label className="form-label">
+                  Expected Return Date{(formData.destination_type === 'internal' || formData.destination_type === 'customer') ? ' *' : ''}
+                </label>
                 <input
                   type="date"
                   name="expected_return_date"
@@ -910,9 +912,52 @@ function CheckOut() {
                   value={formData.expected_return_date}
                   onChange={handleChange}
                   min={formData.expected_checkout_date || undefined}
+                  required={formData.destination_type === 'internal' || formData.destination_type === 'customer'}
                 />
               </div>
             </div>
+
+            {/* Reservation conflict warnings */}
+            {selectedEquipmentIds.length > 0 && formData.expected_checkout_date && formData.expected_return_date && (() => {
+              const conflicts = selectedEquipmentList.map(eq => {
+                const overlapping = activeReservations.filter(r =>
+                  r.equipment_id === eq.id &&
+                  r.start_date <= formData.expected_return_date &&
+                  r.end_date >= formData.expected_checkout_date
+                );
+                return overlapping.length > 0 ? { equipment: eq, reservations: overlapping } : null;
+              }).filter(Boolean);
+              if (conflicts.length === 0) return null;
+              return (
+                <div style={{
+                  padding: '12px',
+                  background: 'rgba(255, 152, 0, 0.1)',
+                  border: '1px solid rgba(255, 152, 0, 0.4)',
+                  borderRadius: 'var(--radius-sm)',
+                  marginBottom: '16px',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <Icons.Warning size={18} style={{ color: '#ff9800' }} />
+                    <strong style={{ color: '#ff9800' }}>Reservation Conflict</strong>
+                  </div>
+                  {conflicts.map(c => (
+                    <div key={c.equipment.id} style={{ fontSize: '0.85rem', marginBottom: '4px' }}>
+                      <strong>{c.equipment.equipment_name}</strong> is reserved:
+                      {c.reservations.map(r => (
+                        <div key={r.id} style={{ marginLeft: '12px', fontSize: '0.8rem' }}>
+                          {new Date(r.start_date).toLocaleDateString('en-GB')} – {new Date(r.end_date).toLocaleDateString('en-GB')}
+                          {r.personnel_name && ` by ${r.personnel_name}`}
+                          <span className="badge" style={{ marginLeft: '6px', fontSize: '0.7rem' }}>{r.status}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '8px', marginBottom: 0 }}>
+                    You can still proceed — the reservation holder will need to be notified.
+                  </p>
+                </div>
+              );
+            })()}
 
             <div className="form-group">
               <label className="form-label">Notes (Optional)</label>
@@ -940,6 +985,7 @@ function CheckOut() {
                     formData.destination_type === 'transfer' ? !formData.to_site_id : false) ||
                   submitting ||
                   (shouldShowReason() && !formData.reason) ||
+                  ((formData.destination_type === 'internal' || formData.destination_type === 'customer') && !formData.expected_return_date) ||
                   (selectedEquipmentList.some(eq => eq.is_quantity_tracked) && (!formData.quantity || formData.quantity < 1 || formData.quantity > selectedEquipmentList.find(eq => eq.is_quantity_tracked)?.available_quantity))
                 }
               >
