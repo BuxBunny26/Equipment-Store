@@ -632,8 +632,8 @@ function CellphoneAssignments() {
               background: 'rgba(230, 126, 34, 0.08)',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                <span style={{ color: '#e67e22', fontWeight: 600, fontSize: '0.9rem' }}>
-                  🔶 {upgradesApproaching.length} phone{upgradesApproaching.length !== 1 ? 's' : ''} approaching upgrade (18-24 months)
+                <span style={{ color: '#e67e22', fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Icons.Clock size={14} /> {upgradesApproaching.length} phone{upgradesApproaching.length !== 1 ? 's' : ''} approaching upgrade (18-24 months)
                 </span>
                 <button
                   className="btn btn-sm"
