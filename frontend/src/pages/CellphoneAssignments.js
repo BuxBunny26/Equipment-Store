@@ -251,7 +251,7 @@ function CellphoneAssignments() {
       return 0;
     });
     return arr;
-  }, [filtered, sortCol, sortDir]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filtered, sortCol, sortDir]);
 
   // Duplicate phone detection (employees with multiple active phones)
   const duplicatePhoneEmployees = useMemo(() => {
@@ -273,7 +273,7 @@ function CellphoneAssignments() {
       counts[div] = (counts[div] || 0) + 1;
     });
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  }, [assignments, personnel]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [assignments, personnel]);
 
   // Contract/Warranty alert helpers
   const getContractStatus = (item) => {
