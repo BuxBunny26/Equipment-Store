@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { laptopAssignmentsApi, personnelApi } from '../services/api';
 import { useOperator } from '../context/OperatorContext';
 import { Icons } from '../components/Icons';
 import { getAssetConfig } from './Settings';
+import { exportData } from '../services/exportUtils';
 
 function LaptopAssignments() {
   const { operatorRole } = useOperator();
@@ -17,6 +18,15 @@ function LaptopAssignments() {
   const [showReturned, setShowReturned] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [divisionFilter, setDivisionFilter] = useState('');
+  const [brandFilter, setBrandFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [sortCol, setSortCol] = useState('employee_name');
+  const [sortDir, setSortDir] = useState('asc');
+  const [showDivisionBreakdown, setShowDivisionBreakdown] = useState(false);
+  const [showReassignModal, setShowReassignModal] = useState(false);
+  const [reassignItem, setReassignItem] = useState(null);
 
   const LAPTOP_STATUSES = [
     { value: 'Active', label: 'Active', badge: 'badge-available', color: 'var(--success-color)' },
@@ -27,6 +37,32 @@ function LaptopAssignments() {
     { value: 'Lost', label: 'Lost', badge: 'badge-overdue', color: 'var(--error-color)' },
     { value: 'Decommissioned', label: 'Decommissioned', badge: 'badge-checked-out', color: 'var(--text-secondary)' },
   ];
+
+  // Laptop age helpers
+  const getLaptopAgeMonths = (dateAssigned) => {
+    if (!dateAssigned) return 0;
+    const assigned = new Date(dateAssigned);
+    const now = new Date();
+    return (now.getFullYear() - assigned.getFullYear()) * 12 + (now.getMonth() - assigned.getMonth());
+  };
+
+  const getLaptopAgeLabel = (dateAssigned) => {
+    if (!dateAssigned) return '-';
+    const months = getLaptopAgeMonths(dateAssigned);
+    const years = Math.floor(months / 12);
+    const remainingMonths = months % 12;
+    if (years > 0) return `${years}y ${remainingMonths}m`;
+    return `${remainingMonths}m`;
+  };
+
+  const getLaptopAgeColor = (dateAssigned, status) => {
+    if (!dateAssigned || status !== 'Active') return 'var(--text-secondary)';
+    const months = getLaptopAgeMonths(dateAssigned);
+    if (months >= 48) return '#e74c3c';
+    if (months >= 36) return '#e67e22';
+    if (months >= 24) return '#f39c12';
+    return 'var(--success-color)';
+  };
 
   useEffect(() => {
     fetchData();
@@ -59,8 +95,6 @@ function LaptopAssignments() {
     setShowModal(true);
   };
 
-
-
   const handleDelete = async (item) => {
     if (!window.confirm(`Delete this laptop assignment record for ${item.employee_name}?`)) return;
     try {
@@ -71,8 +105,61 @@ function LaptopAssignments() {
     }
   };
 
+  // Division lookup from personnel
+  const personnelDivisionMap = {};
+  personnel.forEach(p => {
+    if (p.full_name) personnelDivisionMap[p.full_name.toLowerCase()] = p.division || '';
+  });
+
+  const DIVISION_ABBREVS = { 'rs': 'RS', 'afs': 'AFS', 'gp': 'GP Consult', 'gp consult': 'GP Consult' };
+
+  const standardiseDivision = (div) => {
+    if (!div) return '';
+    if (div === 'GP') return 'GP Consult';
+    return div;
+  };
+
+  const getDivision = (item) => {
+    const byName = personnelDivisionMap[item.employee_name?.toLowerCase()];
+    if (byName) return standardiseDivision(byName);
+    if (item.employee_name) {
+      const nameLower = item.employee_name.toLowerCase();
+      const partialMatch = personnel.find(p => {
+        if (!p.full_name) return false;
+        const pName = p.full_name.toLowerCase();
+        const nameParts = nameLower.split(' ');
+        const pParts = pName.split(' ');
+        if (nameParts.length >= 2 && pParts.length >= 2) {
+          const lastName = nameParts.slice(1).join(' ');
+          const pLastName = pParts.slice(1).join(' ');
+          return lastName === pLastName && (pParts[0].startsWith(nameParts[0]) || nameParts[0].startsWith(pParts[0]));
+        }
+        return false;
+      });
+      if (partialMatch?.division) return standardiseDivision(partialMatch.division);
+    }
+    if (item.notes) {
+      const notesLower = item.notes.toLowerCase().trim();
+      if (DIVISION_ABBREVS[notesLower]) return DIVISION_ABBREVS[notesLower];
+    }
+    return '';
+  };
+
+  // Unique divisions and brands for filters
+  const personnelDivisions = personnel.map(p => p.division).filter(Boolean);
+  const assignmentDivisions = assignments.map(a => getDivision(a)).filter(Boolean);
+  const divisions = [...new Set([...personnelDivisions, ...assignmentDivisions])].sort();
+  const brands = [...new Set(assignments.map(a => a.laptop_brand).filter(Boolean))].sort();
+
   const filtered = assignments.filter(a => {
     if (statusFilter && a.laptop_status !== statusFilter) return false;
+    if (brandFilter && a.laptop_brand !== brandFilter) return false;
+    if (divisionFilter) {
+      const empDiv = getDivision(a);
+      if (empDiv !== divisionFilter) return false;
+    }
+    if (dateFrom && a.date_assigned < dateFrom) return false;
+    if (dateTo && a.date_assigned > dateTo) return false;
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
@@ -83,6 +170,131 @@ function LaptopAssignments() {
       a.asset_tag?.toLowerCase().includes(term)
     );
   });
+
+  // Column sorting
+  const handleSort = (col) => {
+    if (sortCol === col) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
+  };
+
+  const sortedFiltered = useMemo(() => {
+    const arr = [...filtered];
+    arr.sort((a, b) => {
+      let valA, valB;
+      switch (sortCol) {
+        case 'employee_name': valA = a.employee_name || ''; valB = b.employee_name || ''; break;
+        case 'division': valA = getDivision(a); valB = getDivision(b); break;
+        case 'laptop': valA = `${a.laptop_brand} ${a.laptop_model}`; valB = `${b.laptop_brand} ${b.laptop_model}`; break;
+        case 'date_assigned': valA = a.date_assigned || ''; valB = b.date_assigned || ''; break;
+        case 'laptop_age': valA = getLaptopAgeMonths(a.date_assigned); valB = getLaptopAgeMonths(b.date_assigned); return sortDir === 'asc' ? valA - valB : valB - valA;
+        case 'status': valA = a.laptop_status || ''; valB = b.laptop_status || ''; break;
+        default: valA = a.employee_name || ''; valB = b.employee_name || '';
+      }
+      if (typeof valA === 'string') {
+        const cmp = valA.localeCompare(valB, undefined, { sensitivity: 'base' });
+        return sortDir === 'asc' ? cmp : -cmp;
+      }
+      return 0;
+    });
+    return arr;
+  }, [filtered, sortCol, sortDir]);
+
+  // Division breakdown
+  const divisionBreakdown = useMemo(() => {
+    const counts = {};
+    assignments.filter(a => a.laptop_status === 'Active').forEach(a => {
+      const div = getDivision(a) || 'Unassigned';
+      counts[div] = (counts[div] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [assignments, personnel]);
+
+  // Export handler
+  const handleExport = (format) => {
+    const exportColumns = [
+      { label: 'Employee', accessor: 'employee_name' },
+      { label: 'Employee ID', accessor: 'employee_id' },
+      { label: 'Division', accessor: r => getDivision(r) || '' },
+      { label: 'Laptop Brand', accessor: 'laptop_brand' },
+      { label: 'Laptop Model', accessor: 'laptop_model' },
+      { label: 'Serial Number', accessor: 'serial_number' },
+      { label: 'Asset Tag', accessor: 'asset_tag' },
+      { label: 'Date Assigned', accessor: r => r.date_assigned ? new Date(r.date_assigned).toLocaleDateString() : '' },
+      { label: 'Laptop Age', accessor: r => getLaptopAgeLabel(r.date_assigned) },
+      { label: 'Status', accessor: 'laptop_status' },
+      { label: 'Laptop Setup', accessor: r => r.setup_laptop ? 'Yes' : 'No' },
+      { label: 'M365', accessor: r => r.setup_m365 ? 'Yes' : 'No' },
+      { label: 'Adobe', accessor: r => r.setup_adobe ? 'Yes' : 'No' },
+      { label: 'Zoho', accessor: r => r.setup_zoho ? 'Yes' : 'No' },
+      { label: 'Smartsheet', accessor: r => r.setup_smartsheet ? 'Yes' : 'No' },
+      { label: 'Dist. Lists', accessor: r => r.setup_distribution_lists ? 'Yes' : 'No' },
+      { label: 'Notes', accessor: 'notes' },
+    ];
+    exportData(format, sortedFiltered, exportColumns, 'laptop_assignments', 'Laptop Assignments Report');
+  };
+
+  // Print handler
+  const handlePrint = () => {
+    const printContent = sortedFiltered.map(item => ({
+      employee: item.employee_name || '',
+      division: getDivision(item) || '',
+      laptop: `${item.laptop_brand} ${item.laptop_model}`,
+      serial: item.serial_number || '',
+      assetTag: item.asset_tag || '',
+      assigned: item.date_assigned ? new Date(item.date_assigned).toLocaleDateString() : '',
+      age: getLaptopAgeLabel(item.date_assigned),
+      status: item.laptop_status || '',
+      setup: [
+        item.setup_laptop && 'Laptop',
+        item.setup_m365 && 'M365',
+        item.setup_adobe && 'Adobe',
+        item.setup_zoho && 'Zoho',
+        item.setup_smartsheet && 'Smart',
+        item.setup_distribution_lists && 'DLists',
+      ].filter(Boolean).join(', ') || '-',
+    }));
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html><head><title>Laptop Assignments</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        h1 { font-size: 18px; margin-bottom: 4px; }
+        .subtitle { font-size: 12px; color: #666; margin-bottom: 16px; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        th { background: #333; color: white; padding: 6px 8px; text-align: left; }
+        td { padding: 5px 8px; border-bottom: 1px solid #ddd; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        .footer { margin-top: 16px; font-size: 10px; color: #999; }
+        @media print { body { padding: 0; } }
+      </style></head><body>
+      <h1>Laptop Assignments Report</h1>
+      <div class="subtitle">Generated: ${new Date().toLocaleDateString()} | Records: ${printContent.length}</div>
+      <table>
+        <thead><tr>
+          <th>Employee</th><th>Division</th><th>Laptop</th><th>Serial</th><th>Asset Tag</th><th>Assigned</th><th>Age</th><th>Setup</th><th>Status</th>
+        </tr></thead>
+        <tbody>${printContent.map(r => `
+          <tr><td>${r.employee}</td><td>${r.division}</td><td>${r.laptop}</td><td style="font-family:monospace;font-size:10px">${r.serial}</td><td>${r.assetTag}</td><td>${r.assigned}</td><td>${r.age}</td><td>${r.setup}</td><td>${r.status}</td></tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="footer">Equipment Store - Laptop Assignments</div>
+      </body></html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 300);
+  };
+
+  const SortHeader = ({ col, label }) => (
+    <th onClick={() => handleSort(col)} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+      {label} {sortCol === col ? (sortDir === 'asc' ? '▲' : '▼') : <span style={{ opacity: 0.3 }}>▲</span>}
+    </th>
+  );
 
   if (loading) {
     return (
@@ -100,7 +312,19 @@ function LaptopAssignments() {
           <h1 className="page-title">Laptop Assignments</h1>
           <p className="page-subtitle">Track company laptops assigned to employees</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary" onClick={() => handleExport('csv')} title="Export CSV">
+            <Icons.Download size={14} /> CSV
+          </button>
+          <button className="btn btn-secondary" onClick={() => handleExport('excel')} title="Export Excel">
+            <Icons.Download size={14} /> Excel
+          </button>
+          <button className="btn btn-secondary" onClick={() => handleExport('pdf')} title="Export PDF">
+            <Icons.Download size={14} /> PDF
+          </button>
+          <button className="btn btn-secondary" onClick={handlePrint} title="Print">
+            <Icons.Printer size={14} /> Print
+          </button>
           {isAdminOrManager && (
             <button className="btn btn-primary" onClick={handleAdd}>
               + Assign Laptop
@@ -124,30 +348,66 @@ function LaptopAssignments() {
           <input
             type="text"
             className="form-input"
-            placeholder="Search by name, brand, model, serial..."
+            placeholder="Search by name, brand, model, serial, asset tag..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             style={{ flex: 1, minWidth: '200px' }}
           />
-          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.875rem' }}>
-            <input
-              type="checkbox"
-              checked={showReturned}
-              onChange={e => setShowReturned(e.target.checked)}
-            />
-            Show inactive laptops
-          </label>
+          <select
+            className="form-input"
+            value={divisionFilter}
+            onChange={e => setDivisionFilter(e.target.value)}
+            style={{ minWidth: '140px' }}
+          >
+            <option value="">All Divisions</option>
+            {divisions.map(d => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+          <select
+            className="form-input"
+            value={brandFilter}
+            onChange={e => setBrandFilter(e.target.value)}
+            style={{ minWidth: '140px' }}
+          >
+            <option value="">All Brands</option>
+            {brands.map(b => (
+              <option key={b} value={b}>{b}</option>
+            ))}
+          </select>
           <select
             className="form-input"
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
-            style={{ minWidth: '150px' }}
+            style={{ minWidth: '140px' }}
           >
             <option value="">All Statuses</option>
             {LAPTOP_STATUSES.map(s => (
               <option key={s.value} value={s.value}>{s.label}</option>
             ))}
           </select>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.875rem' }}>
+            <input
+              type="checkbox"
+              checked={showReturned}
+              onChange={e => setShowReturned(e.target.checked)}
+            />
+            Show inactive
+          </label>
+        </div>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginTop: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Assigned From:</label>
+            <input type="date" className="form-input" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ width: '150px' }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>To:</label>
+            <input type="date" className="form-input" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ width: '150px' }} />
+          </div>
+          {(divisionFilter || brandFilter || dateFrom || dateTo || searchTerm || statusFilter) && (
+            <button className="btn btn-sm" style={{ fontSize: '0.8rem' }} onClick={() => { setDivisionFilter(''); setBrandFilter(''); setDateFrom(''); setDateTo(''); setSearchTerm(''); setStatusFilter(''); }}>Clear Filters</button>
+          )}
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 'auto' }}>{filtered.length} record{filtered.length !== 1 ? 's' : ''}</span>
         </div>
       </div>
 
@@ -191,9 +451,42 @@ function LaptopAssignments() {
         </div>
       </div>
 
+      {/* Division Breakdown */}
+      <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setShowDivisionBreakdown(!showDivisionBreakdown)}>
+          <Icons.Building size={16} />
+          <strong style={{ fontSize: '0.9rem' }}>Division Breakdown</strong>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>({divisionBreakdown.length} divisions)</span>
+          <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{showDivisionBreakdown ? '▼' : '▶'}</span>
+        </div>
+        {showDivisionBreakdown && (
+          <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {divisionBreakdown.map(([div, count]) => {
+              const maxCount = divisionBreakdown[0]?.[1] || 1;
+              return (
+                <div key={div} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '0.85rem', minWidth: '120px', textAlign: 'right' }}>{div}</span>
+                  <div style={{ flex: 1, background: 'var(--bg-secondary, #f0f0f0)', borderRadius: '4px', height: '20px', overflow: 'hidden' }}>
+                    <div style={{
+                      width: `${(count / maxCount) * 100}%`,
+                      height: '100%',
+                      background: 'var(--primary-color)',
+                      borderRadius: '4px',
+                      transition: 'width 0.3s ease',
+                      minWidth: '2px',
+                    }} />
+                  </div>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, minWidth: '30px' }}>{count}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Table */}
       <div className="card">
-        {filtered.length === 0 ? (
+        {sortedFiltered.length === 0 ? (
           <div className="empty-state">
             <h3>No laptop assignments found</h3>
             <p>{searchTerm ? 'Try a different search term' : 'Click "Assign Laptop" to add the first record'}</p>
@@ -203,18 +496,19 @@ function LaptopAssignments() {
             <table>
               <thead>
                 <tr>
-                  <th>Employee</th>
-                  <th>Laptop</th>
-                  <th>Serial Number</th>
-                  <th>Asset Tag</th>
-                  <th>Date Assigned</th>
+                  <SortHeader col="employee_name" label="Employee" />
+                  <SortHeader col="division" label="Division" />
+                  <SortHeader col="laptop" label="Laptop" />
+                  <th>Serial / Asset Tag</th>
+                  <SortHeader col="date_assigned" label="Date Assigned" />
+                  <SortHeader col="laptop_age" label="Age" />
                   <th>Setup</th>
-                  <th>Status</th>
+                  <SortHeader col="status" label="Status" />
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(item => (
+                {sortedFiltered.map(item => (
                   <tr key={item.id}>
                     <td>
                       <div>
@@ -232,6 +526,11 @@ function LaptopAssignments() {
                       </div>
                     </td>
                     <td>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        {getDivision(item) || '-'}
+                      </span>
+                    </td>
+                    <td>
                       <div>
                         <strong>{item.laptop_brand}</strong>
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
@@ -239,9 +538,26 @@ function LaptopAssignments() {
                         </div>
                       </div>
                     </td>
-                    <td style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>{item.serial_number}</td>
-                    <td>{item.asset_tag || '-'}</td>
+                    <td>
+                      <div>
+                        <span style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>{item.serial_number}</span>
+                        {item.asset_tag && (
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                            Tag: {item.asset_tag}
+                          </div>
+                        )}
+                      </div>
+                    </td>
                     <td>{item.date_assigned ? new Date(item.date_assigned).toLocaleDateString() : '-'}</td>
+                    <td>
+                      <span style={{
+                        fontWeight: 600,
+                        color: getLaptopAgeColor(item.date_assigned, item.laptop_status),
+                        fontSize: '0.85rem',
+                      }}>
+                        {getLaptopAgeLabel(item.date_assigned)}
+                      </span>
+                    </td>
                     <td>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
                         {[
@@ -285,6 +601,16 @@ function LaptopAssignments() {
                         <button className="btn btn-sm btn-secondary" onClick={() => setHistoryItem(item)} title="View History">
                           <Icons.Clock size={14} />
                         </button>
+                        {isAdminOrManager && item.laptop_status === 'Active' && (
+                          <button
+                            className="btn btn-sm"
+                            style={{ background: 'var(--primary-color)', color: 'white' }}
+                            onClick={() => { setReassignItem(item); setShowReassignModal(true); }}
+                            title="Reassign Laptop"
+                          >
+                            <Icons.Users size={14} />
+                          </button>
+                        )}
                         {isAdminOrManager && (
                           <button className="btn btn-sm btn-secondary" onClick={() => handleEdit(item)} title="Edit">
                             <Icons.Edit size={14} />
@@ -323,6 +649,96 @@ function LaptopAssignments() {
           onClose={() => setHistoryItem(null)}
         />
       )}
+
+      {/* Reassign Modal */}
+      {showReassignModal && reassignItem && (
+        <ReassignModal
+          item={reassignItem}
+          personnel={personnel}
+          onClose={() => { setShowReassignModal(false); setReassignItem(null); }}
+          onSuccess={() => { setShowReassignModal(false); setReassignItem(null); fetchData(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ReassignModal({ item, personnel, onClose, onSuccess }) {
+  const [newEmployee, setNewEmployee] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleReassign = async () => {
+    if (!newEmployee) return;
+    const person = personnel.find(p => p.name === newEmployee);
+    if (!person) return;
+    setSaving(true);
+    try {
+      // Return the old assignment
+      await laptopAssignmentsApi.update(item.id, {
+        ...item,
+        laptop_status: 'Returned',
+        date_returned: new Date().toISOString().split('T')[0],
+      });
+      // Create new assignment for the new employee
+      await laptopAssignmentsApi.create({
+        employee_name: person.name,
+        employee_id: person.employee_id || '',
+        employee_email: person.email || '',
+        laptop_brand: item.laptop_brand,
+        laptop_model: item.laptop_model,
+        serial_number: item.serial_number,
+        asset_tag: item.asset_tag,
+        date_assigned: new Date().toISOString().split('T')[0],
+        laptop_status: 'Active',
+        setup_laptop: false,
+        setup_m365: false,
+        setup_adobe: false,
+        setup_zoho: false,
+        setup_smartsheet: false,
+        setup_distribution_lists: false,
+        notes: `Reassigned from ${item.employee_name}`,
+      });
+      onSuccess();
+    } catch (err) {
+      alert('Failed to reassign: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+        <div className="modal-header">
+          <h3>Reassign Laptop</h3>
+          <button className="modal-close" onClick={onClose}><Icons.Close size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <p style={{ marginBottom: '12px' }}>
+            Reassign <strong>{item.laptop_brand} {item.laptop_model}</strong> from <strong>{item.employee_name}</strong> to:
+          </p>
+          <select
+            className="form-input"
+            value={newEmployee}
+            onChange={e => setNewEmployee(e.target.value)}
+            style={{ width: '100%' }}
+          >
+            <option value="">Select new employee...</option>
+            {personnel
+              .filter(p => p.name !== item.employee_name && p.status === 'Active')
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map(p => (
+                <option key={p.id} value={p.name}>{p.name}{p.department ? ` (${p.department})` : ''}</option>
+              ))}
+          </select>
+        </div>
+        <div className="modal-footer" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleReassign} disabled={!newEmployee || saving}>
+            {saving ? 'Reassigning...' : 'Reassign'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
