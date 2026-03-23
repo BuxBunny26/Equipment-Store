@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { laptopAssignmentsApi, personnelApi } from '../services/api';
 import { useOperator } from '../context/OperatorContext';
 import { Icons } from '../components/Icons';
@@ -27,6 +27,15 @@ function LaptopAssignments() {
   const [showDivisionBreakdown, setShowDivisionBreakdown] = useState(false);
   const [showReassignModal, setShowReassignModal] = useState(false);
   const [reassignItem, setReassignItem] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [showBulkStatusModal, setShowBulkStatusModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showBrandChart, setShowBrandChart] = useState(false);
+  const [showCostSummary, setShowCostSummary] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [hiddenColumns, setHiddenColumns] = useState(new Set());
+  const [showColumnToggle, setShowColumnToggle] = useState(false);
 
   const LAPTOP_STATUSES = [
     { value: 'Active', label: 'Active', badge: 'badge-available', color: 'var(--success-color)' },
@@ -62,6 +71,15 @@ function LaptopAssignments() {
     if (months >= 36) return '#e67e22';
     if (months >= 24) return '#f39c12';
     return 'var(--success-color)';
+  };
+
+  // Upgrade/refresh cycle helpers (4 year lifecycle)
+  const getUpgradeStatus = (item) => {
+    if (!item.date_assigned || item.laptop_status !== 'Active') return 'ok';
+    const months = getLaptopAgeMonths(item.date_assigned);
+    if (months >= 48) return 'due';
+    if (months >= 36) return 'approaching';
+    return 'ok';
   };
 
   useEffect(() => {
@@ -213,6 +231,79 @@ function LaptopAssignments() {
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
   }, [assignments, personnel]);
 
+  // Brand distribution
+  const brandDistribution = useMemo(() => {
+    const counts = {};
+    assignments.filter(a => a.laptop_status === 'Active').forEach(a => {
+      const brand = a.laptop_brand || 'Unknown';
+      counts[brand] = (counts[brand] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [assignments]);
+
+  const brandColors = { 'Lenovo': '#E2231A', 'Dell': '#007DB8', 'HP': '#0096D6', 'Asus': '#00539B', 'Acer': '#83B81A', 'Apple': '#555', 'Microsoft': '#00A4EF', 'Huawei': '#CF0A2C' };
+
+  // Cost per division
+  const costPerDivision = useMemo(() => {
+    const map = {};
+    assignments.filter(a => a.laptop_status === 'Active').forEach(a => {
+      const div = getDivision(a) || 'Unassigned';
+      if (!map[div]) map[div] = { count: 0, totalDevice: 0, totalMonthly: 0 };
+      map[div].count++;
+      if (a.device_cost) map[div].totalDevice += Number(a.device_cost);
+      if (a.monthly_cost) map[div].totalMonthly += Number(a.monthly_cost);
+    });
+    return Object.entries(map).sort((a, b) => b[1].count - a[1].count);
+  }, [assignments, personnel]);
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(sortedFiltered.length / pageSize));
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return sortedFiltered.slice(start, start + pageSize);
+  }, [sortedFiltered, currentPage, pageSize]);
+
+  // Reset page when filters change
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, divisionFilter, brandFilter, statusFilter, dateFrom, dateTo, showReturned]);
+
+  // Bulk selection
+  const toggleSelect = useCallback((id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds(prev => {
+      if (prev.size === paginatedData.length) return new Set();
+      return new Set(paginatedData.map(i => i.id));
+    });
+  }, [paginatedData]);
+
+  // Column visibility
+  const ALL_COLUMNS = [
+    { key: 'employee', label: 'Employee' },
+    { key: 'division', label: 'Division' },
+    { key: 'laptop', label: 'Laptop' },
+    { key: 'serial', label: 'Serial / Asset Tag' },
+    { key: 'date_assigned', label: 'Date Assigned' },
+    { key: 'laptop_age', label: 'Age' },
+    { key: 'condition', label: 'Condition' },
+    { key: 'setup', label: 'Setup' },
+    { key: 'status', label: 'Status' },
+    { key: 'actions', label: 'Actions' },
+  ];
+  const isColVisible = (key) => !hiddenColumns.has(key);
+  const toggleColumn = (key) => {
+    setHiddenColumns(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
   // Export handler
   const handleExport = (format) => {
     const exportColumns = [
@@ -232,6 +323,15 @@ function LaptopAssignments() {
       { label: 'Zoho', accessor: r => r.setup_zoho ? 'Yes' : 'No' },
       { label: 'Smartsheet', accessor: r => r.setup_smartsheet ? 'Yes' : 'No' },
       { label: 'Dist. Lists', accessor: r => r.setup_distribution_lists ? 'Yes' : 'No' },
+      { label: 'Device Cost (R)', accessor: r => r.device_cost ? Number(r.device_cost).toFixed(2) : '' },
+      { label: 'Monthly Cost (R)', accessor: r => r.monthly_cost ? Number(r.monthly_cost).toFixed(2) : '' },
+      { label: 'Warranty End', accessor: r => r.warranty_end_date ? new Date(r.warranty_end_date).toLocaleDateString() : '' },
+      { label: 'Contract Start', accessor: r => r.contract_start_date ? new Date(r.contract_start_date).toLocaleDateString() : '' },
+      { label: 'Contract End', accessor: r => r.contract_end_date ? new Date(r.contract_end_date).toLocaleDateString() : '' },
+      { label: 'Device Condition', accessor: 'device_condition' },
+      { label: 'Accessories', accessor: 'accessories' },
+      { label: 'Insurance Policy', accessor: 'insurance_policy' },
+      { label: 'Insurance Expiry', accessor: r => r.insurance_expiry ? new Date(r.insurance_expiry).toLocaleDateString() : '' },
       { label: 'Notes', accessor: 'notes' },
     ];
     exportData(format, sortedFiltered, exportColumns, 'laptop_assignments', 'Laptop Assignments Report');
@@ -325,6 +425,16 @@ function LaptopAssignments() {
           <button className="btn btn-secondary" onClick={handlePrint} title="Print">
             <Icons.Printer size={14} /> Print
           </button>
+          {isAdminOrManager && (
+            <button className="btn btn-secondary" onClick={() => setShowImportModal(true)} title="Import CSV">
+              <Icons.Upload size={14} /> Import
+            </button>
+          )}
+          {isAdminOrManager && selectedIds.size > 0 && (
+            <button className="btn btn-secondary" onClick={() => setShowBulkStatusModal(true)} style={{ border: '2px solid var(--primary-color)' }}>
+              Update {selectedIds.size} selected
+            </button>
+          )}
           {isAdminOrManager && (
             <button className="btn btn-primary" onClick={handleAdd}>
               + Assign Laptop
@@ -484,6 +594,110 @@ function LaptopAssignments() {
         )}
       </div>
 
+      {/* Brand Distribution */}
+      <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setShowBrandChart(!showBrandChart)}>
+          <Icons.Package size={16} />
+          <strong style={{ fontSize: '0.9rem' }}>Brand Distribution</strong>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>({brandDistribution.length} brands)</span>
+          <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{showBrandChart ? '▼' : '▶'}</span>
+        </div>
+        {showBrandChart && (
+          <div style={{ marginTop: '12px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
+              {brandDistribution.map(([brand, count]) => {
+                const total = brandDistribution.reduce((s, [, c]) => s + c, 0);
+                const pct = total ? ((count / total) * 100).toFixed(1) : 0;
+                return (
+                  <div key={brand} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: brandColors[brand] || '#888' }} />
+                    <span style={{ fontSize: '0.85rem' }}>{brand}: <strong>{count}</strong> ({pct}%)</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', height: '20px', borderRadius: '4px', overflow: 'hidden' }}>
+              {brandDistribution.map(([brand, count]) => {
+                const total = brandDistribution.reduce((s, [, c]) => s + c, 0);
+                return (
+                  <div key={brand} title={`${brand}: ${count}`} style={{ width: `${(count / total) * 100}%`, background: brandColors[brand] || '#888', transition: 'width 0.3s' }} />
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Cost Per Division */}
+      <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setShowCostSummary(!showCostSummary)}>
+          <Icons.FileText size={16} />
+          <strong style={{ fontSize: '0.9rem' }}>Cost Per Division</strong>
+          <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{showCostSummary ? '▼' : '▶'}</span>
+        </div>
+        {showCostSummary && (
+          <div className="table-container" style={{ marginTop: '12px' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Division</th>
+                  <th style={{ textAlign: 'right' }}>Laptops</th>
+                  <th style={{ textAlign: 'right' }}>Device Cost (R)</th>
+                  <th style={{ textAlign: 'right' }}>Monthly (R)</th>
+                  <th style={{ textAlign: 'right' }}>Annual (R)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {costPerDivision.map(([div, data]) => (
+                  <tr key={div}>
+                    <td><strong>{div}</strong></td>
+                    <td style={{ textAlign: 'right' }}>{data.count}</td>
+                    <td style={{ textAlign: 'right' }}>{data.totalDevice ? `R ${data.totalDevice.toFixed(2)}` : '-'}</td>
+                    <td style={{ textAlign: 'right' }}>{data.totalMonthly ? `R ${data.totalMonthly.toFixed(2)}` : '-'}</td>
+                    <td style={{ textAlign: 'right' }}>{data.totalMonthly ? `R ${(data.totalMonthly * 12).toFixed(2)}` : '-'}</td>
+                  </tr>
+                ))}
+                <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border-color)' }}>
+                  <td>Total</td>
+                  <td style={{ textAlign: 'right' }}>{costPerDivision.reduce((s, [, d]) => s + d.count, 0)}</td>
+                  <td style={{ textAlign: 'right' }}>R {costPerDivision.reduce((s, [, d]) => s + d.totalDevice, 0).toFixed(2)}</td>
+                  <td style={{ textAlign: 'right' }}>R {costPerDivision.reduce((s, [, d]) => s + d.totalMonthly, 0).toFixed(2)}</td>
+                  <td style={{ textAlign: 'right' }}>R {(costPerDivision.reduce((s, [, d]) => s + d.totalMonthly, 0) * 12).toFixed(2)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Column Toggle + Page Size */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+        <div style={{ position: 'relative' }}>
+          <button className="btn btn-sm btn-secondary" onClick={() => setShowColumnToggle(!showColumnToggle)}>
+            <Icons.Settings size={14} /> Columns
+          </button>
+          {showColumnToggle && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 50, background: 'var(--bg-primary, #fff)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px', minWidth: '180px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+              {ALL_COLUMNS.map(col => (
+                <label key={col.key} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.85rem', padding: '3px 0' }}>
+                  <input type="checkbox" checked={isColVisible(col.key)} onChange={() => toggleColumn(col.key)} />
+                  {col.label}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Per page:</label>
+          <select className="form-input" value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} style={{ width: '70px', padding: '4px 6px', fontSize: '0.85rem' }}>
+            <option value={10}>10</option>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+        </div>
+      </div>
+
       {/* Table */}
       <div className="card">
         {sortedFiltered.length === 0 ? (
@@ -492,24 +706,29 @@ function LaptopAssignments() {
             <p>{searchTerm ? 'Try a different search term' : 'Click "Assign Laptop" to add the first record'}</p>
           </div>
         ) : (
+          <>
           <div className="table-container">
             <table>
               <thead>
                 <tr>
-                  <SortHeader col="employee_name" label="Employee" />
-                  <SortHeader col="division" label="Division" />
-                  <SortHeader col="laptop" label="Laptop" />
-                  <th>Serial / Asset Tag</th>
-                  <SortHeader col="date_assigned" label="Date Assigned" />
-                  <SortHeader col="laptop_age" label="Age" />
-                  <th>Setup</th>
-                  <SortHeader col="status" label="Status" />
-                  <th>Actions</th>
+                  {isAdminOrManager && <th style={{ width: '36px' }}><input type="checkbox" checked={selectedIds.size === paginatedData.length && paginatedData.length > 0} onChange={toggleSelectAll} title="Select all on this page" /></th>}
+                  {isColVisible('employee') && <SortHeader col="employee_name" label="Employee" />}
+                  {isColVisible('division') && <SortHeader col="division" label="Division" />}
+                  {isColVisible('laptop') && <SortHeader col="laptop" label="Laptop" />}
+                  {isColVisible('serial') && <th>Serial / Asset Tag</th>}
+                  {isColVisible('date_assigned') && <SortHeader col="date_assigned" label="Date Assigned" />}
+                  {isColVisible('laptop_age') && <SortHeader col="laptop_age" label="Age" />}
+                  {isColVisible('condition') && <th>Condition</th>}
+                  {isColVisible('setup') && <th>Setup</th>}
+                  {isColVisible('status') && <SortHeader col="status" label="Status" />}
+                  {isColVisible('actions') && <th>Actions</th>}
                 </tr>
               </thead>
               <tbody>
-                {sortedFiltered.map(item => (
-                  <tr key={item.id}>
+                {paginatedData.map(item => (
+                  <tr key={item.id} style={selectedIds.has(item.id) ? { background: 'rgba(52,152,219,0.08)' } : undefined}>
+                    {isAdminOrManager && <td><input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} /></td>}
+                    {isColVisible('employee') && (
                     <td>
                       <div>
                         <strong>{item.employee_name}</strong>
@@ -525,11 +744,15 @@ function LaptopAssignments() {
                         )}
                       </div>
                     </td>
+                    )}
+                    {isColVisible('division') && (
                     <td>
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                         {getDivision(item) || '-'}
                       </span>
                     </td>
+                    )}
+                    {isColVisible('laptop') && (
                     <td>
                       <div>
                         <strong>{item.laptop_brand}</strong>
@@ -538,6 +761,8 @@ function LaptopAssignments() {
                         </div>
                       </div>
                     </td>
+                    )}
+                    {isColVisible('serial') && (
                     <td>
                       <div>
                         <span style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>{item.serial_number}</span>
@@ -548,16 +773,52 @@ function LaptopAssignments() {
                         )}
                       </div>
                     </td>
-                    <td>{item.date_assigned ? new Date(item.date_assigned).toLocaleDateString() : '-'}</td>
+                    )}
+                    {isColVisible('date_assigned') && <td>{item.date_assigned ? new Date(item.date_assigned).toLocaleDateString() : '-'}</td>}
+                    {isColVisible('laptop_age') && (
                     <td>
-                      <span style={{
-                        fontWeight: 600,
-                        color: getLaptopAgeColor(item.date_assigned, item.laptop_status),
-                        fontSize: '0.85rem',
-                      }}>
-                        {getLaptopAgeLabel(item.date_assigned)}
-                      </span>
+                      {(() => {
+                        const ageColor = getLaptopAgeColor(item.date_assigned, item.laptop_status);
+                        const upgradeStatus = getUpgradeStatus(item);
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
+                            <span style={{ fontWeight: 600, color: ageColor, fontSize: '0.85rem' }}>
+                              {getLaptopAgeLabel(item.date_assigned)}
+                            </span>
+                            {upgradeStatus === 'due' && (
+                              <span style={{ fontSize: '0.65rem', padding: '1px 6px', borderRadius: '10px', background: 'rgba(231,76,60,0.15)', color: '#e74c3c', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                REFRESH DUE
+                              </span>
+                            )}
+                            {upgradeStatus === 'approaching' && (
+                              <span style={{ fontSize: '0.65rem', padding: '1px 6px', borderRadius: '10px', background: 'rgba(230,126,34,0.15)', color: '#e67e22', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                REFRESH SOON
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
+                    )}
+                    {isColVisible('condition') && (
+                    <td>
+                      {item.device_condition ? (
+                        <span style={{
+                          fontSize: '0.8rem', padding: '2px 8px', borderRadius: '10px',
+                          background: item.device_condition === 'Good' ? 'rgba(39,174,96,0.12)' :
+                                     item.device_condition === 'Fair' ? 'rgba(243,156,18,0.12)' :
+                                     item.device_condition === 'Poor' ? 'rgba(230,126,34,0.12)' : 'rgba(231,76,60,0.12)',
+                          color: item.device_condition === 'Good' ? '#27ae60' :
+                                 item.device_condition === 'Fair' ? '#f39c12' :
+                                 item.device_condition === 'Poor' ? '#e67e22' : '#e74c3c',
+                          fontWeight: 600,
+                        }}>
+                          {item.device_condition}
+                        </span>
+                      ) : <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>-</span>}
+                    </td>
+                    )}
+                    {isColVisible('setup') && (
                     <td>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
                         {[
@@ -585,6 +846,8 @@ function LaptopAssignments() {
                         ))}
                       </div>
                     </td>
+                    )}
+                    {isColVisible('status') && (
                     <td>
                       {(() => {
                         const st = LAPTOP_STATUSES.find(s => s.value === item.laptop_status) || LAPTOP_STATUSES[0];
@@ -596,6 +859,8 @@ function LaptopAssignments() {
                         </div>
                       )}
                     </td>
+                    )}
+                    {isColVisible('actions') && (
                     <td>
                       <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                         <button className="btn btn-sm btn-secondary" onClick={() => setHistoryItem(item)} title="View History">
@@ -623,11 +888,44 @@ function LaptopAssignments() {
                         )}
                       </div>
                     </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '12px 16px', borderTop: '1px solid var(--border-color)', flexWrap: 'wrap', gap: '8px',
+            }}>
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Showing {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, sortedFiltered.length)} of {sortedFiltered.length}
+              </span>
+              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                <button className="btn btn-sm btn-secondary" disabled={currentPage === 1} onClick={() => setCurrentPage(1)} title="First">&laquo;</button>
+                <button className="btn btn-sm btn-secondary" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} title="Previous">&lsaquo;</button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 2)
+                  .reduce((acc, p, idx, arr) => {
+                    if (idx > 0 && p - arr[idx - 1] > 1) acc.push('...');
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((p, i) =>
+                    p === '...' ? <span key={`dot-${i}`} style={{ padding: '0 4px', color: 'var(--text-secondary)' }}>…</span> :
+                    <button key={p} className={`btn btn-sm ${p === currentPage ? '' : 'btn-secondary'}`}
+                      style={p === currentPage ? { background: 'var(--primary-color)', color: 'white' } : undefined}
+                      onClick={() => setCurrentPage(p)}>{p}</button>
+                  )}
+                <button className="btn btn-sm btn-secondary" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} title="Next">&rsaquo;</button>
+                <button className="btn btn-sm btn-secondary" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)} title="Last">&raquo;</button>
+              </div>
+            </div>
+          )}
+          </>
         )}
       </div>
 
@@ -657,6 +955,24 @@ function LaptopAssignments() {
           personnel={personnel}
           onClose={() => { setShowReassignModal(false); setReassignItem(null); }}
           onSuccess={() => { setShowReassignModal(false); setReassignItem(null); fetchData(); }}
+        />
+      )}
+
+      {/* Bulk Status Modal */}
+      {showBulkStatusModal && (
+        <BulkStatusModal
+          selectedIds={selectedIds}
+          assignments={assignments}
+          onClose={() => setShowBulkStatusModal(false)}
+          onSuccess={() => { setShowBulkStatusModal(false); setSelectedIds(new Set()); fetchData(); }}
+        />
+      )}
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <ImportModal
+          onClose={() => setShowImportModal(false)}
+          onSuccess={() => { setShowImportModal(false); fetchData(); }}
         />
       )}
     </div>
@@ -763,6 +1079,15 @@ function LaptopModal({ item, personnel, allAssignments, onClose, onSuccess }) {
     laptop_status: item?.laptop_status || 'Active',
     is_active: item?.is_active ?? true,
     notes: item?.notes || '',
+    device_cost: item?.device_cost || '',
+    monthly_cost: item?.monthly_cost || '',
+    warranty_end_date: item?.warranty_end_date || '',
+    contract_start_date: item?.contract_start_date || '',
+    contract_end_date: item?.contract_end_date || '',
+    device_condition: item?.device_condition || '',
+    accessories: item?.accessories || '',
+    insurance_policy: item?.insurance_policy || '',
+    insurance_expiry: item?.insurance_expiry || '',
   });
   const [saving, setSaving] = useState(false);
   const [serialMatch, setSerialMatch] = useState(null);
@@ -850,6 +1175,15 @@ function LaptopModal({ item, personnel, allAssignments, onClose, onSuccess }) {
       if (!payload.asset_tag) payload.asset_tag = null;
       if (!payload.employee_email) payload.employee_email = null;
       if (!payload.notes) payload.notes = null;
+      payload.device_cost = payload.device_cost ? parseFloat(payload.device_cost) : null;
+      payload.monthly_cost = payload.monthly_cost ? parseFloat(payload.monthly_cost) : null;
+      if (!payload.warranty_end_date) payload.warranty_end_date = null;
+      if (!payload.contract_start_date) payload.contract_start_date = null;
+      if (!payload.contract_end_date) payload.contract_end_date = null;
+      if (!payload.device_condition) payload.device_condition = null;
+      if (!payload.accessories) payload.accessories = null;
+      if (!payload.insurance_policy) payload.insurance_policy = null;
+      if (!payload.insurance_expiry) payload.insurance_expiry = null;
 
       if (item) {
         // If status changed, use updateStatus to log history
@@ -1071,6 +1405,64 @@ function LaptopModal({ item, personnel, allAssignments, onClose, onSuccess }) {
               </div>
             </div>
 
+            {/* Cost Tracking */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="form-group">
+                <label className="form-label">Device Cost (R)</label>
+                <input type="number" name="device_cost" value={form.device_cost} onChange={handleChange} className="form-input" placeholder="e.g. 15000" step="0.01" min="0" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Monthly Cost (R)</label>
+                <input type="number" name="monthly_cost" value={form.monthly_cost} onChange={handleChange} className="form-input" placeholder="e.g. 350" step="0.01" min="0" />
+              </div>
+            </div>
+
+            {/* Contract / Warranty */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+              <div className="form-group">
+                <label className="form-label">Contract Start</label>
+                <input type="date" name="contract_start_date" value={form.contract_start_date} onChange={handleChange} className="form-input" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Contract End</label>
+                <input type="date" name="contract_end_date" value={form.contract_end_date} onChange={handleChange} className="form-input" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Warranty End</label>
+                <input type="date" name="warranty_end_date" value={form.warranty_end_date} onChange={handleChange} className="form-input" />
+              </div>
+            </div>
+
+            {/* Condition / Accessories */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="form-group">
+                <label className="form-label">Device Condition</label>
+                <select name="device_condition" value={form.device_condition} onChange={handleChange} className="form-input">
+                  <option value="">-- Select --</option>
+                  <option value="Good">Good</option>
+                  <option value="Fair">Fair</option>
+                  <option value="Poor">Poor</option>
+                  <option value="Damaged">Damaged</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Accessories</label>
+                <input type="text" name="accessories" value={form.accessories} onChange={handleChange} className="form-input" placeholder="e.g. Charger, Mouse, Bag" />
+              </div>
+            </div>
+
+            {/* Insurance */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="form-group">
+                <label className="form-label">Insurance Policy</label>
+                <input type="text" name="insurance_policy" value={form.insurance_policy} onChange={handleChange} className="form-input" placeholder="Policy number" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Insurance Expiry</label>
+                <input type="date" name="insurance_expiry" value={form.insurance_expiry} onChange={handleChange} className="form-input" />
+              </div>
+            </div>
+
             <div className="form-group">
               <label className="form-label">Laptop Status</label>
               <select
@@ -1192,6 +1584,300 @@ function HistoryModal({ item, onClose }) {
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Bulk Status Update Modal ──
+function BulkStatusModal({ selectedIds, assignments, onClose, onSuccess }) {
+  const [newStatus, setNewStatus] = useState('Returned');
+  const [condition, setCondition] = useState('Good');
+  const [notes, setNotes] = useState('');
+  const [processing, setProcessing] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0, errors: [] });
+
+  const selected = assignments.filter(a => selectedIds.has(a.id));
+
+  const handleBulkUpdate = async () => {
+    setProcessing(true);
+    const total = selected.length;
+    const errors = [];
+    let done = 0;
+    setProgress({ done: 0, total, errors: [] });
+
+    for (const item of selected) {
+      try {
+        await laptopAssignmentsApi.updateStatus(item.id, newStatus);
+        await laptopAssignmentsApi.update(item.id, {
+          ...item,
+          laptop_status: newStatus,
+          device_condition: condition,
+          notes: notes || `Bulk status update to ${newStatus}`,
+          ...(newStatus === 'Returned' ? { date_returned: new Date().toISOString().split('T')[0] } : {}),
+        });
+      } catch (err) {
+        errors.push(`${item.employee_name}: ${err.message}`);
+      }
+      done++;
+      setProgress({ done, total, errors: [...errors] });
+    }
+
+    if (errors.length === 0) {
+      onSuccess();
+    } else {
+      setProcessing(false);
+    }
+  };
+
+  const LAPTOP_STATUSES_BULK = [
+    { value: 'Returned', label: 'Returned' },
+    { value: 'Stolen', label: 'Stolen' },
+    { value: 'Damaged', label: 'Damaged' },
+    { value: 'Repairs', label: 'Sent for Repairs' },
+    { value: 'Lost', label: 'Lost' },
+    { value: 'Decommissioned', label: 'Decommissioned' },
+  ];
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" style={{ maxWidth: '500px' }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Bulk Status Update ({selected.length} laptops)</h3>
+          <button className="btn btn-sm btn-secondary" onClick={onClose}><Icons.Close size={16} /></button>
+        </div>
+        <div className="modal-body">
+          <div style={{ marginBottom: '12px', padding: '8px', background: 'rgba(52,152,219,0.08)', borderRadius: '8px', fontSize: '0.85rem' }}>
+            <strong>Selected laptops:</strong>
+            <div style={{ maxHeight: '100px', overflowY: 'auto', marginTop: '4px' }}>
+              {selected.map(s => (
+                <div key={s.id}>{s.employee_name} — {s.laptop_brand} {s.laptop_model}</div>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>New Status</label>
+            <select className="form-control" value={newStatus} onChange={e => setNewStatus(e.target.value)} disabled={processing}>
+              {LAPTOP_STATUSES_BULK.map(s => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label>Device Condition</label>
+            <select className="form-control" value={condition} onChange={e => setCondition(e.target.value)} disabled={processing}>
+              <option value="Good">Good</option>
+              <option value="Fair">Fair</option>
+              <option value="Poor">Poor</option>
+              <option value="Damaged">Damaged</option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label>Notes (optional)</label>
+            <input className="form-control" value={notes} onChange={e => setNotes(e.target.value)} disabled={processing} placeholder="Reason for status change" />
+          </div>
+
+          {processing && (
+            <div style={{ marginTop: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '4px' }}>
+                <span>Processing...</span>
+                <span>{progress.done} / {progress.total}</span>
+              </div>
+              <div style={{ background: 'var(--border-color)', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
+                <div style={{ width: `${(progress.done / progress.total) * 100}%`, height: '100%', background: 'var(--primary-color)', transition: 'width 0.3s' }} />
+              </div>
+              {progress.errors.length > 0 && (
+                <div style={{ marginTop: '8px', color: '#e74c3c', fontSize: '0.8rem' }}>
+                  {progress.errors.map((e, i) => <div key={i}>{e}</div>)}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose} disabled={processing}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleBulkUpdate} disabled={processing}>
+            {processing ? `Updating ${progress.done}/${progress.total}...` : `Update ${selected.length} Laptops`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Import Modal ──
+function ImportModal({ onClose, onSuccess }) {
+  const [file, setFile] = useState(null);
+  const [parsedRows, setParsedRows] = useState([]);
+  const [importing, setImporting] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0, errors: [] });
+  const [parseError, setParseError] = useState('');
+
+  const EXPECTED_HEADERS = ['employee_name', 'laptop_brand', 'laptop_model', 'serial_number'];
+
+  const handleFileChange = (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    setFile(f);
+    setParseError('');
+    setParsedRows([]);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const text = evt.target.result;
+        const lines = text.split(/\r?\n/).filter(l => l.trim());
+        if (lines.length < 2) { setParseError('File must have a header row and at least one data row'); return; }
+
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/\s+/g, '_').replace(/['"]/g, ''));
+        const missing = EXPECTED_HEADERS.filter(h => !headers.includes(h));
+        if (missing.length > 0) { setParseError(`Missing required columns: ${missing.join(', ')}`); return; }
+
+        const rows = [];
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
+          if (values.length < headers.length) continue;
+          const row = {};
+          headers.forEach((h, idx) => { row[h] = values[idx] || ''; });
+          if (row.employee_name && row.laptop_brand) rows.push(row);
+        }
+        setParsedRows(rows);
+      } catch (err) {
+        setParseError('Failed to parse file: ' + err.message);
+      }
+    };
+    reader.readAsText(f);
+  };
+
+  const handleImport = async () => {
+    setImporting(true);
+    const total = parsedRows.length;
+    const errors = [];
+    let done = 0;
+    setProgress({ done: 0, total, errors: [] });
+
+    for (const row of parsedRows) {
+      try {
+        await laptopAssignmentsApi.create({
+          employee_name: row.employee_name,
+          employee_id: row.employee_id || '',
+          employee_email: row.employee_email || '',
+          laptop_brand: row.laptop_brand,
+          laptop_model: row.laptop_model || '',
+          serial_number: row.serial_number || '',
+          asset_tag: row.asset_tag || '',
+          date_assigned: row.date_assigned || new Date().toISOString().split('T')[0],
+          laptop_status: row.laptop_status || 'Active',
+          setup_laptop: row.setup_laptop === 'true' || row.setup_laptop === 'Yes',
+          setup_m365: row.setup_m365 === 'true' || row.setup_m365 === 'Yes',
+          setup_adobe: row.setup_adobe === 'true' || row.setup_adobe === 'Yes',
+          setup_zoho: row.setup_zoho === 'true' || row.setup_zoho === 'Yes',
+          setup_smartsheet: row.setup_smartsheet === 'true' || row.setup_smartsheet === 'Yes',
+          setup_distribution_lists: row.setup_distribution_lists === 'true' || row.setup_distribution_lists === 'Yes',
+          device_cost: row.device_cost ? parseFloat(row.device_cost) : null,
+          monthly_cost: row.monthly_cost ? parseFloat(row.monthly_cost) : null,
+          warranty_end_date: row.warranty_end_date || null,
+          contract_start_date: row.contract_start_date || null,
+          contract_end_date: row.contract_end_date || null,
+          device_condition: row.device_condition || null,
+          accessories: row.accessories || null,
+          insurance_policy: row.insurance_policy || null,
+          insurance_expiry: row.insurance_expiry || null,
+          notes: row.notes || null,
+        });
+      } catch (err) {
+        errors.push(`Row ${done + 1} (${row.employee_name}): ${err.message}`);
+      }
+      done++;
+      setProgress({ done, total, errors: [...errors] });
+    }
+
+    if (errors.length === 0) {
+      onSuccess();
+    } else {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" style={{ maxWidth: '700px' }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3><Icons.Upload size={18} /> Import Laptop Assignments</h3>
+          <button className="btn btn-sm btn-secondary" onClick={onClose}><Icons.Close size={16} /></button>
+        </div>
+        <div className="modal-body">
+          <div style={{ marginBottom: '12px', padding: '10px', background: 'rgba(52,152,219,0.08)', borderRadius: '8px', fontSize: '0.83rem' }}>
+            <strong>CSV Format:</strong> File must include headers. Required columns: <code>employee_name</code>, <code>laptop_brand</code>, <code>laptop_model</code>, <code>serial_number</code>.
+            <br />Optional: employee_id, employee_email, asset_tag, date_assigned, laptop_status, device_cost, monthly_cost, warranty_end_date, contract_start_date, contract_end_date, device_condition, accessories, insurance_policy, insurance_expiry, notes, setup_laptop, setup_m365, setup_adobe, setup_zoho, setup_smartsheet, setup_distribution_lists
+          </div>
+
+          <div className="form-group">
+            <label>Select CSV File</label>
+            <input type="file" accept=".csv" className="form-control" onChange={handleFileChange} disabled={importing} />
+          </div>
+
+          {parseError && <div style={{ color: '#e74c3c', fontSize: '0.85rem', marginBottom: '8px' }}><Icons.Warning size={14} /> {parseError}</div>}
+
+          {parsedRows.length > 0 && (
+            <div>
+              <strong style={{ fontSize: '0.9rem' }}>{parsedRows.length} records ready to import</strong>
+              <div className="table-container" style={{ maxHeight: '250px', overflowY: 'auto', marginTop: '8px' }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Employee</th>
+                      <th>Laptop</th>
+                      <th>Serial</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parsedRows.slice(0, 50).map((row, i) => (
+                      <tr key={i}>
+                        <td>{i + 1}</td>
+                        <td>{row.employee_name}</td>
+                        <td>{row.laptop_brand} {row.laptop_model}</td>
+                        <td style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{row.serial_number}</td>
+                        <td>{row.laptop_status || 'Active'}</td>
+                      </tr>
+                    ))}
+                    {parsedRows.length > 50 && (
+                      <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>...and {parsedRows.length - 50} more</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {importing && (
+            <div style={{ marginTop: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '4px' }}>
+                <span>Importing...</span>
+                <span>{progress.done} / {progress.total}</span>
+              </div>
+              <div style={{ background: 'var(--border-color)', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
+                <div style={{ width: `${(progress.done / progress.total) * 100}%`, height: '100%', background: '#27ae60', transition: 'width 0.3s' }} />
+              </div>
+              {progress.errors.length > 0 && (
+                <div style={{ marginTop: '8px', color: '#e74c3c', fontSize: '0.8rem', maxHeight: '100px', overflowY: 'auto' }}>
+                  {progress.errors.map((e, i) => <div key={i}>{e}</div>)}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose} disabled={importing}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleImport} disabled={importing || parsedRows.length === 0}>
+            {importing ? `Importing ${progress.done}/${progress.total}...` : `Import ${parsedRows.length} Records`}
+          </button>
         </div>
       </div>
     </div>
