@@ -689,6 +689,62 @@ function UsageReport({ stats }) {
   );
 }
 
+// Division lookup helper used by all asset report components
+const DIVISION_ABBREVS = { 'rs': 'RS', 'afs': 'AFS', 'gp': 'GP Consult', 'gp consult': 'GP Consult', 'wearcheck': 'RS' };
+
+function standardiseDivision(div) {
+  if (!div) return '';
+  if (div === 'GP') return 'GP Consult';
+  return div;
+}
+
+function buildDivisionLookup(personnel) {
+  const byName = {};
+  const byId = {};
+  (personnel || []).forEach(p => {
+    if (p.full_name) byName[p.full_name.toLowerCase()] = p.division || '';
+    if (p.employee_id) byId[p.employee_id.toLowerCase()] = p.division || '';
+  });
+  return { byName, byId, personnel: personnel || [] };
+}
+
+function lookupDivision(lookup, item, nameField) {
+  const empName = item[nameField] || '';
+  // 1. Exact name match
+  if (empName) {
+    const d = lookup.byName[empName.toLowerCase()];
+    if (d) return standardiseDivision(d);
+  }
+  // 2. Employee ID match
+  if (item.employee_id) {
+    const d = lookup.byId[item.employee_id.toLowerCase()];
+    if (d) return standardiseDivision(d);
+  }
+  // 3. Partial name match (e.g. "Arnold van Zyl" matches "Arnoldus van Zyl")
+  if (empName) {
+    const nameLower = empName.toLowerCase();
+    const partialMatch = lookup.personnel.find(p => {
+      if (!p.full_name) return false;
+      const pName = p.full_name.toLowerCase();
+      const nameParts = nameLower.split(' ');
+      const pParts = pName.split(' ');
+      if (nameParts.length >= 2 && pParts.length >= 2) {
+        const lastName = nameParts.slice(1).join(' ');
+        const pLastName = pParts.slice(1).join(' ');
+        return lastName === pLastName && (pParts[0].startsWith(nameParts[0]) || nameParts[0].startsWith(pParts[0]));
+      }
+      return false;
+    });
+    if (partialMatch?.division) return standardiseDivision(partialMatch.division);
+  }
+  // 4. Fall back to notes field if it contains a known division abbreviation
+  if (item.notes) {
+    const notesLower = item.notes.toLowerCase().trim();
+    if (DIVISION_ABBREVS[notesLower]) return DIVISION_ABBREVS[notesLower];
+  }
+  return '';
+}
+
 // Vehicle Report Component
 function VehicleReport({ data, personnel, fines, services }) {
   const [showMakeChart, setShowMakeChart] = useState(false);
@@ -704,11 +760,11 @@ function VehicleReport({ data, personnel, fines, services }) {
     );
   }
 
+  const divLookup = buildDivisionLookup(personnel);
   const getDivision = (v) => {
-    const driverName = v.assigned_to || v.assigned_driver || '';
-    if (!driverName || !personnel?.length) return '';
-    const p = personnel.find(p => p.full_name && p.full_name.toLowerCase() === driverName.toLowerCase());
-    return p?.division || '';
+    // Vehicles use assigned_to for driver name, no employee_id on vehicle record
+    const item = { assigned_to: v.assigned_to || v.assigned_driver || '', notes: v.notes };
+    return lookupDivision(divLookup, item, 'assigned_to');
   };
 
   const active = data.filter(v => v.is_active);
@@ -987,12 +1043,8 @@ function CellphoneReport({ data, personnel }) {
     );
   }
 
-  const getDivision = (c) => {
-    const empName = c.employee_name || '';
-    if (!empName || !personnel?.length) return c.notes || '';
-    const p = personnel.find(p => p.full_name && p.full_name.toLowerCase() === empName.toLowerCase());
-    return p?.division || c.notes || '';
-  };
+  const divLookup = buildDivisionLookup(personnel);
+  const getDivision = (c) => lookupDivision(divLookup, c, 'employee_name');
 
   const active = data.filter(c => c.is_active);
   const statusCounts = data.reduce((acc, c) => {
@@ -1247,12 +1299,8 @@ function LaptopReport({ data, personnel }) {
     );
   }
 
-  const getDivision = (l) => {
-    const empName = l.employee_name || '';
-    if (!empName || !personnel?.length) return '';
-    const p = personnel.find(p => p.full_name && p.full_name.toLowerCase() === empName.toLowerCase());
-    return p?.division || '';
-  };
+  const divLookup = buildDivisionLookup(personnel);
+  const getDivision = (l) => lookupDivision(divLookup, l, 'employee_name');
 
   const active = data.filter(l => l.is_active);
   const statusCounts = data.reduce((acc, l) => {
