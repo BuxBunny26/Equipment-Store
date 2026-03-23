@@ -2227,23 +2227,34 @@ function ImportModal({ onClose, onSuccess }) {
     setParseError('');
     setParsedRows([]);
 
+    const isExcel = f.name.match(/\.xlsx?$/i);
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
-        const text = evt.target.result;
-        const lines = text.split(/\r?\n/).filter(l => l.trim());
-        if (lines.length < 2) { setParseError('File must have a header row and at least one data row'); return; }
+        let headers, dataRows;
+        if (isExcel) {
+          const wb = XLSX.read(evt.target.result, { type: 'array' });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+          if (json.length < 2) { setParseError('File must have a header row and at least one data row'); return; }
+          headers = json[0].map(h => String(h).trim().toLowerCase().replace(/\s+/g, '_'));
+          dataRows = json.slice(1).filter(r => r.some(c => String(c).trim()));
+        } else {
+          const text = evt.target.result;
+          const lines = text.split(/\r?\n/).filter(l => l.trim());
+          if (lines.length < 2) { setParseError('File must have a header row and at least one data row'); return; }
+          headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/\s+/g, '_').replace(/['"]/g, ''));
+          dataRows = lines.slice(1).map(l => l.split(',').map(v => v.trim().replace(/^["']|["']$/g, '')));
+        }
 
-        const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/\s+/g, '_').replace(/['"]/g, ''));
         const missing = EXPECTED_HEADERS.filter(h => !headers.includes(h));
         if (missing.length > 0) { setParseError(`Missing required columns: ${missing.join(', ')}`); return; }
 
         const rows = [];
-        for (let i = 1; i < lines.length; i++) {
-          const values = lines[i].split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
+        for (const values of dataRows) {
           if (values.length < headers.length) continue;
           const row = {};
-          headers.forEach((h, idx) => { row[h] = values[idx] || ''; });
+          headers.forEach((h, idx) => { row[h] = String(values[idx] || '').trim(); });
           if (row.employee_name && row.phone_brand) rows.push(row);
         }
         setParsedRows(rows);
@@ -2251,7 +2262,11 @@ function ImportModal({ onClose, onSuccess }) {
         setParseError('Failed to parse file: ' + err.message);
       }
     };
-    reader.readAsText(f);
+    if (isExcel) {
+      reader.readAsArrayBuffer(f);
+    } else {
+      reader.readAsText(f);
+    }
   };
 
   const handleImport = async () => {
@@ -2311,7 +2326,7 @@ function ImportModal({ onClose, onSuccess }) {
         </div>
         <div className="modal-body">
           <div style={{ marginBottom: '12px', padding: '10px', background: 'rgba(52,152,219,0.08)', borderRadius: '8px', fontSize: '0.83rem' }}>
-            <strong>CSV Format:</strong> File must include headers. Required columns: <code>employee_name</code>, <code>phone_brand</code>, <code>phone_model</code>, <code>serial_number</code>.
+            <strong>XLSX Format:</strong> File must include headers. Required columns: <code>employee_name</code>, <code>phone_brand</code>, <code>phone_model</code>, <code>serial_number</code>.
             <br />Optional: employee_id, employee_email, phone_number, imei_number, asset_tag, date_assigned, phone_status, network_provider, sim_number, device_cost, monthly_cost, contract_end_date, warranty_end_date, data_plan, device_condition, accessories, insurance_policy, insurance_expiry
             <div style={{ marginTop: '8px' }}>
               <button type="button" className="btn btn-sm btn-secondary" onClick={downloadTemplate} style={{ fontSize: '0.8rem' }}>
@@ -2321,8 +2336,8 @@ function ImportModal({ onClose, onSuccess }) {
           </div>
 
           <div className="form-group">
-            <label>Select CSV File</label>
-            <input type="file" accept=".csv" className="form-control" onChange={handleFileChange} disabled={importing} />
+            <label>Select CSV / XLSX File</label>
+            <input type="file" accept=".csv,.xlsx,.xls" className="form-control" onChange={handleFileChange} disabled={importing} />
           </div>
 
           {parseError && <div style={{ color: '#e74c3c', fontSize: '0.85rem', marginBottom: '8px' }}><Icons.Warning size={14} /> {parseError}</div>}
