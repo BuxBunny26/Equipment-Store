@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { cellphoneAssignmentsApi, personnelApi } from '../services/api';
 import { useOperator } from '../context/OperatorContext';
 import { Icons } from '../components/Icons';
@@ -29,6 +29,17 @@ function CellphoneAssignments() {
   const [sortCol, setSortCol] = useState('employee_name');
   const [sortDir, setSortDir] = useState('asc');
   const [showDivisionBreakdown, setShowDivisionBreakdown] = useState(false);
+
+  // New feature state
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [showBulkStatusModal, setShowBulkStatusModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showBrandChart, setShowBrandChart] = useState(false);
+  const [showCostSummary, setShowCostSummary] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [hiddenColumns, setHiddenColumns] = useState(new Set());
+  const [showColumnToggle, setShowColumnToggle] = useState(false);
 
   const PHONE_STATUSES = [
     { value: 'Active', label: 'Active', badge: 'badge-available', color: 'var(--success-color)' },
@@ -299,6 +310,83 @@ function CellphoneAssignments() {
   const contractAlerts = assignments.filter(a => ['expired', 'expiring'].includes(getContractStatus(a)));
   const warrantyAlerts = assignments.filter(a => ['expired', 'expiring'].includes(getWarrantyStatus(a)));
 
+  // Brand distribution
+  const brandDistribution = useMemo(() => {
+    const counts = {};
+    assignments.filter(a => a.phone_status === 'Active').forEach(a => {
+      const brand = a.phone_brand || 'Unknown';
+      counts[brand] = (counts[brand] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [assignments]);
+
+  const brandColors = { Samsung: '#1428A0', Huawei: '#CF0A2C', 'Rugged SA': '#2d8659', Apple: '#555', Nokia: '#005EB8', Xiaomi: '#FF6900' };
+
+  // Cost-per-division summary
+  const costPerDivision = useMemo(() => {
+    const summary = {};
+    assignments.filter(a => a.phone_status === 'Active').forEach(a => {
+      const div = getDivision(a) || 'Unassigned';
+      if (!summary[div]) summary[div] = { count: 0, totalDevice: 0, totalMonthly: 0 };
+      summary[div].count++;
+      if (a.device_cost) summary[div].totalDevice += Number(a.device_cost);
+      if (a.monthly_cost) summary[div].totalMonthly += Number(a.monthly_cost);
+    });
+    return Object.entries(summary).sort((a, b) => b[1].totalMonthly - a[1].totalMonthly);
+  }, [assignments, personnel]);
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(sortedFiltered.length / pageSize));
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return sortedFiltered.slice(start, start + pageSize);
+  }, [sortedFiltered, currentPage, pageSize]);
+
+  // Reset page when filters change
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, statusFilter, divisionFilter, brandFilter, dateFrom, dateTo, upgradeFilter, showReturned]);
+
+  // Bulk selection
+  const toggleSelect = useCallback((id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    if (selectedIds.size === paginatedData.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(paginatedData.map(r => r.id)));
+    }
+  }, [paginatedData, selectedIds]);
+
+  // Table columns definition for visibility toggle
+  const ALL_COLUMNS = [
+    { key: 'employee', label: 'Employee' },
+    { key: 'division', label: 'Division' },
+    { key: 'phone', label: 'Phone' },
+    { key: 'serial', label: 'Serial / IMEI' },
+    { key: 'phone_number', label: 'Phone Number' },
+    { key: 'network', label: 'Network' },
+    { key: 'date_assigned', label: 'Date Assigned' },
+    { key: 'phone_age', label: 'Phone Age' },
+    { key: 'condition', label: 'Condition' },
+    { key: 'status', label: 'Status' },
+    { key: 'actions', label: 'Actions' },
+  ];
+
+  const isColVisible = (key) => !hiddenColumns.has(key);
+
+  const toggleColumn = (key) => {
+    setHiddenColumns(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
   // Export handler
   const handleExport = (format) => {
     const exportColumns = [
@@ -320,6 +408,12 @@ function CellphoneAssignments() {
       { label: 'Monthly Cost (R)', accessor: r => r.monthly_cost ? Number(r.monthly_cost).toFixed(2) : '' },
       { label: 'Contract End', accessor: r => r.contract_end_date ? new Date(r.contract_end_date).toLocaleDateString() : '' },
       { label: 'Warranty End', accessor: r => r.warranty_end_date ? new Date(r.warranty_end_date).toLocaleDateString() : '' },
+      { label: 'Device Condition', accessor: 'device_condition' },
+      { label: 'Data Plan', accessor: 'data_plan' },
+      { label: 'Accessories', accessor: 'accessories' },
+      { label: 'Insurance Policy', accessor: 'insurance_policy' },
+      { label: 'Insurance Expiry', accessor: r => r.insurance_expiry ? new Date(r.insurance_expiry).toLocaleDateString() : '' },
+      { label: 'Contract Start', accessor: r => r.contract_start_date ? new Date(r.contract_start_date).toLocaleDateString() : '' },
       { label: 'Notes', accessor: 'notes' },
     ];
     exportData(format, sortedFiltered, exportColumns, 'cellphone_assignments', 'Cellphone Assignments Report');
@@ -406,6 +500,16 @@ function CellphoneAssignments() {
           <button className="btn btn-secondary" onClick={handlePrint} title="Print">
             <Icons.Printer size={14} /> Print
           </button>
+          {isAdminOrManager && (
+            <button className="btn btn-secondary" onClick={() => setShowImportModal(true)} title="Bulk Import">
+              <Icons.Upload size={14} /> Import
+            </button>
+          )}
+          {isAdminOrManager && selectedIds.size > 0 && (
+            <button className="btn btn-secondary" onClick={() => setShowBulkStatusModal(true)} title="Bulk Status Update" style={{ borderColor: 'var(--primary-color)' }}>
+              <Icons.Check size={14} /> Update {selectedIds.size} selected
+            </button>
+          )}
           {isAdminOrManager && (
             <button className="btn btn-primary" onClick={handleAdd}>
               + Assign Cellphone
@@ -759,6 +863,124 @@ function CellphoneAssignments() {
         )}
       </div>
 
+      {/* Brand Distribution */}
+      <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setShowBrandChart(!showBrandChart)}>
+          <Icons.Phone size={16} />
+          <strong style={{ fontSize: '0.9rem' }}>Brand Distribution</strong>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>({brandDistribution.length} brands)</span>
+          <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{showBrandChart ? '▼' : '▶'}</span>
+        </div>
+        {showBrandChart && (
+          <div style={{ marginTop: '12px' }}>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '12px' }}>
+              {brandDistribution.map(([brand, count]) => {
+                const total = brandDistribution.reduce((s, [, c]) => s + c, 0);
+                const pct = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
+                const color = brandColors[brand] || '#666';
+                return (
+                  <div key={brand} style={{ textAlign: 'center', minWidth: '80px' }}>
+                    <div style={{ fontSize: '1.6rem', fontWeight: 700, color }}>{count}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{brand}</div>
+                    <div style={{ fontSize: '0.7rem', color }}>{pct}%</div>
+                  </div>
+                );
+              })}
+            </div>
+            {/* Stacked bar */}
+            <div style={{ display: 'flex', height: '24px', borderRadius: '6px', overflow: 'hidden' }}>
+              {brandDistribution.map(([brand, count]) => {
+                const total = brandDistribution.reduce((s, [, c]) => s + c, 0);
+                const pct = total > 0 ? (count / total) * 100 : 0;
+                const color = brandColors[brand] || '#666';
+                return (
+                  <div
+                    key={brand}
+                    title={`${brand}: ${count} (${pct.toFixed(1)}%)`}
+                    style={{ width: `${pct}%`, background: color, minWidth: pct > 0 ? '2px' : '0', transition: 'width 0.3s ease' }}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Cost Per Division Summary */}
+      {costPerDivision.some(([, s]) => s.totalMonthly > 0 || s.totalDevice > 0) && (
+        <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setShowCostSummary(!showCostSummary)}>
+            <Icons.FileText size={16} />
+            <strong style={{ fontSize: '0.9rem' }}>Cost Per Division</strong>
+            <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{showCostSummary ? '▼' : '▶'}</span>
+          </div>
+          {showCostSummary && (
+            <div style={{ marginTop: '12px', overflowX: 'auto' }}>
+              <table style={{ width: '100%', fontSize: '0.85rem', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
+                    <th style={{ textAlign: 'left', padding: '6px 8px' }}>Division</th>
+                    <th style={{ textAlign: 'right', padding: '6px 8px' }}>Phones</th>
+                    <th style={{ textAlign: 'right', padding: '6px 8px' }}>Device Cost (R)</th>
+                    <th style={{ textAlign: 'right', padding: '6px 8px' }}>Monthly (R)</th>
+                    <th style={{ textAlign: 'right', padding: '6px 8px' }}>Annual (R)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {costPerDivision.map(([div, s]) => (
+                    <tr key={div} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td style={{ padding: '6px 8px' }}>{div}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{s.count}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{s.totalDevice > 0 ? `R ${s.totalDevice.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}` : '-'}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{s.totalMonthly > 0 ? `R ${s.totalMonthly.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}` : '-'}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600 }}>{s.totalMonthly > 0 ? `R ${(s.totalMonthly * 12).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}` : '-'}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border-color)' }}>
+                    <td style={{ padding: '6px 8px' }}>Total</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>{costPerDivision.reduce((s, [, d]) => s + d.count, 0)}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>R {costPerDivision.reduce((s, [, d]) => s + d.totalDevice, 0).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>R {costPerDivision.reduce((s, [, d]) => s + d.totalMonthly, 0).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>R {(costPerDivision.reduce((s, [, d]) => s + d.totalMonthly, 0) * 12).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Column Visibility Toggle + Table Controls */}
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative' }}>
+          <button className="btn btn-sm btn-secondary" onClick={() => setShowColumnToggle(!showColumnToggle)}>
+            <Icons.Settings size={14} /> Columns
+          </button>
+          {showColumnToggle && (
+            <div style={{
+              position: 'absolute', top: '100%', left: 0, zIndex: 50,
+              background: 'var(--bg-primary, white)', border: '1px solid var(--border-color)',
+              borderRadius: '8px', padding: '8px', minWidth: '160px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            }}>
+              {ALL_COLUMNS.map(col => (
+                <label key={col.key} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 0', cursor: 'pointer', fontSize: '0.8rem' }}>
+                  <input type="checkbox" checked={isColVisible(col.key)} onChange={() => toggleColumn(col.key)} />
+                  {col.label}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+        {isAdminOrManager && selectedIds.size > 0 && (
+          <span style={{ fontSize: '0.8rem', color: 'var(--primary-color)', fontWeight: 600 }}>{selectedIds.size} selected</span>
+        )}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <select className="form-input" value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} style={{ width: '80px', fontSize: '0.8rem', padding: '4px' }}>
+            {[10, 25, 50, 100].map(n => <option key={n} value={n}>{n} / page</option>)}
+          </select>
+        </div>
+      </div>
+
       {/* Table */}
       <div className="card">
         {sortedFiltered.length === 0 ? (
@@ -767,25 +989,30 @@ function CellphoneAssignments() {
             <p>{searchTerm ? 'Try a different search term' : 'Click "Assign Cellphone" to add the first record'}</p>
           </div>
         ) : (
+          <>
           <div className="table-container">
             <table>
               <thead>
                 <tr>
-                  <SortHeader col="employee_name" label="Employee" />
-                  <SortHeader col="division" label="Division" />
-                  <SortHeader col="phone" label="Phone" />
-                  <th>Serial / IMEI</th>
-                  <SortHeader col="phone_number" label="Phone Number" />
-                  <SortHeader col="network" label="Network" />
-                  <SortHeader col="date_assigned" label="Date Assigned" />
-                  <SortHeader col="phone_age" label="Phone Age" />
-                  <SortHeader col="status" label="Status" />
-                  <th>Actions</th>
+                  {isAdminOrManager && <th style={{ width: '36px' }}><input type="checkbox" checked={selectedIds.size === paginatedData.length && paginatedData.length > 0} onChange={toggleSelectAll} title="Select all on this page" /></th>}
+                  {isColVisible('employee') && <SortHeader col="employee_name" label="Employee" />}
+                  {isColVisible('division') && <SortHeader col="division" label="Division" />}
+                  {isColVisible('phone') && <SortHeader col="phone" label="Phone" />}
+                  {isColVisible('serial') && <th>Serial / IMEI</th>}
+                  {isColVisible('phone_number') && <SortHeader col="phone_number" label="Phone Number" />}
+                  {isColVisible('network') && <SortHeader col="network" label="Network" />}
+                  {isColVisible('date_assigned') && <SortHeader col="date_assigned" label="Date Assigned" />}
+                  {isColVisible('phone_age') && <SortHeader col="phone_age" label="Phone Age" />}
+                  {isColVisible('condition') && <th>Condition</th>}
+                  {isColVisible('status') && <SortHeader col="status" label="Status" />}
+                  {isColVisible('actions') && <th>Actions</th>}
                 </tr>
               </thead>
               <tbody>
-                {sortedFiltered.map(item => (
-                  <tr key={item.id}>
+                {paginatedData.map(item => (
+                  <tr key={item.id} style={selectedIds.has(item.id) ? { background: 'rgba(52,152,219,0.08)' } : undefined}>
+                    {isAdminOrManager && <td><input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} /></td>}
+                    {isColVisible('employee') && (
                     <td>
                       <div>
                         <strong>{item.employee_name}</strong>
@@ -801,11 +1028,15 @@ function CellphoneAssignments() {
                         )}
                       </div>
                     </td>
+                    )}
+                    {isColVisible('division') && (
                     <td>
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                         {getDivision(item) || '-'}
                       </span>
                     </td>
+                    )}
+                    {isColVisible('phone') && (
                     <td>
                       <div>
                         <strong>{item.phone_brand}</strong>
@@ -814,6 +1045,8 @@ function CellphoneAssignments() {
                         </div>
                       </div>
                     </td>
+                    )}
+                    {isColVisible('serial') && (
                     <td>
                       <div>
                         <span style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>{item.serial_number}</span>
@@ -824,7 +1057,9 @@ function CellphoneAssignments() {
                         )}
                       </div>
                     </td>
-                    <td>{item.phone_number || '-'}</td>
+                    )}
+                    {isColVisible('phone_number') && <td>{item.phone_number || '-'}</td>}
+                    {isColVisible('network') && (
                     <td>
                       <div>
                         {item.network_provider && <div style={{ fontSize: '0.85rem' }}>{item.network_provider}</div>}
@@ -832,7 +1067,9 @@ function CellphoneAssignments() {
                         {!item.network_provider && !item.sim_number && '-'}
                       </div>
                     </td>
-                    <td>{item.date_assigned ? new Date(item.date_assigned).toLocaleDateString() : '-'}</td>
+                    )}
+                    {isColVisible('date_assigned') && <td>{item.date_assigned ? new Date(item.date_assigned).toLocaleDateString() : '-'}</td>}
+                    {isColVisible('phone_age') && (
                     <td>
                       {(() => {
                         const ageColor = getPhoneAgeColor(item.date_assigned, item.phone_status);
@@ -877,6 +1114,30 @@ function CellphoneAssignments() {
                         );
                       })()}
                     </td>
+                    )}
+                    {isColVisible('condition') && (
+                    <td>
+                      {item.device_condition ? (
+                        <span style={{
+                          fontSize: '0.8rem',
+                          padding: '2px 8px',
+                          borderRadius: '10px',
+                          background: item.device_condition === 'Good' ? 'rgba(39,174,96,0.12)' :
+                                     item.device_condition === 'Fair' ? 'rgba(243,156,18,0.12)' :
+                                     item.device_condition === 'Poor' ? 'rgba(230,126,34,0.12)' :
+                                     'rgba(231,76,60,0.12)',
+                          color: item.device_condition === 'Good' ? '#27ae60' :
+                                 item.device_condition === 'Fair' ? '#f39c12' :
+                                 item.device_condition === 'Poor' ? '#e67e22' :
+                                 '#e74c3c',
+                          fontWeight: 600,
+                        }}>
+                          {item.device_condition}
+                        </span>
+                      ) : <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>-</span>}
+                    </td>
+                    )}
+                    {isColVisible('status') && (
                     <td>
                       {(() => {
                         const st = PHONE_STATUSES.find(s => s.value === item.phone_status) || PHONE_STATUSES[0];
@@ -888,6 +1149,8 @@ function CellphoneAssignments() {
                         </div>
                       )}
                     </td>
+                    )}
+                    {isColVisible('actions') && (
                     <td>
                       <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                         <button className="btn btn-sm btn-secondary" onClick={() => setHistoryItem(item)} title="View History">
@@ -915,11 +1178,44 @@ function CellphoneAssignments() {
                         )}
                       </div>
                     </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '12px 16px', borderTop: '1px solid var(--border-color)', flexWrap: 'wrap', gap: '8px',
+            }}>
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Showing {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, sortedFiltered.length)} of {sortedFiltered.length}
+              </span>
+              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                <button className="btn btn-sm btn-secondary" disabled={currentPage === 1} onClick={() => setCurrentPage(1)} title="First">&laquo;</button>
+                <button className="btn btn-sm btn-secondary" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} title="Previous">&lsaquo;</button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 2)
+                  .reduce((acc, p, idx, arr) => {
+                    if (idx > 0 && p - arr[idx - 1] > 1) acc.push('...');
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((p, i) =>
+                    p === '...' ? <span key={`dot-${i}`} style={{ padding: '0 4px', color: 'var(--text-secondary)' }}>…</span> :
+                    <button key={p} className={`btn btn-sm ${p === currentPage ? '' : 'btn-secondary'}`}
+                      style={p === currentPage ? { background: 'var(--primary-color)', color: 'white' } : undefined}
+                      onClick={() => setCurrentPage(p)}>{p}</button>
+                  )}
+                <button className="btn btn-sm btn-secondary" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} title="Next">&rsaquo;</button>
+                <button className="btn btn-sm btn-secondary" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)} title="Last">&raquo;</button>
+              </div>
+            </div>
+          )}
+          </>
         )}
       </div>
 
@@ -951,6 +1247,24 @@ function CellphoneAssignments() {
           onClose={() => setHistoryItem(null)}
         />
       )}
+
+      {/* Bulk Status Modal */}
+      {showBulkStatusModal && (
+        <BulkStatusModal
+          selectedIds={selectedIds}
+          assignments={assignments}
+          onClose={() => setShowBulkStatusModal(false)}
+          onSuccess={() => { setShowBulkStatusModal(false); setSelectedIds(new Set()); fetchData(); }}
+        />
+      )}
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <ImportModal
+          onClose={() => setShowImportModal(false)}
+          onSuccess={() => { setShowImportModal(false); fetchData(); }}
+        />
+      )}
     </div>
   );
 }
@@ -973,13 +1287,40 @@ function CellphoneModal({ item, personnel, allAssignments, onClose, onSuccess })
     notes: item?.notes || '',
     device_cost: item?.device_cost || '',
     monthly_cost: item?.monthly_cost || '',
+    contract_start_date: item?.contract_start_date || '',
     contract_end_date: item?.contract_end_date || '',
     warranty_end_date: item?.warranty_end_date || '',
     sim_number: item?.sim_number || '',
     network_provider: item?.network_provider || '',
+    data_plan: item?.data_plan || '',
+    device_condition: item?.device_condition || '',
+    accessories: item?.accessories || '',
+    insurance_policy: item?.insurance_policy || '',
+    insurance_expiry: item?.insurance_expiry || '',
   });
   const [saving, setSaving] = useState(false);
   const [serialMatch, setSerialMatch] = useState(null);
+  const [imeiError, setImeiError] = useState('');
+
+  // IMEI Luhn check validation
+  const validateIMEI = (imei) => {
+    if (!imei) { setImeiError(''); return; }
+    const digits = imei.replace(/\D/g, '');
+    if (digits.length !== 15) { setImeiError('IMEI must be exactly 15 digits'); return; }
+    // Luhn algorithm
+    let sum = 0;
+    for (let i = 0; i < 14; i++) {
+      let d = parseInt(digits[i], 10);
+      if (i % 2 === 1) { d *= 2; if (d > 9) d -= 9; }
+      sum += d;
+    }
+    const checkDigit = (10 - (sum % 10)) % 10;
+    if (checkDigit !== parseInt(digits[14], 10)) {
+      setImeiError('Invalid IMEI (Luhn check failed)');
+    } else {
+      setImeiError('');
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -1061,10 +1402,16 @@ function CellphoneModal({ item, personnel, allAssignments, onClose, onSuccess })
       if (!payload.notes) payload.notes = null;
       if (!payload.device_cost) payload.device_cost = null;
       if (!payload.monthly_cost) payload.monthly_cost = null;
+      if (!payload.contract_start_date) payload.contract_start_date = null;
       if (!payload.contract_end_date) payload.contract_end_date = null;
       if (!payload.warranty_end_date) payload.warranty_end_date = null;
       if (!payload.sim_number) payload.sim_number = null;
       if (!payload.network_provider) payload.network_provider = null;
+      if (!payload.data_plan) payload.data_plan = null;
+      if (!payload.device_condition) payload.device_condition = null;
+      if (!payload.accessories) payload.accessories = null;
+      if (!payload.insurance_policy) payload.insurance_policy = null;
+      if (!payload.insurance_expiry) payload.insurance_expiry = null;
 
       if (item) {
         // If status changed, use updateStatus to log history
@@ -1161,11 +1508,20 @@ function CellphoneModal({ item, personnel, allAssignments, onClose, onSuccess })
                   type="text"
                   name="imei_number"
                   value={form.imei_number}
-                  onChange={handleChange}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '').slice(0, 15);
+                    setForm(prev => ({ ...prev, imei_number: val }));
+                    validateIMEI(val);
+                  }}
                   className="form-input"
                   placeholder="15-digit IMEI"
                   maxLength={15}
+                  style={imeiError ? { borderColor: '#e74c3c' } : {}}
                 />
+                {imeiError && <div style={{ fontSize: '0.75rem', color: '#e74c3c', marginTop: '2px' }}>{imeiError}</div>}
+                {form.imei_number && !imeiError && form.imei_number.length === 15 && (
+                  <div style={{ fontSize: '0.75rem', color: 'var(--success-color)', marginTop: '2px' }}>Valid IMEI</div>
+                )}
               </div>
             </div>
 
@@ -1396,6 +1752,16 @@ function CellphoneModal({ item, personnel, allAssignments, onClose, onSuccess })
               <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '8px', color: 'var(--text-secondary)' }}>Contract & Warranty</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div className="form-group">
+                  <label className="form-label">Contract Start Date</label>
+                  <input
+                    type="date"
+                    name="contract_start_date"
+                    value={form.contract_start_date}
+                    onChange={handleChange}
+                    className="form-input"
+                  />
+                </div>
+                <div className="form-group">
                   <label className="form-label">Contract End Date</label>
                   <input
                     type="date"
@@ -1405,12 +1771,85 @@ function CellphoneModal({ item, personnel, allAssignments, onClose, onSuccess })
                     className="form-input"
                   />
                 </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '8px' }}>
                 <div className="form-group">
                   <label className="form-label">Warranty End Date</label>
                   <input
                     type="date"
                     name="warranty_end_date"
                     value={form.warranty_end_date}
+                    onChange={handleChange}
+                    className="form-input"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Data Plan</label>
+                  <input
+                    type="text"
+                    name="data_plan"
+                    value={form.data_plan}
+                    onChange={handleChange}
+                    className="form-input"
+                    placeholder="e.g. 10GB monthly"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Device Condition & Accessories */}
+            <div style={{ borderTop: '1px solid var(--border-color, #e0e0e0)', paddingTop: '12px', marginTop: '4px' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '8px', color: 'var(--text-secondary)' }}>Device Condition & Accessories</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group">
+                  <label className="form-label">Device Condition</label>
+                  <select
+                    name="device_condition"
+                    value={form.device_condition}
+                    onChange={handleChange}
+                    className="form-input"
+                  >
+                    <option value="">-- Select --</option>
+                    {['Good', 'Fair', 'Poor', 'Damaged'].map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Accessories</label>
+                  <input
+                    type="text"
+                    name="accessories"
+                    value={form.accessories}
+                    onChange={handleChange}
+                    className="form-input"
+                    placeholder="Charger, Case, Screen Protector"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Insurance */}
+            <div style={{ borderTop: '1px solid var(--border-color, #e0e0e0)', paddingTop: '12px', marginTop: '4px' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '8px', color: 'var(--text-secondary)' }}>Insurance</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group">
+                  <label className="form-label">Policy Number</label>
+                  <input
+                    type="text"
+                    name="insurance_policy"
+                    value={form.insurance_policy}
+                    onChange={handleChange}
+                    className="form-input"
+                    placeholder="Insurance policy number"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Insurance Expiry</label>
+                  <input
+                    type="date"
+                    name="insurance_expiry"
+                    value={form.insurance_expiry}
                     onChange={handleChange}
                     className="form-input"
                   />
@@ -1637,6 +2076,287 @@ function HistoryModal({ item, onClose }) {
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Bulk Status Update Modal ──
+function BulkStatusModal({ selectedIds, assignments, onClose, onSuccess }) {
+  const [newStatus, setNewStatus] = useState('Returned');
+  const [condition, setCondition] = useState('Good');
+  const [notes, setNotes] = useState('');
+  const [processing, setProcessing] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0, errors: [] });
+
+  const selected = assignments.filter(a => selectedIds.has(a.id));
+
+  const handleBulkUpdate = async () => {
+    setProcessing(true);
+    const total = selected.length;
+    const errors = [];
+    let done = 0;
+    setProgress({ done: 0, total, errors: [] });
+
+    for (const item of selected) {
+      try {
+        await cellphoneAssignmentsApi.updateStatus(item.id, {
+          phone_status: newStatus,
+          device_condition: condition,
+          notes: notes || `Bulk status update to ${newStatus}`,
+          ...(newStatus === 'Returned' ? { date_returned: new Date().toISOString().split('T')[0] } : {}),
+        });
+      } catch (err) {
+        errors.push(`${item.employee_name}: ${err.message}`);
+      }
+      done++;
+      setProgress({ done, total, errors: [...errors] });
+    }
+
+    if (errors.length === 0) {
+      onSuccess();
+    } else {
+      setProcessing(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" style={{ maxWidth: '500px' }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Bulk Status Update ({selected.length} phones)</h3>
+          <button className="btn btn-sm btn-secondary" onClick={onClose}><Icons.Close size={16} /></button>
+        </div>
+        <div className="modal-body">
+          <div style={{ marginBottom: '12px', padding: '8px', background: 'rgba(52,152,219,0.08)', borderRadius: '8px', fontSize: '0.85rem' }}>
+            <strong>Selected phones:</strong>
+            <div style={{ maxHeight: '100px', overflowY: 'auto', marginTop: '4px' }}>
+              {selected.map(s => (
+                <div key={s.id}>{s.employee_name} — {s.phone_brand} {s.phone_model}</div>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>New Status</label>
+            <select className="form-control" value={newStatus} onChange={e => setNewStatus(e.target.value)} disabled={processing}>
+              {PHONE_STATUSES.filter(s => s.value !== 'Active').map(s => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label>Device Condition</label>
+            <select className="form-control" value={condition} onChange={e => setCondition(e.target.value)} disabled={processing}>
+              <option value="Good">Good</option>
+              <option value="Fair">Fair</option>
+              <option value="Poor">Poor</option>
+              <option value="Damaged">Damaged</option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label>Notes (optional)</label>
+            <input className="form-control" value={notes} onChange={e => setNotes(e.target.value)} disabled={processing} placeholder="Reason for status change" />
+          </div>
+
+          {processing && (
+            <div style={{ marginTop: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '4px' }}>
+                <span>Processing...</span>
+                <span>{progress.done} / {progress.total}</span>
+              </div>
+              <div style={{ background: 'var(--border-color)', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
+                <div style={{ width: `${(progress.done / progress.total) * 100}%`, height: '100%', background: 'var(--primary-color)', transition: 'width 0.3s' }} />
+              </div>
+              {progress.errors.length > 0 && (
+                <div style={{ marginTop: '8px', color: '#e74c3c', fontSize: '0.8rem' }}>
+                  {progress.errors.map((e, i) => <div key={i}>{e}</div>)}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose} disabled={processing}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleBulkUpdate} disabled={processing}>
+            {processing ? `Updating ${progress.done}/${progress.total}...` : `Update ${selected.length} Phones`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Import Modal ──
+function ImportModal({ onClose, onSuccess }) {
+  const [file, setFile] = useState(null);
+  const [parsedRows, setParsedRows] = useState([]);
+  const [importing, setImporting] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0, errors: [] });
+  const [parseError, setParseError] = useState('');
+
+  const EXPECTED_HEADERS = ['employee_name', 'phone_brand', 'phone_model', 'serial_number'];
+
+  const handleFileChange = (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    setFile(f);
+    setParseError('');
+    setParsedRows([]);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const text = evt.target.result;
+        const lines = text.split(/\r?\n/).filter(l => l.trim());
+        if (lines.length < 2) { setParseError('File must have a header row and at least one data row'); return; }
+
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/\s+/g, '_').replace(/['"]/g, ''));
+        const missing = EXPECTED_HEADERS.filter(h => !headers.includes(h));
+        if (missing.length > 0) { setParseError(`Missing required columns: ${missing.join(', ')}`); return; }
+
+        const rows = [];
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
+          if (values.length < headers.length) continue;
+          const row = {};
+          headers.forEach((h, idx) => { row[h] = values[idx] || ''; });
+          if (row.employee_name && row.phone_brand) rows.push(row);
+        }
+        setParsedRows(rows);
+      } catch (err) {
+        setParseError('Failed to parse file: ' + err.message);
+      }
+    };
+    reader.readAsText(f);
+  };
+
+  const handleImport = async () => {
+    setImporting(true);
+    const total = parsedRows.length;
+    const errors = [];
+    let done = 0;
+    setProgress({ done: 0, total, errors: [] });
+
+    for (const row of parsedRows) {
+      try {
+        await cellphoneAssignmentsApi.create({
+          employee_name: row.employee_name,
+          employee_id: row.employee_id || '',
+          employee_email: row.employee_email || '',
+          phone_brand: row.phone_brand,
+          phone_model: row.phone_model || '',
+          serial_number: row.serial_number || '',
+          imei_number: row.imei_number || '',
+          phone_number: row.phone_number || '',
+          asset_tag: row.asset_tag || '',
+          date_assigned: row.date_assigned || new Date().toISOString().split('T')[0],
+          phone_status: row.phone_status || 'Active',
+          network_provider: row.network_provider || '',
+          sim_number: row.sim_number || '',
+          device_cost: row.device_cost ? parseFloat(row.device_cost) : null,
+          monthly_cost: row.monthly_cost ? parseFloat(row.monthly_cost) : null,
+          contract_end_date: row.contract_end_date || null,
+          warranty_end_date: row.warranty_end_date || null,
+          data_plan: row.data_plan || null,
+          contract_start_date: row.contract_start_date || null,
+          device_condition: row.device_condition || null,
+          accessories: row.accessories || null,
+          insurance_policy: row.insurance_policy || null,
+          insurance_expiry: row.insurance_expiry || null,
+        });
+      } catch (err) {
+        errors.push(`Row ${done + 1} (${row.employee_name}): ${err.message}`);
+      }
+      done++;
+      setProgress({ done, total, errors: [...errors] });
+    }
+
+    if (errors.length === 0) {
+      onSuccess();
+    } else {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" style={{ maxWidth: '700px' }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3><Icons.Upload size={18} /> Import Cellphone Assignments</h3>
+          <button className="btn btn-sm btn-secondary" onClick={onClose}><Icons.Close size={16} /></button>
+        </div>
+        <div className="modal-body">
+          <div style={{ marginBottom: '12px', padding: '10px', background: 'rgba(52,152,219,0.08)', borderRadius: '8px', fontSize: '0.83rem' }}>
+            <strong>CSV Format:</strong> File must include headers. Required columns: <code>employee_name</code>, <code>phone_brand</code>, <code>phone_model</code>, <code>serial_number</code>.
+            <br />Optional: employee_id, employee_email, phone_number, imei_number, asset_tag, date_assigned, phone_status, network_provider, sim_number, device_cost, monthly_cost, contract_end_date, warranty_end_date, data_plan, device_condition, accessories, insurance_policy, insurance_expiry
+          </div>
+
+          <div className="form-group">
+            <label>Select CSV File</label>
+            <input type="file" accept=".csv" className="form-control" onChange={handleFileChange} disabled={importing} />
+          </div>
+
+          {parseError && <div style={{ color: '#e74c3c', fontSize: '0.85rem', marginBottom: '8px' }}><Icons.Warning size={14} /> {parseError}</div>}
+
+          {parsedRows.length > 0 && (
+            <div>
+              <strong style={{ fontSize: '0.9rem' }}>{parsedRows.length} records ready to import</strong>
+              <div className="table-container" style={{ maxHeight: '250px', overflowY: 'auto', marginTop: '8px' }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Employee</th>
+                      <th>Phone</th>
+                      <th>Serial</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parsedRows.slice(0, 50).map((row, i) => (
+                      <tr key={i}>
+                        <td>{i + 1}</td>
+                        <td>{row.employee_name}</td>
+                        <td>{row.phone_brand} {row.phone_model}</td>
+                        <td style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{row.serial_number}</td>
+                        <td>{row.phone_status || 'Active'}</td>
+                      </tr>
+                    ))}
+                    {parsedRows.length > 50 && (
+                      <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>...and {parsedRows.length - 50} more</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {importing && (
+            <div style={{ marginTop: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '4px' }}>
+                <span>Importing...</span>
+                <span>{progress.done} / {progress.total}</span>
+              </div>
+              <div style={{ background: 'var(--border-color)', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
+                <div style={{ width: `${(progress.done / progress.total) * 100}%`, height: '100%', background: '#27ae60', transition: 'width 0.3s' }} />
+              </div>
+              {progress.errors.length > 0 && (
+                <div style={{ marginTop: '8px', color: '#e74c3c', fontSize: '0.8rem', maxHeight: '100px', overflowY: 'auto' }}>
+                  {progress.errors.map((e, i) => <div key={i}>{e}</div>)}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose} disabled={importing}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleImport} disabled={importing || parsedRows.length === 0}>
+            {importing ? `Importing ${progress.done}/${progress.total}...` : `Import ${parsedRows.length} Records`}
+          </button>
         </div>
       </div>
     </div>
