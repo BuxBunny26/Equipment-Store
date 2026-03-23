@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { laptopAssignmentsApi, personnelApi } from '../services/api';
+import * as XLSX from 'xlsx';
 import { useOperator } from '../context/OperatorContext';
 import { Icons } from '../components/Icons';
 import { getAssetConfig } from './Settings';
@@ -1726,14 +1727,12 @@ function ImportModal({ onClose, onSuccess }) {
   ];
 
   const downloadTemplate = () => {
-    const csv = ALL_HEADERS.join(',') + '\n';
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'laptop_assignments_template.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+    const ws = XLSX.utils.aoa_to_sheet([ALL_HEADERS]);
+    // Set column widths
+    ws['!cols'] = ALL_HEADERS.map(h => ({ wch: Math.max(h.length + 2, 14) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Laptop Assignments');
+    XLSX.writeFile(wb, 'laptop_assignments_template.xlsx');
   };
 
   const handleFileChange = (e) => {
