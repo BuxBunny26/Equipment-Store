@@ -230,6 +230,28 @@ function CheckOut() {
           // Only attach photo to first item
           await movementsApi.create(payload, successNames.length === 0 ? photoFile : null);
           successNames.push(equipment.equipment_name);
+
+          // Auto-update matching reservations
+          try {
+            const today = new Date().toISOString().split('T')[0];
+            const matchingReservations = activeReservations.filter(r =>
+              r.equipment_id === equipment.id &&
+              ['pending', 'approved'].includes(r.status?.toLowerCase()) &&
+              r.end_date >= today
+            );
+
+            for (const res of matchingReservations) {
+              if (res.personnel_id === parseInt(formData.personnel_id)) {
+                // Same person — activate the reservation
+                await reservationsApi.updateStatus(res.id, 'active');
+              } else {
+                // Different person checked it out — cancel the reservation with a note
+                await reservationsApi.updateStatus(res.id, 'cancelled');
+              }
+            }
+          } catch (resErr) {
+            console.error('Failed to update reservation:', resErr);
+          }
         } catch (err) {
           errors.push(`${equipment.equipment_name}: ${err.message}`);
         }
@@ -280,13 +302,19 @@ function CheckOut() {
       setPhotoFile(null);
       setPhotoPreview(null);
 
-      // Refresh equipment lists
-      const [equipmentRes, checkedOutRes] = await Promise.all([
+      // Refresh equipment lists and reservations
+      const [equipmentRes, checkedOutRes, reservationsRes] = await Promise.all([
         reportsApi.getAvailable(),
         reportsApi.getCheckedOut(),
+        reservationsApi.getAll(),
       ]);
       setAvailableEquipment(equipmentRes.data);
       setCheckedOutEquipment(checkedOutRes.data || []);
+      const today = new Date().toISOString().split('T')[0];
+      setActiveReservations((reservationsRes.data || []).filter(r =>
+        ['pending', 'approved', 'active'].includes(r.status?.toLowerCase()) &&
+        r.end_date >= today
+      ));
 
     } catch (err) {
       setError(err.message);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { reportsApi, locationsApi, movementsApi } from '../services/api';
+import { reportsApi, locationsApi, movementsApi, reservationsApi } from '../services/api';
 import { useOperator } from '../context/OperatorContext';
 import OperatorWarning from '../components/OperatorWarning';
 import PhotoCapture from '../components/PhotoCapture';
@@ -95,6 +95,20 @@ function CheckIn() {
       };
 
       await movementsApi.create(payload, photoFile);
+
+      // Auto-complete any active reservations for this equipment
+      try {
+        const resResponse = await reservationsApi.getAll({ equipment_id: parseInt(formData.equipment_id) });
+        const activeRes = (resResponse.data || []).filter(r =>
+          ['active', 'approved'].includes(r.status?.toLowerCase()) &&
+          r.equipment_id === parseInt(formData.equipment_id)
+        );
+        for (const res of activeRes) {
+          await reservationsApi.updateStatus(res.id, 'completed');
+        }
+      } catch (resErr) {
+        console.error('Failed to update reservation on check-in:', resErr);
+      }
 
       setSuccess(`Successfully returned: ${selectedEquipment?.equipment_name}`);
       setTimeout(() => setSuccess(null), 5000);
