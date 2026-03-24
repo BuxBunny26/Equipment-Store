@@ -170,28 +170,14 @@ function Equipment() {
   };
 
   const handleDownloadTemplate = () => {
-    // Use backend API for template if available, else fallback
-    const backendUrl = process.env.REACT_APP_API_URL || '';
-    if (backendUrl) {
-      window.open(`${backendUrl}/api/exports/equipment-template`, '_blank');
-    } else {
-      // Client-side template generation fallback
-      const headers = ['Equipment ID *', 'Equipment Name *', 'Category *', 'Subcategory *', 'Manufacturer', 'Model', 'Serial Number', 'Location *', 'Description', 'Notes'];
-      const example1 = ['EQ-EXAMPLE-001', 'SKF CMXA 80 Analyzer', 'Vibration Analysis', 'Analyzers', 'SKF', 'CMXA 80', 'SN-12345', 'WearCheck - Springs', 'Portable vibration analyzer', ''];
-      const example2 = ['EQ-EXAMPLE-002', 'Fluke Ti480 Thermal Camera', 'Thermal Camera', 'Handheld Cameras', 'Fluke', 'Ti480', 'SN-67890', 'WearCheck - Springs', 'Infrared thermal imaging camera', 'Delete example rows before importing'];
-      const ws = XLSX.utils.aoa_to_sheet([headers, example1, example2]);
-      ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 2, 20) }));
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Equipment Import');
-      const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
-      const blob = new Blob([buf], { type: 'application/octet-stream' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'equipment_import_template.xlsx';
-      a.click();
-      URL.revokeObjectURL(url);
-    }
+    const headers = ['Equipment ID *', 'Equipment Name *', 'Category *', 'Subcategory *', 'Manufacturer', 'Model', 'Serial Number', 'Location *', 'Description', 'Notes'];
+    const example1 = ['EQ-EXAMPLE-001', 'SKF CMXA 80 Analyzer', 'Vibration Analysis', 'Analyzers', 'SKF', 'CMXA 80', 'SN-12345', 'WearCheck - Springs', 'Portable vibration analyzer', ''];
+    const example2 = ['EQ-EXAMPLE-002', 'Fluke Ti480 Thermal Camera', 'Thermal Camera', 'Handheld Cameras', 'Fluke', 'Ti480', 'SN-67890', 'WearCheck - Springs', 'Infrared thermal imaging camera', 'Delete example rows before importing'];
+    const ws = XLSX.utils.aoa_to_sheet([headers, example1, example2]);
+    ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 2, 20) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Equipment Import');
+    XLSX.writeFile(wb, 'equipment_import_template.xlsx');
   };
 
   return (
@@ -211,7 +197,7 @@ function Equipment() {
           <button className="btn btn-secondary" onClick={() => exportData('pdf', equipment, EXPORT_COLUMNS.equipment, 'equipment', 'Equipment List')} disabled={equipment.length === 0}>
             <Icons.Download size={16} /> PDF
           </button>
-          <button className="btn btn-secondary" onClick={() => fileInputRef.current?.click()}>
+          <button className="btn btn-secondary" onClick={() => { setShowImportModal(true); setImportData(null); setImportResults(null); }}>
             <Icons.Upload size={16} /> Import
           </button>
           <input
@@ -400,15 +386,29 @@ function Equipment() {
               <button className="modal-close" onClick={() => { setShowImportModal(false); setImportData(null); setImportResults(null); }}>×</button>
             </div>
             <div className="modal-body" style={{ maxHeight: '60vh', overflow: 'auto' }}>
-              {!importResults ? (
+              {!importResults && !importData ? (
+                <div style={{ textAlign: 'center', padding: '32px 16px' }}>
+                  <p style={{ marginBottom: '24px', color: 'var(--text-secondary)' }}>
+                    Import equipment from an Excel spreadsheet. Download the template first, fill in your data, then select the file to upload.
+                  </p>
+                  <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <button className="btn btn-secondary" onClick={handleDownloadTemplate}>
+                      <Icons.Download size={16} /> Download Template
+                    </button>
+                    <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()}>
+                      <Icons.Upload size={16} /> Select File
+                    </button>
+                  </div>
+                </div>
+              ) : !importResults ? (
                 <>
                   <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <p style={{ margin: 0 }}>
                       <strong>{importData?.length || 0}</strong> equipment items found in file.
                       Review the preview below, then click Import.
                     </p>
-                    <button className="btn btn-sm btn-secondary" onClick={handleDownloadTemplate}>
-                      <Icons.Download size={14} /> Download Template
+                    <button className="btn btn-sm btn-secondary" onClick={() => { setImportData(null); fileInputRef.current?.click(); }}>
+                      <Icons.Upload size={14} /> Choose Different File
                     </button>
                   </div>
                   {importData && importData.length > 0 ? (
@@ -487,19 +487,23 @@ function Equipment() {
               )}
             </div>
             <div className="modal-footer">
-              {!importResults ? (
+              {!importResults && importData ? (
                 <>
-                  <button className="btn btn-secondary" onClick={() => { setShowImportModal(false); setImportData(null); }}>
-                    Cancel
+                  <button className="btn btn-secondary" onClick={() => { setImportData(null); }}>
+                    Back
                   </button>
                   <button
                     className="btn btn-primary"
                     onClick={handleImport}
-                    disabled={importing || !importData || importData.length === 0}
+                    disabled={importing || importData.length === 0}
                   >
-                    {importing ? 'Importing...' : `Import ${importData?.length || 0} Items`}
+                    {importing ? 'Importing...' : `Import ${importData.length} Items`}
                   </button>
                 </>
+              ) : !importResults ? (
+                <button className="btn btn-secondary" onClick={() => { setShowImportModal(false); }}>
+                  Cancel
+                </button>
               ) : (
                 <button className="btn btn-primary" onClick={() => { setShowImportModal(false); setImportData(null); setImportResults(null); }}>
                   Close
