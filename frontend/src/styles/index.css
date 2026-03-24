@@ -2370,10 +2370,31 @@ input[type="search"]::-webkit-search-results-decoration {
 
 /* Page header improvements */
 @media (max-width: 480px) {
-  .page-header .btn {
+  .page-header > div:last-child {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
     width: 100%;
   }
-  
+
+  .page-header > div:last-child > .btn,
+  .page-header > div:last-child > .export-menu {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+  }
+
+  .page-header > div:last-child > .export-menu {
+    display: flex;
+  }
+
+  .page-header > div:last-child > .export-menu > .btn {
+    width: 100%;
+  }
+
+  .page-header > div:last-child > .btn-primary {
+    flex: 1 1 100%;
+  }
+
   .page-header {
     gap: 16px;
   }
