@@ -822,6 +822,18 @@ $$ LANGUAGE plpgsql;
 
 
 -- ============================================
+-- FIX: Add 'active' to reservations status check constraint
+-- ============================================
+ALTER TABLE reservations DROP CONSTRAINT IF EXISTS reservations_status_check;
+ALTER TABLE reservations ADD CONSTRAINT reservations_status_check
+    CHECK (status IN ('pending', 'approved', 'rejected', 'active', 'completed', 'cancelled',
+                       'Pending', 'Approved', 'Rejected', 'Active', 'Completed', 'Cancelled'));
+
+-- Normalize existing statuses to lowercase
+UPDATE reservations SET status = LOWER(status) WHERE status != LOWER(status);
+
+
+-- ============================================
 -- STORAGE BUCKETS (run via Supabase Dashboard or API)
 -- ============================================
 -- Create these buckets in Supabase Dashboard > Storage:

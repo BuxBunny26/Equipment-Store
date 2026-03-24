@@ -252,7 +252,8 @@ CREATE TABLE reservations (
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
     status VARCHAR(30) DEFAULT 'Pending'
-        CHECK (status IN ('Pending', 'Approved', 'Rejected', 'Completed', 'Cancelled')),
+        CHECK (status IN ('Pending', 'Approved', 'Rejected', 'Active', 'Completed', 'Cancelled',
+                          'pending', 'approved', 'rejected', 'active', 'completed', 'cancelled')),
     purpose TEXT,
     notes TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
