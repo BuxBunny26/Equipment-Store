@@ -236,16 +236,16 @@ function CheckOut() {
             const today = new Date().toISOString().split('T')[0];
             const matchingReservations = activeReservations.filter(r =>
               r.equipment_id === equipment.id &&
-              ['pending', 'approved'].includes(r.status?.toLowerCase()) &&
+              ['pending', 'approved', 'active'].includes(r.status?.toLowerCase()) &&
               r.end_date >= today
             );
 
             for (const res of matchingReservations) {
               if (res.personnel_id === parseInt(formData.personnel_id)) {
-                // Same person — activate the reservation
-                await reservationsApi.updateStatus(res.id, 'active');
+                // Same person — reservation fulfilled by checkout
+                await reservationsApi.updateStatus(res.id, 'completed');
               } else {
-                // Different person checked it out — cancel the reservation with a note
+                // Different person checked it out — cancel the reservation
                 await reservationsApi.updateStatus(res.id, 'cancelled');
               }
             }
