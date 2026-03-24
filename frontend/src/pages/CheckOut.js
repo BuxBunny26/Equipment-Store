@@ -737,13 +737,12 @@ function CheckOut() {
 
             {(formData.destination_type === 'customer' || formData.destination_type === 'transfer') && (
               <div className="form-group">
-                <label className="form-label">Receiving Employee *</label>
+                <label className="form-label">Receiving Employee</label>
                 <select
                   name="receiving_personnel_id"
                   className="form-select"
                   value={formData.receiving_personnel_id}
                   onChange={handleChange}
-                  required
                 >
                   <option value="">Select receiving employee...</option>
                   {personnel
@@ -980,7 +979,6 @@ function CheckOut() {
                 disabled={
                   selectedEquipmentIds.length === 0 ||
                   !formData.personnel_id ||
-                  ((formData.destination_type === 'customer' || formData.destination_type === 'transfer') && !formData.receiving_personnel_id) ||
                   (formData.destination_type === 'internal' ? !formData.location_id :
                     formData.destination_type === 'customer' ? !formData.customer_id :
                     formData.destination_type === 'calibration' ? !formData.calibration_provider :
