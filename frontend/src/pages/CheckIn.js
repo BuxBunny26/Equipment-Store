@@ -34,6 +34,8 @@ function CheckIn() {
     equipment_id: preselectedEquipmentId || '',
     location_id: '',
     quantity: 1,
+    condition: '',
+    reason: '',
     notes: '',
   });
   const [photoFile, setPhotoFile] = useState(null);
@@ -84,7 +86,11 @@ function CheckIn() {
         action: 'IN',
         quantity: 1, // For equipment, always 1
         location_id: parseInt(formData.location_id),
-        notes: formData.notes,
+        notes: [
+          formData.condition ? `Condition: ${formData.condition}` : null,
+          formData.reason ? `Reason: ${formData.reason}` : null,
+          formData.notes || null,
+        ].filter(Boolean).join(' | '),
         created_by: operator?.full_name || 'System',
       };
 
@@ -98,6 +104,8 @@ function CheckIn() {
         equipment_id: '',
         location_id: '',
         quantity: 1,
+        condition: '',
+        reason: '',
         notes: '',
       });
       setPhotoFile(null);
@@ -377,6 +385,38 @@ function CheckIn() {
             </div>
 
             <div className="form-group">
+              <label className="form-label">Return Condition</label>
+              <select
+                name="condition"
+                className="form-select"
+                value={formData.condition}
+                onChange={handleChange}
+              >
+                <option value="">Select condition...</option>
+                <option value="Excellent">Excellent</option>
+                <option value="Good">Good</option>
+                <option value="Fair">Fair</option>
+                <option value="Poor">Poor</option>
+                <option value="Damaged">Damaged</option>
+              </select>
+            </div>
+
+            {formData.condition && formData.condition !== 'Excellent' && formData.condition !== 'Good' && (
+              <div className="form-group">
+                <label className="form-label">Reason *</label>
+                <input
+                  type="text"
+                  name="reason"
+                  className="form-input"
+                  value={formData.reason}
+                  onChange={handleChange}
+                  placeholder="Describe the issue or damage..."
+                  required
+                />
+              </div>
+            )}
+
+            <div className="form-group">
               <label className="form-label">Photo (Optional)</label>
               <div className="photo-buttons">
                 <button 
@@ -448,7 +488,7 @@ function CheckIn() {
               <button
                 type="submit"
                 className="btn btn-success btn-lg"
-                disabled={!formData.equipment_id || !formData.location_id || submitting}
+                disabled={!formData.equipment_id || !formData.location_id || submitting || (formData.condition && !['Excellent', 'Good'].includes(formData.condition) && !formData.reason)}
               >
                 {submitting ? 'Processing...' : 'Check In Equipment'}
               </button>
