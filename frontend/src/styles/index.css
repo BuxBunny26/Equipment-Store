@@ -1471,6 +1471,28 @@ input[type="search"]::-webkit-search-results-decoration {
 }
 
 /* ============================================
+   RESPONSIVE GRID & LAYOUT UTILITIES
+   ============================================ */
+
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.form-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1rem;
+}
+
+.btn-group-wrap {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* ============================================
    ENHANCED RESPONSIVE STYLES
    ============================================ */
 
@@ -1561,9 +1583,10 @@ input[type="search"]::-webkit-search-results-decoration {
   }
   
   /* Modal full width */
-  .modal-content {
+  .modal-content,
+  .modal {
     width: 95%;
-    max-width: none;
+    max-width: none !important;
     margin: 16px;
     max-height: calc(100vh - 32px);
   }
@@ -1571,6 +1594,35 @@ input[type="search"]::-webkit-search-results-decoration {
   /* Form grid single column */
   .form-grid {
     grid-template-columns: 1fr !important;
+  }
+
+  /* Responsive grid utilities collapse to single column */
+  .form-grid-2,
+  .form-grid-3 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Force ALL inline grid-template-columns to single column on mobile */
+  .modal [style*="grid-template-columns"],
+  .modal-body [style*="grid-template-columns"],
+  .card [style*="grid-template-columns"],
+  .page-content [style*="grid-template-columns"],
+  [style*="grid-template-columns"]:not(.stats-grid):not(.dashboard-grid):not(.summary-grid) {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Stats grid always single column on mobile (override inline styles) */
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Button groups wrap on mobile */
+  .btn-group-wrap {
+    gap: 8px;
+  }
+
+  .page-header div[style] {
+    flex-wrap: wrap !important;
   }
   
   /* Button groups stack */

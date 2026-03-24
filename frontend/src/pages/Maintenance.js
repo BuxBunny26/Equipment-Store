@@ -218,7 +218,7 @@ function Maintenance() {
           <h1>Equipment Maintenance</h1>
           <p className="subtitle">Track repairs, servicing, and maintenance history</p>
         </div>
-        <div style={{ display: 'flex', gap: '6px' }}>
+        <div className="btn-group-wrap">
           <button className="btn btn-secondary" onClick={() => exportData('csv', records, EXPORT_COLUMNS.maintenance, 'maintenance', 'Maintenance Records')} disabled={records.length === 0}>
             <Icons.Download size={16} /> CSV
           </button>
@@ -330,6 +330,7 @@ function Maintenance() {
 
           {/* Records Table */}
           <div className="card">
+            <div className="table-container">
             <table className="table">
               <thead>
                 <tr>
@@ -418,12 +419,14 @@ function Maintenance() {
               </tbody>
             </table>
           </div>
+          </div>
         </>
       )}
 
       {activeTab === 'due' && (
         <div className="card">
           <h3 style={{ marginBottom: '1rem' }}>Maintenance Due</h3>
+          <div className="table-container">
           <table className="table">
             <thead>
               <tr>
@@ -481,6 +484,7 @@ function Maintenance() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
@@ -494,7 +498,7 @@ function Maintenance() {
             </div>
             <form onSubmit={handleSubmit}>
               <div className="modal-body">
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div className="form-grid-2">
                   <div className="form-group">
                     <label className="form-label">Equipment *</label>
                     <select
@@ -565,7 +569,7 @@ function Maintenance() {
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div className="form-grid-2">
                   <div className="form-group">
                     <label className="form-label">Performed By</label>
                     <input

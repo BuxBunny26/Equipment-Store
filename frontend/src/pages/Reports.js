@@ -170,7 +170,7 @@ function Reports() {
           <h1 className="page-title">Reports</h1>
           <p className="page-subtitle">Equipment &amp; asset reports and analytics</p>
         </div>
-        <div style={{ display: 'flex', gap: '6px' }}>
+        <div className="btn-group-wrap">
           <button className="btn btn-secondary" onClick={fetchData}>
             Refresh
           </button>

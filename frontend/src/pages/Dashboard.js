@@ -186,7 +186,7 @@ function Dashboard() {
           <h1 className="page-title">Dashboard</h1>
           <p className="page-subtitle">Equipment inventory overview</p>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div className="btn-group-wrap">
           <Link to="/check-out" className="btn btn-primary">
             Check Out Equipment
           </Link>
@@ -413,7 +413,7 @@ function Dashboard() {
       )}
 
       {/* Two Column Layout for Maintenance & Reservations */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.5rem' }}>
+      <div className="two-column-grid">
         {/* Maintenance Overview */}
         <div className="card">
           <div className="card-header">
@@ -471,7 +471,7 @@ function Dashboard() {
               </p>
             </div>
           )}
-          <div className="stats-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: '1rem' }}>
+          <div className="stats-grid" style={{ marginBottom: '1rem' }}>
             <div className="stat-card" style={{ cursor: 'pointer' }}>
               <div className="stat-icon orange"><Icons.Clock size={24} /></div>
               <div className="stat-content">
@@ -561,7 +561,7 @@ function Dashboard() {
               </p>
             </div>
           )}
-          <div className="stats-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: '1rem' }}>
+          <div className="stats-grid" style={{ marginBottom: '1rem' }}>
             <div className="stat-card" style={{ cursor: 'pointer' }}>
               <div className="stat-icon orange"><Icons.Hourglass size={24} /></div>
               <div className="stat-content">

@@ -211,7 +211,7 @@ function UserManagement() {
           <h1>User Management</h1>
           <p className="subtitle">Manage system users and their roles</p>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div className="btn-group-wrap">
           <button className="btn btn-secondary" onClick={() => setShowBulkModal(true)}>
             <Icons.Users size={16} /> Import from Personnel
           </button>
@@ -290,6 +290,7 @@ function UserManagement() {
 
       {/* Users Table */}
       <div className="card">
+        <div className="table-container">
         <table className="table">
           <thead>
             <tr>
@@ -372,6 +373,7 @@ function UserManagement() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Add/Edit Modal */}

@@ -96,7 +96,7 @@ function AuditLog() {
   return (
     <>
       {/* Activity Summary */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+      <div className="two-column-grid" style={{ marginBottom: '1.5rem' }}>
         <div className="card">
           <h3 style={{ marginBottom: '1rem' }}>Top Tables (30 days)</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -206,6 +206,7 @@ function AuditLog() {
           </div>
         </div>
 
+        <div className="table-container">
         <table className="table">
           <thead>
             <tr>
@@ -260,6 +261,7 @@ function AuditLog() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Detail Modal */}

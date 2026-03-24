@@ -326,7 +326,7 @@ function VehicleCheckoutForm() {
       </div>
 
       {/* Tab Bar */}
-      <div style={{ display: 'flex', gap: '0', marginBottom: '24px', borderBottom: '2px solid var(--border-color)' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0', marginBottom: '24px', borderBottom: '2px solid var(--border-color)' }}>
         {[
           { key: 'checkout', label: 'New Checkout', icon: <Icons.ArrowRight size={16} /> },
           { key: 'return', label: `Return Vehicle${activeTrips.length ? ` (${activeTrips.length})` : ''}`, icon: <Icons.Check size={16} /> },

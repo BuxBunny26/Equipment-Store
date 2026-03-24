@@ -301,7 +301,7 @@ function AssetsDashboard() {
       </div>
 
       {/* Vehicles Currently Out & Recent Fines */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.5rem', marginTop: '1.5rem' }}>
+      <div className="two-column-grid" style={{ marginTop: '1.5rem' }}>
 
         {/* Vehicles Currently Out */}
         <div className="card">

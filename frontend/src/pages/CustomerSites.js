@@ -104,7 +104,7 @@ function CustomerSites() {
           <h1>Customer Sites</h1>
           <p className="subtitle">Track equipment deployed at customer locations</p>
         </div>
-        <div style={{ display: 'flex', gap: '6px' }}>
+        <div className="btn-group-wrap">
           <button className="btn btn-secondary" onClick={() => handleExport(null, 'csv')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Icons.Download size={16} /> CSV
           </button>
@@ -222,6 +222,7 @@ function CustomerSites() {
                         No equipment currently at this customer site
                       </div>
                     ) : (
+                      <div className="table-container">
                       <table className="table">
                         <thead>
                           <tr>
@@ -265,6 +266,7 @@ function CustomerSites() {
                           ))}
                         </tbody>
                       </table>
+                      </div>
                     )}
                   </div>
                 )}

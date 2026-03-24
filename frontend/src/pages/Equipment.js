@@ -187,7 +187,7 @@ function Equipment() {
           <h1 className="page-title">Equipment</h1>
           <p className="page-subtitle">Manage equipment inventory</p>
         </div>
-        <div style={{ display: 'flex', gap: '6px' }}>
+        <div className="btn-group-wrap">
           <button className="btn btn-secondary" onClick={() => exportData('csv', equipment, EXPORT_COLUMNS.equipment, 'equipment', 'Equipment List')} disabled={equipment.length === 0}>
             <Icons.Download size={16} /> CSV
           </button>

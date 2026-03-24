@@ -142,7 +142,7 @@ function EquipmentDetail() {
           <h1 className="page-title">{equipment.equipment_name}</h1>
           <p className="page-subtitle">{equipment.equipment_id}</p>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div className="btn-group-wrap">
           {equipment.status === 'Available' && equipment.is_checkout_allowed && !equipment.is_consumable && (
             <Link to={`/check-out?equipment=${equipment.id}`} className="btn btn-primary">
               Check Out
