@@ -101,7 +101,7 @@ function CheckOut() {
           const res = await movementsApi.getAll({ equipment_id: parseInt(idStr), action: 'OUT', limit: 1 });
           if (res.data && res.data.length > 0) {
             const movement = res.data[0];
-            const conditionMatch = movement.notes?.match(/Condition:\s*(Excellent|Good|Poor)/i);
+            const conditionMatch = movement.notes?.match(/Condition:\s*(Excellent|Good|Fair|Poor|Damaged)/i);
             if (conditionMatch) {
               conditions[idStr] = {
                 condition: conditionMatch[1],
