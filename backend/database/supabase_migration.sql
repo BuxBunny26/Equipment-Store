@@ -83,7 +83,9 @@ CREATE OR REPLACE FUNCTION create_movement(
     p_personnel_id INTEGER DEFAULT NULL,
     p_notes TEXT DEFAULT NULL,
     p_created_by VARCHAR(100) DEFAULT NULL,
-    p_is_transfer BOOLEAN DEFAULT FALSE
+    p_is_transfer BOOLEAN DEFAULT FALSE,
+    p_expected_checkout_date DATE DEFAULT NULL,
+    p_expected_return_date DATE DEFAULT NULL
 )
 RETURNS JSONB AS $$
 DECLARE
@@ -162,9 +164,11 @@ BEGIN
 
     -- Insert movement (trigger handles equipment update)
     INSERT INTO equipment_movements (
-        equipment_id, action, quantity, location_id, customer_id, personnel_id, notes, created_by
+        equipment_id, action, quantity, location_id, customer_id, personnel_id, notes, created_by,
+        expected_checkout_date, expected_return_date
     ) VALUES (
-        p_equipment_id, p_action, p_quantity, p_location_id, p_customer_id, p_personnel_id, p_notes, p_created_by
+        p_equipment_id, p_action, p_quantity, p_location_id, p_customer_id, p_personnel_id, p_notes, p_created_by,
+        p_expected_checkout_date, p_expected_return_date
     )
     RETURNING * INTO v_movement;
 
@@ -319,15 +323,37 @@ BEGIN
                 p.email AS holder_email,
                 e.last_action_timestamp AS checked_out_at,
                 EXTRACT(DAY FROM (CURRENT_TIMESTAMP - e.last_action_timestamp))::INTEGER AS days_out,
+                latest_mov.expected_checkout_date,
+                latest_mov.expected_return_date,
                 CASE 
-                    WHEN e.last_action_timestamp < (CURRENT_TIMESTAMP - (p_overdue_days || ' days')::INTERVAL) THEN TRUE 
+                    WHEN latest_mov.expected_return_date IS NOT NULL AND CURRENT_DATE > latest_mov.expected_return_date THEN TRUE
+                    WHEN latest_mov.expected_return_date IS NULL AND e.last_action_timestamp < (CURRENT_TIMESTAMP - (p_overdue_days || ' days')::INTERVAL) THEN TRUE 
                     ELSE FALSE 
-                END AS is_overdue
+                END AS is_overdue,
+                CASE 
+                    WHEN cal.id IS NULL THEN 'Not Calibrated'
+                    WHEN cal.expiry_date IS NULL THEN 'N/A'
+                    WHEN cal.expiry_date < CURRENT_DATE THEN 'Expired'
+                    WHEN cal.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 'Due Soon'
+                    ELSE 'Valid'
+                END AS calibration_status
             FROM equipment e
             JOIN categories c ON e.category_id = c.id
             JOIN subcategories s ON e.subcategory_id = s.id
             LEFT JOIN locations l ON e.current_location_id = l.id
             LEFT JOIN personnel p ON e.current_holder_id = p.id
+            LEFT JOIN LATERAL (
+                SELECT em.expected_checkout_date, em.expected_return_date
+                FROM equipment_movements em
+                WHERE em.equipment_id = e.id AND em.action = 'OUT'
+                ORDER BY em.created_at DESC LIMIT 1
+            ) latest_mov ON true
+            LEFT JOIN LATERAL (
+                SELECT cr.id, cr.expiry_date
+                FROM calibration_records cr
+                WHERE cr.equipment_id = e.id
+                ORDER BY cr.calibration_date DESC LIMIT 1
+            ) cal ON true
             WHERE e.status = 'Checked Out' AND c.is_consumable = FALSE
             ORDER BY e.last_action_timestamp ASC
         ) t

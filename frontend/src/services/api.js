@@ -222,6 +222,75 @@ export const equipmentApi = {
             personnel_employee_id: m.personnel?.employee_id, locations: undefined,
         }))
     })),
+
+    bulkImport: async (rows) => {
+        // Fetch lookup tables for name-to-id resolution
+        const [catRes, subRes, locRes] = await Promise.all([
+            wrap(supabase.from('categories').select('id, name')),
+            wrap(supabase.from('subcategories').select('id, name, category_id')),
+            wrap(supabase.from('locations').select('id, name').eq('is_active', true)),
+        ]);
+        const cats = catRes.data || [];
+        const subs = subRes.data || [];
+        const locs = locRes.data || [];
+
+        const results = { success: [], errors: [] };
+
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            const rowNum = i + 2; // Excel row (1-indexed + header)
+            try {
+                // Validate required fields
+                if (!row.equipment_id?.trim()) throw new Error('Equipment ID is required');
+                if (!row.equipment_name?.trim()) throw new Error('Equipment Name is required');
+                if (!row.category?.trim()) throw new Error('Category is required');
+                if (!row.subcategory?.trim()) throw new Error('Subcategory is required');
+                if (!row.location?.trim()) throw new Error('Location is required');
+
+                // Resolve category
+                const cat = cats.find(c => c.name.toLowerCase() === row.category.trim().toLowerCase());
+                if (!cat) throw new Error(`Category "${row.category}" not found`);
+
+                // Resolve subcategory
+                const sub = subs.find(s => s.name.toLowerCase() === row.subcategory.trim().toLowerCase() && s.category_id === cat.id);
+                if (!sub) throw new Error(`Subcategory "${row.subcategory}" not found under "${row.category}"`);
+
+                // Resolve location
+                const loc = locs.find(l => l.name.toLowerCase() === row.location.trim().toLowerCase());
+                if (!loc) throw new Error(`Location "${row.location}" not found`);
+
+                // Insert equipment
+                const insertData = {
+                    equipment_id: row.equipment_id.trim(),
+                    equipment_name: row.equipment_name.trim(),
+                    category_id: cat.id,
+                    subcategory_id: sub.id,
+                    current_location_id: loc.id,
+                    manufacturer: row.manufacturer?.trim() || null,
+                    model: row.model?.trim() || null,
+                    serial_number: row.serial_number?.trim() || null,
+                    description: row.description?.trim() || null,
+                    notes: row.notes?.trim() || null,
+                    is_serialised: !!row.serial_number?.trim(),
+                    status: 'Available',
+                    available_quantity: 1,
+                    total_quantity: 1,
+                };
+
+                const { data, error } = await supabase.from('equipment').insert(insertData).select().single();
+                if (error) {
+                    if (error.message?.includes('duplicate') || error.code === '23505') {
+                        throw new Error(`Duplicate equipment ID or serial number`);
+                    }
+                    throw new Error(error.message);
+                }
+                results.success.push({ row: rowNum, equipment_id: insertData.equipment_id, name: insertData.equipment_name });
+            } catch (err) {
+                results.errors.push({ row: rowNum, equipment_id: row.equipment_id || '(empty)', error: err.message });
+            }
+        }
+        return results;
+    },
 };
 
 // Movements

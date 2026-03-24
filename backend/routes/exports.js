@@ -531,4 +531,152 @@ router.get('/customer-equipment', async (req, res) => {
   }
 });
 
+// Download equipment import template
+router.get('/equipment-template', async (req, res) => {
+  try {
+    // Fetch categories, subcategories, and locations for reference sheet
+    const [catResult, subResult, locResult] = await Promise.all([
+      pool.query('SELECT id, name, is_consumable FROM categories ORDER BY name'),
+      pool.query('SELECT s.id, s.name, s.category_id, c.name as category_name FROM subcategories s JOIN categories c ON s.category_id = c.id ORDER BY c.name, s.name'),
+      pool.query("SELECT id, name FROM locations WHERE is_active = true ORDER BY name"),
+    ]);
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Equipment Store';
+    workbook.created = new Date();
+
+    // ---- Main data entry sheet ----
+    const ws = workbook.addWorksheet('Equipment Import');
+
+    ws.columns = [
+      { header: 'Equipment ID *', key: 'equipment_id', width: 18 },
+      { header: 'Equipment Name *', key: 'equipment_name', width: 30 },
+      { header: 'Category *', key: 'category', width: 25 },
+      { header: 'Subcategory *', key: 'subcategory', width: 25 },
+      { header: 'Manufacturer', key: 'manufacturer', width: 20 },
+      { header: 'Model', key: 'model', width: 20 },
+      { header: 'Serial Number', key: 'serial_number', width: 20 },
+      { header: 'Location *', key: 'location', width: 25 },
+      { header: 'Description', key: 'description', width: 35 },
+      { header: 'Notes', key: 'notes', width: 35 },
+    ];
+
+    // Style header row
+    const headerRow = ws.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1976D2' } };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+    headerRow.height = 24;
+
+    // Add 2 example rows
+    ws.addRow({
+      equipment_id: 'EQ-EXAMPLE-001',
+      equipment_name: 'SKF CMXA 80 Analyzer',
+      category: catResult.rows[0]?.name || 'Vibration Analysis',
+      subcategory: subResult.rows[0]?.name || 'Analyzers',
+      manufacturer: 'SKF',
+      model: 'CMXA 80',
+      serial_number: 'SN-12345',
+      location: locResult.rows[0]?.name || 'WearCheck - Springs',
+      description: 'Portable vibration analyzer',
+      notes: '',
+    });
+    ws.addRow({
+      equipment_id: 'EQ-EXAMPLE-002',
+      equipment_name: 'Fluke Ti480 Thermal Camera',
+      category: catResult.rows.find(c => !c.is_consumable)?.name || 'Thermal Camera',
+      subcategory: 'Handheld Cameras',
+      manufacturer: 'Fluke',
+      model: 'Ti480',
+      serial_number: 'SN-67890',
+      location: locResult.rows[0]?.name || 'WearCheck - Springs',
+      description: 'Infrared thermal imaging camera',
+      notes: 'Delete these example rows before importing',
+    });
+
+    // Style example rows in italic gray
+    [2, 3].forEach(rowNum => {
+      const row = ws.getRow(rowNum);
+      row.font = { italic: true, color: { argb: 'FF999999' } };
+    });
+
+    // ---- Reference sheet: Categories & Subcategories ----
+    const refSheet = workbook.addWorksheet('Reference - Categories');
+    refSheet.columns = [
+      { header: 'Category', key: 'category', width: 30 },
+      { header: 'Subcategory', key: 'subcategory', width: 30 },
+      { header: 'Type', key: 'type', width: 15 },
+    ];
+    const refHeader = refSheet.getRow(1);
+    refHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    refHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF388E3C' } };
+
+    subResult.rows.forEach(sub => {
+      const cat = catResult.rows.find(c => c.id === sub.category_id);
+      refSheet.addRow({
+        category: sub.category_name,
+        subcategory: sub.name,
+        type: cat?.is_consumable ? 'Consumable' : 'Equipment',
+      });
+    });
+
+    // ---- Reference sheet: Locations ----
+    const locSheet = workbook.addWorksheet('Reference - Locations');
+    locSheet.columns = [
+      { header: 'Location Name', key: 'name', width: 35 },
+    ];
+    const locHeader = locSheet.getRow(1);
+    locHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    locHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF388E3C' } };
+
+    locResult.rows.forEach(loc => {
+      locSheet.addRow({ name: loc.name });
+    });
+
+    // ---- Instructions sheet ----
+    const instrSheet = workbook.addWorksheet('Instructions');
+    instrSheet.getColumn(1).width = 80;
+    const instructions = [
+      'EQUIPMENT IMPORT TEMPLATE - INSTRUCTIONS',
+      '',
+      '1. Fill in your equipment data on the "Equipment Import" sheet.',
+      '2. Fields marked with * are required.',
+      '3. Category and Subcategory must exactly match values in the "Reference - Categories" sheet.',
+      '4. Location must exactly match a value in the "Reference - Locations" sheet.',
+      '5. Equipment ID must be unique - duplicates will be skipped.',
+      '6. Serial Number should be unique if provided.',
+      '7. Delete the example rows (gray italic) before importing.',
+      '8. Save the file and use the Import button on the Equipment List page.',
+      '',
+      'COLUMN DETAILS:',
+      '  Equipment ID * — Unique identifier (e.g., EQ-VA-001, EQP-TC-042)',
+      '  Equipment Name * — Display name of the equipment',
+      '  Category * — Must match a category from Reference sheet',
+      '  Subcategory * — Must match a subcategory under the chosen category',
+      '  Manufacturer — Equipment manufacturer (e.g., SKF, Fluke)',
+      '  Model — Equipment model number',
+      '  Serial Number — Device serial number (must be unique if provided)',
+      '  Location * — Storage location, must match Reference sheet',
+      '  Description — Optional description',
+      '  Notes — Optional notes',
+    ];
+    instructions.forEach((text, i) => {
+      const row = instrSheet.getRow(i + 1);
+      row.getCell(1).value = text;
+      if (i === 0) {
+        row.font = { bold: true, size: 14 };
+      }
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=equipment_import_template.xlsx');
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error('Error generating template:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import { equipmentApi, categoriesApi, calibrationApi } from '../services/api';
 import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
 import { Icons } from '../components/Icons';
@@ -18,6 +19,11 @@ function Equipment() {
     calibration_status: '',
   });
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importData, setImportData] = useState(null);
+  const [importResults, setImportResults] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     fetchCategories();
@@ -113,6 +119,81 @@ function Equipment() {
     return <span className="badge" style={{ background: 'var(--success-color)' }}>Calibrated</span>;
   };
 
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const wb = XLSX.read(evt.target.result, { type: 'array' });
+        const wsName = wb.SheetNames.find(n => n.toLowerCase().includes('import')) || wb.SheetNames[0];
+        const ws = wb.Sheets[wsName];
+        const jsonData = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        // Normalize header keys to snake_case
+        const normalized = jsonData.map(row => {
+          const out = {};
+          Object.entries(row).forEach(([key, val]) => {
+            const k = key.replace(/\s*\*\s*/g, '').trim().toLowerCase().replace(/\s+/g, '_');
+            out[k] = typeof val === 'string' ? val.trim() : val;
+          });
+          return out;
+        }).filter(row => row.equipment_id && !row.equipment_id.toString().includes('EXAMPLE'));
+
+        setImportData(normalized);
+        setImportResults(null);
+        setShowImportModal(true);
+      } catch (err) {
+        setError('Failed to read file: ' + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    // Reset input so the same file can be selected again
+    e.target.value = '';
+  };
+
+  const handleImport = async () => {
+    if (!importData || importData.length === 0) return;
+    setImporting(true);
+    try {
+      const results = await equipmentApi.bulkImport(importData);
+      setImportResults(results);
+      if (results.success.length > 0) {
+        fetchEquipment();
+      }
+    } catch (err) {
+      setError('Import failed: ' + err.message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleDownloadTemplate = () => {
+    // Use backend API for template if available, else fallback
+    const backendUrl = process.env.REACT_APP_API_URL || '';
+    if (backendUrl) {
+      window.open(`${backendUrl}/api/exports/equipment-template`, '_blank');
+    } else {
+      // Client-side template generation fallback
+      const headers = ['Equipment ID *', 'Equipment Name *', 'Category *', 'Subcategory *', 'Manufacturer', 'Model', 'Serial Number', 'Location *', 'Description', 'Notes'];
+      const example1 = ['EQ-EXAMPLE-001', 'SKF CMXA 80 Analyzer', 'Vibration Analysis', 'Analyzers', 'SKF', 'CMXA 80', 'SN-12345', 'WearCheck - Springs', 'Portable vibration analyzer', ''];
+      const example2 = ['EQ-EXAMPLE-002', 'Fluke Ti480 Thermal Camera', 'Thermal Camera', 'Handheld Cameras', 'Fluke', 'Ti480', 'SN-67890', 'WearCheck - Springs', 'Infrared thermal imaging camera', 'Delete example rows before importing'];
+      const ws = XLSX.utils.aoa_to_sheet([headers, example1, example2]);
+      ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 2, 20) }));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Equipment Import');
+      const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+      const blob = new Blob([buf], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'equipment_import_template.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  };
+
   return (
     <div>
       <div className="page-header">
@@ -130,6 +211,16 @@ function Equipment() {
           <button className="btn btn-secondary" onClick={() => exportData('pdf', equipment, EXPORT_COLUMNS.equipment, 'equipment', 'Equipment List')} disabled={equipment.length === 0}>
             <Icons.Download size={16} /> PDF
           </button>
+          <button className="btn btn-secondary" onClick={() => fileInputRef.current?.click()}>
+            <Icons.Upload size={16} /> Import
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleFileSelect}
+            style={{ display: 'none' }}
+          />
           <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
             + Add Equipment
           </button>
@@ -298,6 +389,125 @@ function Equipment() {
             fetchEquipment();
           }}
         />
+      )}
+
+      {/* Import Equipment Modal */}
+      {showImportModal && (
+        <div className="modal-overlay" onClick={() => { setShowImportModal(false); setImportData(null); setImportResults(null); }}>
+          <div className="modal modal-large" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Import Equipment</h2>
+              <button className="modal-close" onClick={() => { setShowImportModal(false); setImportData(null); setImportResults(null); }}>×</button>
+            </div>
+            <div className="modal-body" style={{ maxHeight: '60vh', overflow: 'auto' }}>
+              {!importResults ? (
+                <>
+                  <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <p style={{ margin: 0 }}>
+                      <strong>{importData?.length || 0}</strong> equipment items found in file.
+                      Review the preview below, then click Import.
+                    </p>
+                    <button className="btn btn-sm btn-secondary" onClick={handleDownloadTemplate}>
+                      <Icons.Download size={14} /> Download Template
+                    </button>
+                  </div>
+                  {importData && importData.length > 0 ? (
+                    <div className="table-container">
+                      <table className="equipment-table">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>Equipment ID</th>
+                            <th>Name</th>
+                            <th>Category</th>
+                            <th>Subcategory</th>
+                            <th>Manufacturer</th>
+                            <th>Serial Number</th>
+                            <th>Location</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importData.map((row, i) => (
+                            <tr key={i}>
+                              <td>{i + 1}</td>
+                              <td>{row.equipment_id}</td>
+                              <td>{row.equipment_name}</td>
+                              <td>{row.category}</td>
+                              <td>{row.subcategory}</td>
+                              <td>{row.manufacturer || '-'}</td>
+                              <td>{row.serial_number || '-'}</td>
+                              <td>{row.location}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="alert alert-warning">
+                      No valid rows found. Make sure the file follows the template format and example rows are removed.
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div>
+                  <h3 style={{ marginBottom: '12px' }}>Import Results</h3>
+                  {importResults.success.length > 0 && (
+                    <div className="alert alert-success" style={{ marginBottom: '12px' }}>
+                      <strong>{importResults.success.length}</strong> equipment items imported successfully.
+                    </div>
+                  )}
+                  {importResults.errors.length > 0 && (
+                    <div>
+                      <div className="alert alert-error" style={{ marginBottom: '8px' }}>
+                        <strong>{importResults.errors.length}</strong> items failed to import:
+                      </div>
+                      <div className="table-container" style={{ maxHeight: '300px', overflow: 'auto' }}>
+                        <table className="equipment-table">
+                          <thead>
+                            <tr>
+                              <th>Row</th>
+                              <th>Equipment ID</th>
+                              <th>Error</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {importResults.errors.map((err, i) => (
+                              <tr key={i}>
+                                <td>{err.row}</td>
+                                <td>{err.equipment_id}</td>
+                                <td style={{ color: 'var(--error-color)' }}>{err.error}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              {!importResults ? (
+                <>
+                  <button className="btn btn-secondary" onClick={() => { setShowImportModal(false); setImportData(null); }}>
+                    Cancel
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleImport}
+                    disabled={importing || !importData || importData.length === 0}
+                  >
+                    {importing ? 'Importing...' : `Import ${importData?.length || 0} Items`}
+                  </button>
+                </>
+              ) : (
+                <button className="btn btn-primary" onClick={() => { setShowImportModal(false); setImportData(null); setImportResults(null); }}>
+                  Close
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
