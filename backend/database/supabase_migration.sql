@@ -325,6 +325,7 @@ BEGIN
                 EXTRACT(DAY FROM (CURRENT_TIMESTAMP - e.last_action_timestamp))::INTEGER AS days_out,
                 latest_mov.expected_checkout_date,
                 latest_mov.expected_return_date,
+                latest_mov.notes AS checkout_notes,
                 CASE 
                     WHEN latest_mov.expected_return_date IS NOT NULL AND CURRENT_DATE > latest_mov.expected_return_date THEN TRUE
                     WHEN latest_mov.expected_return_date IS NULL AND e.last_action_timestamp < (CURRENT_TIMESTAMP - (p_overdue_days || ' days')::INTERVAL) THEN TRUE 
@@ -343,7 +344,7 @@ BEGIN
             LEFT JOIN locations l ON e.current_location_id = l.id
             LEFT JOIN personnel p ON e.current_holder_id = p.id
             LEFT JOIN LATERAL (
-                SELECT em.expected_checkout_date, em.expected_return_date
+                SELECT em.expected_checkout_date, em.expected_return_date, em.notes
                 FROM equipment_movements em
                 WHERE em.equipment_id = e.id AND em.action = 'OUT'
                 ORDER BY em.created_at DESC LIMIT 1

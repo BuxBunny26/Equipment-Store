@@ -144,6 +144,29 @@ function CheckIn() {
     setPhotoPreview(null);
   };
 
+  // Condition ranking for deterioration detection
+  const CONDITION_RANK = { 'Excellent': 1, 'Good': 2, 'Fair': 3, 'Poor': 4, 'Damaged': 5 };
+
+  const getCheckoutCondition = (equipment) => {
+    if (!equipment?.checkout_notes) return null;
+    const match = equipment.checkout_notes.match(/Condition:\s*(Excellent|Good|Fair|Poor|Damaged)/i);
+    return match ? match[1] : null;
+  };
+
+  const checkoutCondition = selectedEquipment ? getCheckoutCondition(selectedEquipment) : null;
+
+  const hasConditionWorsened = () => {
+    if (!formData.condition || !checkoutCondition) return false;
+    return (CONDITION_RANK[formData.condition] || 0) > (CONDITION_RANK[checkoutCondition] || 0);
+  };
+
+  const isReasonRequired = () => {
+    // Reason required if condition worsened from checkout, OR if condition is Fair/Poor/Damaged regardless
+    if (hasConditionWorsened()) return true;
+    if (formData.condition && !['Excellent', 'Good'].includes(formData.condition)) return true;
+    return false;
+  };
+
   // Get unique categories from checked out equipment
   const categories = [...new Set((Array.isArray(checkedOutEquipment) ? checkedOutEquipment : []).map(eq => eq.category).filter(Boolean))].sort();
 
@@ -399,9 +422,19 @@ function CheckIn() {
                 <option value="Poor">Poor</option>
                 <option value="Damaged">Damaged</option>
               </select>
+              {checkoutCondition && (
+                <span className="form-help" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  Checked out as: <strong>{checkoutCondition}</strong>
+                </span>
+              )}
+              {hasConditionWorsened() && (
+                <div style={{ marginTop: '6px', padding: '8px 12px', background: 'rgba(255, 107, 107, 0.1)', border: '1px solid var(--error-color)', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem', color: 'var(--error-color)' }}>
+                  <Icons.Warning size={14} /> Condition has deteriorated from <strong>{checkoutCondition}</strong> to <strong>{formData.condition}</strong>. A reason is required.
+                </div>
+              )}
             </div>
 
-            {formData.condition && formData.condition !== 'Excellent' && formData.condition !== 'Good' && (
+            {isReasonRequired() && (
               <div className="form-group">
                 <label className="form-label">Reason *</label>
                 <input
@@ -488,7 +521,7 @@ function CheckIn() {
               <button
                 type="submit"
                 className="btn btn-success btn-lg"
-                disabled={!formData.equipment_id || !formData.location_id || submitting || (formData.condition && !['Excellent', 'Good'].includes(formData.condition) && !formData.reason)}
+                disabled={!formData.equipment_id || !formData.location_id || submitting || (isReasonRequired() && !formData.reason)}
               >
                 {submitting ? 'Processing...' : 'Check In Equipment'}
               </button>
