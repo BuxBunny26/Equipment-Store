@@ -1638,12 +1638,38 @@ input[type="search"]::-webkit-search-results-decoration {
   }
   
   /* Modal full width */
+  .modal-overlay {
+    padding: 8px;
+  }
+
   .modal-content,
   .modal {
-    width: 95%;
+    width: 100% !important;
     max-width: none !important;
-    margin: 16px;
-    max-height: calc(100vh - 32px);
+    margin: 0;
+    max-height: calc(100vh - 16px);
+    box-sizing: border-box;
+  }
+
+  .modal-header {
+    padding: 16px;
+  }
+
+  .modal-body {
+    padding: 16px;
+  }
+
+  .modal-footer {
+    padding: 12px 16px;
+    flex-wrap: wrap;
+  }
+
+  .modal-footer .btn {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   
   /* Form grid single column */
