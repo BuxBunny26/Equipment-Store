@@ -144,29 +144,6 @@ function CheckIn() {
     setPhotoPreview(null);
   };
 
-  // Condition ranking for deterioration detection
-  const CONDITION_RANK = { 'Excellent': 1, 'Good': 2, 'Fair': 3, 'Poor': 4, 'Damaged': 5 };
-
-  const getCheckoutCondition = (equipment) => {
-    if (!equipment?.checkout_notes) return null;
-    const match = equipment.checkout_notes.match(/Condition:\s*(Excellent|Good|Fair|Poor|Damaged)/i);
-    return match ? match[1] : null;
-  };
-
-  const checkoutCondition = selectedEquipment ? getCheckoutCondition(selectedEquipment) : null;
-
-  const hasConditionWorsened = () => {
-    if (!formData.condition || !checkoutCondition) return false;
-    return (CONDITION_RANK[formData.condition] || 0) > (CONDITION_RANK[checkoutCondition] || 0);
-  };
-
-  const isReasonRequired = () => {
-    // Reason required if condition worsened from checkout, OR if condition is Fair/Poor/Damaged regardless
-    if (hasConditionWorsened()) return true;
-    if (formData.condition && !['Excellent', 'Good'].includes(formData.condition)) return true;
-    return false;
-  };
-
   // Get unique categories from checked out equipment
   const categories = [...new Set((Array.isArray(checkedOutEquipment) ? checkedOutEquipment : []).map(eq => eq.category).filter(Boolean))].sort();
 
@@ -186,6 +163,28 @@ function CheckIn() {
   const selectedEquipment = Array.isArray(checkedOutEquipment) ? checkedOutEquipment.find(
     (eq) => eq.id === parseInt(formData.equipment_id)
   ) : null;
+
+  // Condition ranking for deterioration detection
+  const CONDITION_RANK = { 'Excellent': 1, 'Good': 2, 'Fair': 3, 'Poor': 4, 'Damaged': 5 };
+
+  const getCheckoutCondition = (equipment) => {
+    if (!equipment?.checkout_notes) return null;
+    const match = equipment.checkout_notes.match(/Condition:\s*(Excellent|Good|Fair|Poor|Damaged)/i);
+    return match ? match[1] : null;
+  };
+
+  const checkoutCondition = selectedEquipment ? getCheckoutCondition(selectedEquipment) : null;
+
+  const hasConditionWorsened = () => {
+    if (!formData.condition || !checkoutCondition) return false;
+    return (CONDITION_RANK[formData.condition] || 0) > (CONDITION_RANK[checkoutCondition] || 0);
+  };
+
+  const isReasonRequired = () => {
+    if (hasConditionWorsened()) return true;
+    if (formData.condition && !['Excellent', 'Good'].includes(formData.condition)) return true;
+    return false;
+  };
 
   const formatDate = (dateString) => {
     if (!dateString) return '-';
