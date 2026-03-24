@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { equipmentApi, categoriesApi, calibrationApi } from '../services/api';
 import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
+import ExportMenu from '../components/ExportMenu';
 import { Icons } from '../components/Icons';
 import AddEquipmentModal from '../components/AddEquipmentModal';
 
@@ -188,15 +189,10 @@ function Equipment() {
           <p className="page-subtitle">Manage equipment inventory</p>
         </div>
         <div className="btn-group-wrap">
-          <button className="btn btn-secondary" onClick={() => exportData('csv', equipment, EXPORT_COLUMNS.equipment, 'equipment', 'Equipment List')} disabled={equipment.length === 0}>
-            <Icons.Download size={16} /> CSV
-          </button>
-          <button className="btn btn-secondary" onClick={() => exportData('excel', equipment, EXPORT_COLUMNS.equipment, 'equipment', 'Equipment List')} disabled={equipment.length === 0}>
-            <Icons.Download size={16} /> Excel
-          </button>
-          <button className="btn btn-secondary" onClick={() => exportData('pdf', equipment, EXPORT_COLUMNS.equipment, 'equipment', 'Equipment List')} disabled={equipment.length === 0}>
-            <Icons.Download size={16} /> PDF
-          </button>
+          <ExportMenu
+            onExport={(fmt) => exportData(fmt, equipment, EXPORT_COLUMNS.equipment, 'equipment', 'Equipment List')}
+            disabled={equipment.length === 0}
+          />
           <button className="btn btn-secondary" onClick={() => { setShowImportModal(true); setImportData(null); setImportResults(null); }}>
             <Icons.Upload size={16} /> Import
           </button>

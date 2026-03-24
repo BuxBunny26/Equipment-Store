@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { calibrationApi, categoriesApi } from '../services/api';
 import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
+import ExportMenu from '../components/ExportMenu';
 import { Icons } from '../components/Icons';
 
 function Calibration() {
@@ -283,30 +284,9 @@ function Calibration() {
               </select>
             </div>
 
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => exportData('csv', equipment, EXPORT_COLUMNS.calibration, 'calibration', 'Calibration Records')}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px' }}
-            >
-              <Icons.Download size={16} /> CSV
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => exportData('excel', equipment, EXPORT_COLUMNS.calibration, 'calibration', 'Calibration Records')}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px' }}
-            >
-              <Icons.Download size={16} /> Excel
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => exportData('pdf', equipment, EXPORT_COLUMNS.calibration, 'calibration', 'Calibration Records')}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px' }}
-            >
-              <Icons.Download size={16} /> PDF
-            </button>
+            <ExportMenu
+              onExport={(fmt) => exportData(fmt, equipment, EXPORT_COLUMNS.calibration, 'calibration', 'Calibration Records')}
+            />
           </div>
         </form>
       </div>

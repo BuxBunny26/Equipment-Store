@@ -5,6 +5,7 @@ import { useOperator } from '../context/OperatorContext';
 import { Icons } from '../components/Icons';
 import { getAssetConfig } from './Settings';
 import { exportData } from '../services/exportUtils';
+import ExportMenu from '../components/ExportMenu';
 
 const VEHICLE_STATUSES = [
   { value: 'Active', label: 'Active', badge: 'badge-available' },
@@ -507,18 +508,7 @@ function Vehicles() {
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           {activeTab === 'fleet' && (
             <>
-              <button className="btn btn-secondary" onClick={() => handleExport('csv')} title="Export CSV">
-                <Icons.Download size={14} /> CSV
-              </button>
-              <button className="btn btn-secondary" onClick={() => handleExport('excel')} title="Export Excel">
-                <Icons.Download size={14} /> Excel
-              </button>
-              <button className="btn btn-secondary" onClick={() => handleExport('pdf')} title="Export PDF">
-                <Icons.Download size={14} /> PDF
-              </button>
-              <button className="btn btn-secondary" onClick={handlePrint} title="Print">
-                <Icons.Printer size={14} /> Print
-              </button>
+              <ExportMenu onExport={handleExport} onPrint={handlePrint} />
               {isAdminOrManager && (
                 <button className="btn btn-secondary" onClick={() => setShowImportModal(true)} title="Bulk Import">
                   <Icons.Upload size={14} /> Import
@@ -532,34 +522,13 @@ function Vehicles() {
             </>
           )}
           {activeTab === 'checkouts' && (
-            <>
-              <button className="btn btn-secondary" onClick={() => handleExportCheckouts('csv')} title="Export CSV">
-                <Icons.Download size={14} /> CSV
-              </button>
-              <button className="btn btn-secondary" onClick={() => handleExportCheckouts('excel')} title="Export Excel">
-                <Icons.Download size={14} /> Excel
-              </button>
-            </>
+            <ExportMenu onExport={handleExportCheckouts} formats={['csv', 'excel']} />
           )}
           {activeTab === 'fines' && (
-            <>
-              <button className="btn btn-secondary" onClick={() => handleExportFines('csv')} title="Export CSV">
-                <Icons.Download size={14} /> CSV
-              </button>
-              <button className="btn btn-secondary" onClick={() => handleExportFines('excel')} title="Export Excel">
-                <Icons.Download size={14} /> Excel
-              </button>
-            </>
+            <ExportMenu onExport={handleExportFines} formats={['csv', 'excel']} />
           )}
           {activeTab === 'services' && (
-            <>
-              <button className="btn btn-secondary" onClick={() => handleExportServices('csv')} title="Export CSV">
-                <Icons.Download size={14} /> CSV
-              </button>
-              <button className="btn btn-secondary" onClick={() => handleExportServices('excel')} title="Export Excel">
-                <Icons.Download size={14} /> Excel
-              </button>
-            </>
+            <ExportMenu onExport={handleExportServices} formats={['csv', 'excel']} />
           )}
           {isAdminOrManager && activeTab === 'fleet' && (
             <button className="btn btn-primary" onClick={() => { setEditVehicle(null); setShowVehicleModal(true); }}>

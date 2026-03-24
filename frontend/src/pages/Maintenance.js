@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { maintenanceApi, equipmentApi } from '../services/api';
 import { Icons } from '../components/Icons';
 import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
+import ExportMenu from '../components/ExportMenu';
 
 function Maintenance() {
   const [loading, setLoading] = useState(true);
@@ -219,15 +220,10 @@ function Maintenance() {
           <p className="subtitle">Track repairs, servicing, and maintenance history</p>
         </div>
         <div className="btn-group-wrap">
-          <button className="btn btn-secondary" onClick={() => exportData('csv', records, EXPORT_COLUMNS.maintenance, 'maintenance', 'Maintenance Records')} disabled={records.length === 0}>
-            <Icons.Download size={16} /> CSV
-          </button>
-          <button className="btn btn-secondary" onClick={() => exportData('excel', records, EXPORT_COLUMNS.maintenance, 'maintenance', 'Maintenance Records')} disabled={records.length === 0}>
-            <Icons.Download size={16} /> Excel
-          </button>
-          <button className="btn btn-secondary" onClick={() => exportData('pdf', records, EXPORT_COLUMNS.maintenance, 'maintenance', 'Maintenance Records')} disabled={records.length === 0}>
-            <Icons.Download size={16} /> PDF
-          </button>
+          <ExportMenu
+            onExport={(fmt) => exportData(fmt, records, EXPORT_COLUMNS.maintenance, 'maintenance', 'Maintenance Records')}
+            disabled={records.length === 0}
+          />
           <button className="btn btn-primary" onClick={() => handleOpenModal()}>
             + Add Maintenance Record
           </button>

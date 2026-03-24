@@ -6,6 +6,7 @@ import { Icons } from '../components/Icons';
 import { buildDivisionLookup, lookupDivision } from '../utils/divisionUtils';
 import { getAssetConfig } from './Settings';
 import { exportData } from '../services/exportUtils';
+import ExportMenu from '../components/ExportMenu';
 
 function CellphoneAssignments() {
   const { operatorRole } = useOperator();
@@ -440,18 +441,7 @@ function CellphoneAssignments() {
           <p className="page-subtitle">Track company cellphones assigned to employees</p>
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button className="btn btn-secondary" onClick={() => handleExport('csv')} title="Export CSV">
-            <Icons.Download size={14} /> CSV
-          </button>
-          <button className="btn btn-secondary" onClick={() => handleExport('excel')} title="Export Excel">
-            <Icons.Download size={14} /> Excel
-          </button>
-          <button className="btn btn-secondary" onClick={() => handleExport('pdf')} title="Export PDF">
-            <Icons.Download size={14} /> PDF
-          </button>
-          <button className="btn btn-secondary" onClick={handlePrint} title="Print">
-            <Icons.Printer size={14} /> Print
-          </button>
+          <ExportMenu onExport={handleExport} onPrint={handlePrint} />
           {isAdminOrManager && (
             <button className="btn btn-secondary" onClick={() => setShowImportModal(true)} title="Bulk Import">
               <Icons.Upload size={14} /> Import

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { reportsApi, personnelApi, vehicleFinesApi, vehicleServicesApi } from '../services/api';
 import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
+import ExportMenu from '../components/ExportMenu';
 import { Icons } from '../components/Icons';
 import { buildDivisionLookup, lookupDivision } from '../utils/divisionUtils';
 
@@ -174,27 +175,14 @@ function Reports() {
           <button className="btn btn-secondary" onClick={fetchData}>
             Refresh
           </button>
-          <button className="btn btn-secondary" onClick={() => {
-            const colMap = { overdue: 'overdue', 'checked-out': 'checkedOut', available: 'available', 'low-stock': 'lowStock', 'by-category': 'byCategory', 'by-location': 'byLocation', vehicles: 'vehicleReport', cellphones: 'cellphoneReport', laptops: 'laptopReport', 'calibration-due': 'calibrationDue' };
-            const cols = EXPORT_COLUMNS[colMap[activeTab]];
-            if (cols && data.length > 0) exportData('csv', data, cols, `report_${activeTab}`, `Report: ${activeTab}`);
-          }} disabled={data.length === 0 || activeTab === 'usage'}>
-            CSV
-          </button>
-          <button className="btn btn-secondary" onClick={() => {
-            const colMap = { overdue: 'overdue', 'checked-out': 'checkedOut', available: 'available', 'low-stock': 'lowStock', 'by-category': 'byCategory', 'by-location': 'byLocation', vehicles: 'vehicleReport', cellphones: 'cellphoneReport', laptops: 'laptopReport', 'calibration-due': 'calibrationDue' };
-            const cols = EXPORT_COLUMNS[colMap[activeTab]];
-            if (cols && data.length > 0) exportData('excel', data, cols, `report_${activeTab}`, `Report: ${activeTab}`);
-          }} disabled={data.length === 0 || activeTab === 'usage'}>
-            Excel
-          </button>
-          <button className="btn btn-secondary" onClick={() => {
-            const colMap = { overdue: 'overdue', 'checked-out': 'checkedOut', available: 'available', 'low-stock': 'lowStock', 'by-category': 'byCategory', 'by-location': 'byLocation', vehicles: 'vehicleReport', cellphones: 'cellphoneReport', laptops: 'laptopReport', 'calibration-due': 'calibrationDue' };
-            const cols = EXPORT_COLUMNS[colMap[activeTab]];
-            if (cols && data.length > 0) exportData('pdf', data, cols, `report_${activeTab}`, `Report: ${activeTab}`);
-          }} disabled={data.length === 0 || activeTab === 'usage'}>
-            PDF
-          </button>
+          <ExportMenu
+            onExport={(fmt) => {
+              const colMap = { overdue: 'overdue', 'checked-out': 'checkedOut', available: 'available', 'low-stock': 'lowStock', 'by-category': 'byCategory', 'by-location': 'byLocation', vehicles: 'vehicleReport', cellphones: 'cellphoneReport', laptops: 'laptopReport', 'calibration-due': 'calibrationDue' };
+              const cols = EXPORT_COLUMNS[colMap[activeTab]];
+              if (cols && data.length > 0) exportData(fmt, data, cols, `report_${activeTab}`, `Report: ${activeTab}`);
+            }}
+            disabled={data.length === 0 || activeTab === 'usage'}
+          />
         </div>
       </div>
 

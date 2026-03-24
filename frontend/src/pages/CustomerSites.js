@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { customersApi } from '../services/api';
 import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
+import ExportMenu from '../components/ExportMenu';
 import { Icons } from '../components/Icons';
 
 function CustomerSites() {
@@ -105,15 +106,7 @@ function CustomerSites() {
           <p className="subtitle">Track equipment deployed at customer locations</p>
         </div>
         <div className="btn-group-wrap">
-          <button className="btn btn-secondary" onClick={() => handleExport(null, 'csv')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Icons.Download size={16} /> CSV
-          </button>
-          <button className="btn btn-secondary" onClick={() => handleExport(null, 'excel')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Icons.Download size={16} /> Excel
-          </button>
-          <button className="btn btn-secondary" onClick={() => handleExport(null, 'pdf')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Icons.Download size={16} /> PDF
-          </button>
+          <ExportMenu onExport={(fmt) => handleExport(null, fmt)} />
         </div>
       </div>
 
