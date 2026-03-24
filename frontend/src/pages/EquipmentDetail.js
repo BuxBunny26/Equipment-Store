@@ -73,6 +73,7 @@ function EquipmentDetail() {
   const getCalibrationStatusBadge = (expiryDate) => {
     if (!expiryDate) return <span className="badge" style={{ background: 'var(--text-secondary)' }}>Not Calibrated</span>;
     const expiry = new Date(expiryDate);
+    if (isNaN(expiry.getTime())) return <span className="badge" style={{ background: 'var(--text-secondary)' }}>Not Calibrated</span>;
     const today = new Date();
     const daysUntilExpiry = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
     

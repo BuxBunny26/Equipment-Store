@@ -177,7 +177,7 @@ function Dashboard() {
     );
   }
 
-  const { summary, recent_movements } = data;
+  const { summary = {}, recent_movements = [] } = data || {};
 
   return (
     <div>

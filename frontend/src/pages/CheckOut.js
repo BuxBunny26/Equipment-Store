@@ -207,7 +207,7 @@ function CheckOut() {
           const payload = {
             equipment_id: equipment.id,
             action: 'OUT',
-            quantity: 1,
+            quantity: equipment.is_quantity_tracked ? (parseInt(formData.quantity) || 1) : 1,
             location_id: formData.destination_type === 'internal' ? parseInt(formData.location_id) : null,
             customer_id: formData.destination_type === 'customer' ? parseInt(formData.customer_id)
               : formData.destination_type === 'transfer' ? parseInt(formData.to_site_id)

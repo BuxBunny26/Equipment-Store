@@ -66,10 +66,10 @@ function Consumables() {
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       return (
-        item.equipment_name?.toLowerCase().includes(term) ||
-        item.equipment_id?.toLowerCase().includes(term) ||
-        item.category?.toLowerCase().includes(term) ||
-        item.subcategory?.toLowerCase().includes(term)
+        (item.equipment_name || '').toLowerCase().includes(term) ||
+        (item.equipment_id || '').toLowerCase().includes(term) ||
+        (item.category || '').toLowerCase().includes(term) ||
+        (item.subcategory || '').toLowerCase().includes(term)
       );
     }
     return true;

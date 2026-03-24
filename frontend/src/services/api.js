@@ -1036,7 +1036,7 @@ export const laptopAssignmentsApi = {
     searchBySerial: (serial) => wrap(
         supabase.from('laptop_assignments')
             .select('*')
-            .ilike('serial_number', `%${serial}%`)
+            .ilike('serial_number', `%${escapeSearch(serial)}%`)
             .order('created_at', { ascending: false })
     ),
     create: (data) => wrap(
@@ -1130,7 +1130,7 @@ export const cellphoneAssignmentsApi = {
     searchBySerial: (serial) => wrap(
         supabase.from('cellphone_assignments')
             .select('*')
-            .ilike('serial_number', `%${serial}%`)
+            .ilike('serial_number', `%${escapeSearch(serial)}%`)
             .order('created_at', { ascending: false })
     ),
     create: (data) => wrap(
