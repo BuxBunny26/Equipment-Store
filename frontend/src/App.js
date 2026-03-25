@@ -246,15 +246,14 @@ function AppContent() {
         </div>
         
         <nav className="sidebar-nav">
-          <div className="nav-section">
-            <div className="nav-section-title">Overview</div>
-            <NavLink to="/" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-              <Icons.Dashboard /> Dashboard
-            </NavLink>
-          </div>
-        
         <div className="nav-section">
           <div className="nav-section-title">Equipment</div>
+          <NavLink to="/" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.Dashboard /> Dashboard
+          </NavLink>
+          <NavLink to="/equipment-analytics" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.Reports /> Analytics
+          </NavLink>
           <NavLink to="/equipment" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <Icons.Equipment /> Equipment List
           </NavLink>
@@ -266,9 +265,6 @@ function AppContent() {
           </NavLink>
           <NavLink to="/reservations" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <Icons.Calendar /> Reservations
-          </NavLink>
-          <NavLink to="/equipment-analytics" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-            <Icons.Reports /> Analytics
           </NavLink>
         </div>
         
@@ -301,7 +297,10 @@ function AppContent() {
         <div className="nav-section">
           <div className="nav-section-title">Assets</div>
           <NavLink to="/assets" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-            <Icons.Dashboard /> Overview
+            <Icons.Dashboard /> Dashboard
+          </NavLink>
+          <NavLink to="/asset-analytics" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.Reports /> Analytics
           </NavLink>
           <NavLink to="/laptop-assignments" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <Icons.Laptop /> Laptops
@@ -314,9 +313,6 @@ function AppContent() {
           </NavLink>
           <NavLink to="/vehicle-checkout" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <Icons.CheckOut /> Pre-Trip Form
-          </NavLink>
-          <NavLink to="/asset-analytics" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-            <Icons.Reports /> Analytics
           </NavLink>
         </div>
         
