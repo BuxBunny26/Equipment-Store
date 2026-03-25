@@ -110,15 +110,16 @@ function AssetAnalytics() {
 
     const laptopDeviceCost = laptops.reduce((s, l) => s + (parseFloat(l.device_cost) || 0), 0);
     const phoneDeviceCost = cellphones.reduce((s, c) => s + (parseFloat(c.device_cost) || 0), 0);
-    const laptopMonthlyCost = laptops.filter(l => l.laptop_status === 'Active').reduce((s, l) => s + (parseFloat(l.monthly_cost) || 0), 0);
+    const laptopYearlyCost = laptops.filter(l => l.laptop_status === 'Active').reduce((s, l) => s + (parseFloat(l.monthly_cost) || 0), 0);
     const phoneMonthlyCost = cellphones.filter(c => c.phone_status === 'Active').reduce((s, c) => s + (parseFloat(c.monthly_cost) || 0), 0);
     const totalDeviceCost = laptopDeviceCost + phoneDeviceCost;
-    const totalMonthlyCost = laptopMonthlyCost + phoneMonthlyCost;
+    const totalMonthlyCost = phoneMonthlyCost;
+    const totalAnnualRecurring = laptopYearlyCost + (phoneMonthlyCost * 12);
 
     const unpaidFines = fines.filter(f => f.status === 'Unpaid');
     const totalFines = unpaidFines.reduce((s, f) => s + (parseFloat(f.fine_amount) || 0), 0);
 
-    return { totalAssets, totalActive, laptopActive, phoneActive, vehicleActive, totalDeviceCost, totalMonthlyCost, unpaidFineCount: unpaidFines.length, totalFines, laptopDeviceCost, phoneDeviceCost, laptopMonthlyCost, phoneMonthlyCost };
+    return { totalAssets, totalActive, laptopActive, phoneActive, vehicleActive, totalDeviceCost, totalMonthlyCost, totalAnnualRecurring, unpaidFineCount: unpaidFines.length, totalFines, laptopDeviceCost, phoneDeviceCost, laptopYearlyCost, phoneMonthlyCost };
   }, [laptops, cellphones, vehicles, fines]);
 
   // Asset type distribution for pie chart
@@ -261,9 +262,9 @@ function AssetAnalytics() {
       { name: 'Cellphones', value: overviewStats.phoneDeviceCost },
     ].filter(d => d.value > 0);
 
-    const monthlyCosts = [
-      { name: 'Laptops', value: overviewStats.laptopMonthlyCost },
-      { name: 'Cellphones', value: overviewStats.phoneMonthlyCost },
+    const recurringCosts = [
+      { name: 'Laptops (yearly)', value: overviewStats.laptopYearlyCost },
+      { name: 'Cellphones (monthly)', value: overviewStats.phoneMonthlyCost * 12 },
     ].filter(d => d.value > 0);
 
     // Fines paid vs unpaid
@@ -314,7 +315,7 @@ function AssetAnalytics() {
       }).filter(Boolean),
     ].sort((a, b) => a.days - b.days);
 
-    return { deviceCosts, monthlyCosts, fineStatus, svcCost, warrantyAlerts, insuranceAlerts, contractAlerts };
+    return { deviceCosts, recurringCosts, fineStatus, svcCost, warrantyAlerts, insuranceAlerts, contractAlerts };
   }, [laptops, cellphones, fines, services, overviewStats]);
 
   // ---- Render helpers ----
@@ -371,8 +372,8 @@ function AssetAnalytics() {
         <div className="stat-card">
           <div className="stat-icon purple"><Icons.Calendar size={24} /></div>
           <div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{formatCurrency(overviewStats.totalMonthlyCost)}</div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Monthly Recurring</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{formatCurrency(overviewStats.totalAnnualRecurring)}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Annual Recurring</div>
           </div>
         </div>
       </div>
@@ -484,8 +485,8 @@ function AssetAnalytics() {
               <span style={{ fontWeight: 700, fontFamily: 'monospace' }}>{formatCurrency(overviewStats.phoneDeviceCost)}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 8 }}>
-              <span style={{ fontWeight: 500 }}>Monthly (laptops)</span>
-              <span style={{ fontWeight: 700, fontFamily: 'monospace' }}>{formatCurrency(overviewStats.laptopMonthlyCost)}/mo</span>
+              <span style={{ fontWeight: 500 }}>Yearly (laptops)</span>
+              <span style={{ fontWeight: 700, fontFamily: 'monospace' }}>{formatCurrency(overviewStats.laptopYearlyCost)}/yr</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'var(--bg-secondary)', borderRadius: 8 }}>
               <span style={{ fontWeight: 500 }}>Monthly (cellphones)</span>
@@ -892,15 +893,15 @@ function AssetAnalytics() {
         <div className="stat-card">
           <div className="stat-icon green"><Icons.Calendar size={24} /></div>
           <div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{formatCurrency(overviewStats.totalMonthlyCost)}</div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Monthly Recurring</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{formatCurrency(overviewStats.phoneMonthlyCost)}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Cellphone Monthly</div>
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-icon orange"><Icons.TrendingUp size={24} /></div>
           <div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{formatCurrency(overviewStats.totalMonthlyCost * 12)}</div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Annual Recurring</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{formatCurrency(overviewStats.totalAnnualRecurring)}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Total Annual Recurring</div>
           </div>
         </div>
         <div className="stat-card">
@@ -921,11 +922,11 @@ function AssetAnalytics() {
           </div>
         )}
 
-        {/* Monthly cost split */}
-        {costData.monthlyCosts.length > 0 && (
+        {/* Recurring cost split (annualised) */}
+        {costData.recurringCosts.length > 0 && (
           <div className="card">
-            <div className="card-header"><h3 className="card-title">Monthly Cost Split</h3></div>
-            {renderPieDonut(costData.monthlyCosts, 'Monthly', isMobile ? 240 : 280)}
+            <div className="card-header"><h3 className="card-title">Annual Recurring Split</h3></div>
+            {renderPieDonut(costData.recurringCosts, 'Annual', isMobile ? 240 : 280)}
           </div>
         )}
 
