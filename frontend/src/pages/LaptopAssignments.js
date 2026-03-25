@@ -214,10 +214,9 @@ function LaptopAssignments() {
     const map = {};
     assignments.filter(a => a.laptop_status === 'Active').forEach(a => {
       const div = getDivision(a) || 'Unassigned';
-      if (!map[div]) map[div] = { count: 0, totalDevice: 0, totalMonthly: 0 };
+      if (!map[div]) map[div] = { count: 0, totalDevice: 0 };
       map[div].count++;
       if (a.device_cost) map[div].totalDevice += Number(a.device_cost);
-      if (a.monthly_cost) map[div].totalMonthly += Number(a.monthly_cost);
     });
     return Object.entries(map).sort((a, b) => b[1].count - a[1].count);
   }, [assignments, personnel]);
@@ -290,7 +289,6 @@ function LaptopAssignments() {
       { label: 'Smartsheet', accessor: r => r.setup_smartsheet ? 'Yes' : 'No' },
       { label: 'Dist. Lists', accessor: r => r.setup_distribution_lists ? 'Yes' : 'No' },
       { label: 'Device Cost (R)', accessor: r => r.device_cost ? Number(r.device_cost).toFixed(2) : '' },
-      { label: 'Monthly Cost (R)', accessor: r => r.monthly_cost ? Number(r.monthly_cost).toFixed(2) : '' },
       { label: 'Warranty End', accessor: r => r.warranty_end_date ? new Date(r.warranty_end_date).toLocaleDateString() : '' },
       { label: 'Contract Start', accessor: r => r.contract_start_date ? new Date(r.contract_start_date).toLocaleDateString() : '' },
       { label: 'Contract End', accessor: r => r.contract_end_date ? new Date(r.contract_end_date).toLocaleDateString() : '' },
@@ -598,8 +596,6 @@ function LaptopAssignments() {
                   <th>Division</th>
                   <th style={{ textAlign: 'right' }}>Laptops</th>
                   <th style={{ textAlign: 'right' }}>Device Cost (R)</th>
-                  <th style={{ textAlign: 'right' }}>Monthly (R)</th>
-                  <th style={{ textAlign: 'right' }}>Annual (R)</th>
                 </tr>
               </thead>
               <tbody>
@@ -608,16 +604,12 @@ function LaptopAssignments() {
                     <td><strong>{div}</strong></td>
                     <td style={{ textAlign: 'right' }}>{data.count}</td>
                     <td style={{ textAlign: 'right' }}>{data.totalDevice ? `R ${data.totalDevice.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}` : '-'}</td>
-                    <td style={{ textAlign: 'right' }}>{data.totalMonthly ? `R ${data.totalMonthly.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}` : '-'}</td>
-                    <td style={{ textAlign: 'right' }}>{data.totalMonthly ? `R ${(data.totalMonthly * 12).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}` : '-'}</td>
                   </tr>
                 ))}
                 <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border-color)' }}>
                   <td>Total</td>
                   <td style={{ textAlign: 'right' }}>{costPerDivision.reduce((s, [, d]) => s + d.count, 0)}</td>
                   <td style={{ textAlign: 'right' }}>R {costPerDivision.reduce((s, [, d]) => s + d.totalDevice, 0).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
-                  <td style={{ textAlign: 'right' }}>R {costPerDivision.reduce((s, [, d]) => s + d.totalMonthly, 0).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
-                  <td style={{ textAlign: 'right' }}>R {(costPerDivision.reduce((s, [, d]) => s + d.totalMonthly, 0) * 12).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</td>
                 </tr>
               </tbody>
             </table>
@@ -1037,7 +1029,6 @@ function LaptopModal({ item, personnel, allAssignments, operatorRole, onClose, o
     is_active: item?.is_active ?? true,
     notes: item?.notes || '',
     device_cost: item?.device_cost || '',
-    monthly_cost: item?.monthly_cost || '',
     warranty_end_date: item?.warranty_end_date || '',
     contract_start_date: item?.contract_start_date || '',
     contract_end_date: item?.contract_end_date || '',
@@ -1134,7 +1125,6 @@ function LaptopModal({ item, personnel, allAssignments, operatorRole, onClose, o
       if (!payload.employee_email) payload.employee_email = null;
       if (!payload.notes) payload.notes = null;
       payload.device_cost = payload.device_cost ? parseFloat(payload.device_cost) : null;
-      payload.monthly_cost = payload.monthly_cost ? parseFloat(payload.monthly_cost) : null;
       if (!payload.warranty_end_date) payload.warranty_end_date = null;
       if (!payload.contract_start_date) payload.contract_start_date = null;
       if (!payload.contract_end_date) payload.contract_end_date = null;
@@ -1365,14 +1355,10 @@ function LaptopModal({ item, personnel, allAssignments, operatorRole, onClose, o
             </div>
 
             {/* Cost Tracking */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
               <div className="form-group">
                 <label className="form-label">Device Cost (R)</label>
                 <input type="number" name="device_cost" value={form.device_cost} onChange={handleChange} className="form-input" placeholder="e.g. 15000" step="0.01" min="0" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Monthly Cost (R)</label>
-                <input type="number" name="monthly_cost" value={form.monthly_cost} onChange={handleChange} className="form-input" placeholder="e.g. 350" step="0.01" min="0" />
               </div>
             </div>
 
@@ -1693,7 +1679,7 @@ function ImportModal({ onClose, onSuccess }) {
   const ALL_HEADERS = [
     'employee_name', 'laptop_brand', 'laptop_model', 'serial_number',
     'employee_id', 'employee_email', 'asset_tag', 'date_assigned', 'laptop_status',
-    'device_cost', 'monthly_cost', 'warranty_end_date', 'contract_start_date', 'contract_end_date',
+    'device_cost', 'warranty_end_date', 'contract_start_date', 'contract_end_date',
     'device_condition', 'accessories', 'setup_account', 'laptop_pin', 'mfa_phone', 'notes',
     'setup_laptop', 'setup_m365', 'setup_adobe', 'setup_zoho', 'setup_smartsheet', 'setup_distribution_lists'
   ];
@@ -1781,7 +1767,6 @@ function ImportModal({ onClose, onSuccess }) {
           setup_smartsheet: row.setup_smartsheet === 'true' || row.setup_smartsheet === 'Yes',
           setup_distribution_lists: row.setup_distribution_lists === 'true' || row.setup_distribution_lists === 'Yes',
           device_cost: row.device_cost ? parseFloat(row.device_cost) : null,
-          monthly_cost: row.monthly_cost ? parseFloat(row.monthly_cost) : null,
           warranty_end_date: row.warranty_end_date || null,
           contract_start_date: row.contract_start_date || null,
           contract_end_date: row.contract_end_date || null,
@@ -1816,7 +1801,7 @@ function ImportModal({ onClose, onSuccess }) {
         <div className="modal-body">
           <div style={{ marginBottom: '12px', padding: '10px', background: 'rgba(52,152,219,0.08)', borderRadius: '8px', fontSize: '0.83rem' }}>
             <strong>XLSX Format:</strong> File must include headers. Required columns: <code>employee_name</code>, <code>laptop_brand</code>, <code>laptop_model</code>, <code>serial_number</code>.
-            <br />Optional: employee_id, employee_email, asset_tag, date_assigned, laptop_status, device_cost, monthly_cost, warranty_end_date, contract_start_date, contract_end_date, device_condition, accessories, setup_account, laptop_pin, mfa_phone, notes, setup_laptop, setup_m365, setup_adobe, setup_zoho, setup_smartsheet, setup_distribution_lists
+            <br />Optional: employee_id, employee_email, asset_tag, date_assigned, laptop_status, device_cost, warranty_end_date, contract_start_date, contract_end_date, device_condition, accessories, setup_account, laptop_pin, mfa_phone, notes, setup_laptop, setup_m365, setup_adobe, setup_zoho, setup_smartsheet, setup_distribution_lists
             <div style={{ marginTop: '8px' }}>
               <button type="button" className="btn btn-sm btn-secondary" onClick={downloadTemplate} style={{ fontSize: '0.8rem' }}>
                 <Icons.Download size={14} /> Download Template
