@@ -2298,15 +2298,6 @@ input[type="search"]::-webkit-search-results-decoration {
     font-size: 9px !important;
   }
 }
-  
-  .stat-value {
-    font-size: 1.25rem;
-  }
-  
-  .stat-label {
-    font-size: 0.7rem;
-  }
-}
 
 /* Filter card responsive */
 .filter-card {
