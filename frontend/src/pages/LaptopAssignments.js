@@ -296,8 +296,6 @@ function LaptopAssignments() {
       { label: 'Contract End', accessor: r => r.contract_end_date ? new Date(r.contract_end_date).toLocaleDateString() : '' },
       { label: 'Device Condition', accessor: 'device_condition' },
       { label: 'Accessories', accessor: 'accessories' },
-      { label: 'Insurance Policy', accessor: 'insurance_policy' },
-      { label: 'Insurance Expiry', accessor: r => r.insurance_expiry ? new Date(r.insurance_expiry).toLocaleDateString() : '' },
       { label: 'Setup Account', accessor: 'setup_account' },
       { label: 'MFA Phone', accessor: 'mfa_phone' },
       { label: 'Notes', accessor: 'notes' },
@@ -1045,8 +1043,6 @@ function LaptopModal({ item, personnel, allAssignments, operatorRole, onClose, o
     contract_end_date: item?.contract_end_date || '',
     device_condition: item?.device_condition || '',
     accessories: item?.accessories || '',
-    insurance_policy: item?.insurance_policy || '',
-    insurance_expiry: item?.insurance_expiry || '',
     setup_account: item?.setup_account || '',
     laptop_pin: item?.laptop_pin || '',
     mfa_phone: item?.mfa_phone || '',
@@ -1144,8 +1140,6 @@ function LaptopModal({ item, personnel, allAssignments, operatorRole, onClose, o
       if (!payload.contract_end_date) payload.contract_end_date = null;
       if (!payload.device_condition) payload.device_condition = null;
       if (!payload.accessories) payload.accessories = null;
-      if (!payload.insurance_policy) payload.insurance_policy = null;
-      if (!payload.insurance_expiry) payload.insurance_expiry = null;
       if (!payload.setup_account) payload.setup_account = null;
       if (!payload.laptop_pin) payload.laptop_pin = null;
       if (!payload.mfa_phone) payload.mfa_phone = null;
@@ -1416,17 +1410,6 @@ function LaptopModal({ item, personnel, allAssignments, operatorRole, onClose, o
               </div>
             </div>
 
-            {/* Insurance */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div className="form-group">
-                <label className="form-label">Insurance Policy</label>
-                <input type="text" name="insurance_policy" value={form.insurance_policy} onChange={handleChange} className="form-input" placeholder="Policy number" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Insurance Expiry</label>
-                <input type="date" name="insurance_expiry" value={form.insurance_expiry} onChange={handleChange} className="form-input" />
-              </div>
-            </div>
 
             {/* IT Department Fields */}
             <div style={{ border: '1px solid var(--border-color)', borderRadius: 8, padding: 12, marginBottom: 8, background: 'var(--bg-secondary)' }}>
@@ -1711,8 +1694,7 @@ function ImportModal({ onClose, onSuccess }) {
     'employee_name', 'laptop_brand', 'laptop_model', 'serial_number',
     'employee_id', 'employee_email', 'asset_tag', 'date_assigned', 'laptop_status',
     'device_cost', 'monthly_cost', 'warranty_end_date', 'contract_start_date', 'contract_end_date',
-    'device_condition', 'accessories', 'insurance_policy', 'insurance_expiry',
-    'setup_account', 'laptop_pin', 'mfa_phone', 'notes',
+    'device_condition', 'accessories', 'setup_account', 'laptop_pin', 'mfa_phone', 'notes',
     'setup_laptop', 'setup_m365', 'setup_adobe', 'setup_zoho', 'setup_smartsheet', 'setup_distribution_lists'
   ];
 
@@ -1805,8 +1787,6 @@ function ImportModal({ onClose, onSuccess }) {
           contract_end_date: row.contract_end_date || null,
           device_condition: row.device_condition || null,
           accessories: row.accessories || null,
-          insurance_policy: row.insurance_policy || null,
-          insurance_expiry: row.insurance_expiry || null,
           setup_account: row.setup_account || null,
           laptop_pin: row.laptop_pin || null,
           mfa_phone: row.mfa_phone || null,
@@ -1836,7 +1816,7 @@ function ImportModal({ onClose, onSuccess }) {
         <div className="modal-body">
           <div style={{ marginBottom: '12px', padding: '10px', background: 'rgba(52,152,219,0.08)', borderRadius: '8px', fontSize: '0.83rem' }}>
             <strong>XLSX Format:</strong> File must include headers. Required columns: <code>employee_name</code>, <code>laptop_brand</code>, <code>laptop_model</code>, <code>serial_number</code>.
-            <br />Optional: employee_id, employee_email, asset_tag, date_assigned, laptop_status, device_cost, monthly_cost, warranty_end_date, contract_start_date, contract_end_date, device_condition, accessories, insurance_policy, insurance_expiry, notes, setup_laptop, setup_m365, setup_adobe, setup_zoho, setup_smartsheet, setup_distribution_lists
+            <br />Optional: employee_id, employee_email, asset_tag, date_assigned, laptop_status, device_cost, monthly_cost, warranty_end_date, contract_start_date, contract_end_date, device_condition, accessories, setup_account, laptop_pin, mfa_phone, notes, setup_laptop, setup_m365, setup_adobe, setup_zoho, setup_smartsheet, setup_distribution_lists
             <div style={{ marginTop: '8px' }}>
               <button type="button" className="btn btn-sm btn-secondary" onClick={downloadTemplate} style={{ fontSize: '0.8rem' }}>
                 <Icons.Download size={14} /> Download Template
