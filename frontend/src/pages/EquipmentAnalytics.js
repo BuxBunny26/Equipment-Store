@@ -4,6 +4,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { reportsApi, reservationsApi, equipmentApi, calibrationApi } from '../services/api';
+import { Icons } from '../components/Icons';
 
 const COLORS = ['#1976d2', '#2e7d32', '#ed6c02', '#d32f2f', '#9c27b0', '#00796b', '#5d4037', '#455a64', '#c2185b', '#0288d1'];
 
@@ -392,28 +393,28 @@ function EquipmentAnalytics() {
       {/* Summary */}
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-icon blue">📅</div>
+          <div className="stat-icon blue"><Icons.Calendar size={24} /></div>
           <div>
             <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{reservations.filter(r => r.status !== 'cancelled' && r.status !== 'completed').length}</div>
             <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Active Reservations</div>
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon red">⚠️</div>
+          <div className="stat-icon red"><Icons.Warning size={24} /></div>
           <div>
             <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{reservationOverlaps.length}</div>
             <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Potential Overlaps</div>
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon orange">📦</div>
+          <div className="stat-icon orange"><Icons.Package size={24} /></div>
           <div>
             <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipment.filter(e => e.status === 'Checked Out').length}</div>
             <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Currently Checked Out</div>
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon green">✓</div>
+          <div className="stat-icon green"><Icons.Check size={24} /></div>
           <div>
             <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipment.filter(e => e.status === 'Available').length}</div>
             <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Available</div>
