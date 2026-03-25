@@ -3,7 +3,7 @@ import {
   BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { reportsApi, reservationsApi, equipmentApi, calibrationApi } from '../services/api';
+import { reportsApi, reservationsApi, equipmentApi, calibrationApi, maintenanceApi } from '../services/api';
 import { Icons } from '../components/Icons';
 import { useOperator } from '../context/OperatorContext';
 
@@ -43,6 +43,12 @@ function EquipmentAnalytics() {
   const [movements, setMovements] = useState([]);
   const [calData, setCalData] = useState([]);
 
+  // Equipment Insights state
+  const [insightEquipId, setInsightEquipId] = useState(null);
+  const [insightSearch, setInsightSearch] = useState('');
+  const [insightData, setInsightData] = useState(null);
+  const [insightLoading, setInsightLoading] = useState(false);
+
   useEffect(() => {
     fetchAllData();
   }, []);
@@ -69,6 +75,91 @@ function EquipmentAnalytics() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Fetch detailed data for a single equipment item
+  const fetchEquipmentInsight = async (eq) => {
+    setInsightEquipId(eq.id);
+    setInsightLoading(true);
+    try {
+      const [histRes, calRes, maintRes, resRes] = await Promise.all([
+        equipmentApi.getHistory(eq.id, 500),
+        calibrationApi.getHistory(eq.id),
+        maintenanceApi.getForEquipment(eq.id),
+        reservationsApi.getAll({ equipment_id: eq.id }),
+      ]);
+      const hist = Array.isArray(histRes?.data) ? histRes.data : [];
+      const cals = Array.isArray(calRes?.data) ? calRes.data : [];
+      const maints = Array.isArray(maintRes?.data) ? maintRes.data : [];
+      const ress = Array.isArray(resRes?.data) ? resRes.data : [];
+
+      // Compute stats
+      const checkouts = hist.filter(h => h.action === 'OUT');
+      const checkins = hist.filter(h => h.action === 'IN');
+
+      // Users who have used this equipment
+      const userMap = {};
+      checkouts.forEach(h => {
+        const name = h.personnel || 'Unknown';
+        const empId = h.personnel_employee_id || '';
+        const key = empId || name;
+        if (!userMap[key]) userMap[key] = { name, empId, count: 0, lastUsed: null };
+        userMap[key].count++;
+        const d = new Date(h.created_at);
+        if (!userMap[key].lastUsed || d > userMap[key].lastUsed) userMap[key].lastUsed = d;
+      });
+      const users = Object.values(userMap).sort((a, b) => b.count - a.count);
+
+      // Locations visited
+      const locMap = {};
+      checkouts.forEach(h => {
+        const loc = h.location || 'Unknown';
+        if (!locMap[loc]) locMap[loc] = 0;
+        locMap[loc]++;
+      });
+      const locations = Object.entries(locMap).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }));
+
+      // Monthly usage trend (last 12 months)
+      const now = new Date();
+      const months = [];
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        months.push({
+          key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+          label: d.toLocaleString('en-ZA', { month: 'short', year: '2-digit' }),
+          checkouts: 0, checkins: 0,
+        });
+      }
+      const mMap = Object.fromEntries(months.map(m => [m.key, m]));
+      hist.forEach(h => {
+        const d = new Date(h.created_at);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        if (mMap[key]) {
+          if (h.action === 'OUT') mMap[key].checkouts++;
+          if (h.action === 'IN') mMap[key].checkins++;
+        }
+      });
+
+      setInsightData({
+        equipment: eq,
+        history: hist,
+        calibrations: cals,
+        maintenance: maints,
+        reservations: ress,
+        checkoutCount: checkouts.length,
+        checkinCount: checkins.length,
+        calibrationCount: cals.length,
+        maintenanceCount: maints.length,
+        reservationCount: ress.length,
+        users,
+        locations,
+        monthlyTrend: months,
+      });
+    } catch (err) {
+      console.error('Failed to fetch equipment insight:', err);
+    } finally {
+      setInsightLoading(false);
     }
   };
 
@@ -255,29 +346,7 @@ function EquipmentAnalytics() {
     return [...sites].sort();
   }, [movements]);
 
-  // -- Equipment Age Profile --
-  const equipmentAgeData = useMemo(() => {
-    const now = new Date();
-    const ageBuckets = { '< 1 year': 0, '1-2 years': 0, '2-3 years': 0, '3-5 years': 0, '5-10 years': 0, '10+ years': 0 };
-    const ageList = [];
-    equipment.forEach(e => {
-      const dateStr = e.purchase_date || e.created_at;
-      if (!dateStr) return;
-      const acquired = new Date(dateStr);
-      const ageYears = (now - acquired) / (1000 * 60 * 60 * 24 * 365.25);
-      ageList.push({ name: e.equipment_name, id: e.equipment_id, age: ageYears, status: e.status, category: e.category_name });
-      if (ageYears < 1) ageBuckets['< 1 year']++;
-      else if (ageYears < 2) ageBuckets['1-2 years']++;
-      else if (ageYears < 3) ageBuckets['2-3 years']++;
-      else if (ageYears < 5) ageBuckets['3-5 years']++;
-      else if (ageYears < 10) ageBuckets['5-10 years']++;
-      else ageBuckets['10+ years']++;
-    });
-    const buckets = Object.entries(ageBuckets).filter(([, v]) => v > 0).map(([name, value]) => ({ name, value }));
-    const oldest = [...ageList].sort((a, b) => b.age - a.age).slice(0, 10);
-    const avgAge = ageList.length > 0 ? ageList.reduce((s, e) => s + e.age, 0) / ageList.length : 0;
-    return { buckets, oldest, avgAge, total: ageList.length };
-  }, [equipment]);
+  // (Equipment Age Profile removed - replaced by Equipment Insights)
 
   // -- Availability Calendar: next 30 days --
   const availabilityCalendar = useMemo(() => {
@@ -797,97 +866,270 @@ function EquipmentAnalytics() {
     );
   };
 
-  const renderEquipmentAge = () => (
-    <div>
-      {/* Stat cards */}
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-icon blue"><Icons.Package size={24} /></div>
-          <div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipmentAgeData.total}</div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Equipment Tracked</div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon green"><Icons.Clock size={24} /></div>
-          <div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipmentAgeData.avgAge.toFixed(1)} yrs</div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Average Age</div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon orange"><Icons.Warning size={24} /></div>
-          <div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipmentAgeData.oldest.length > 0 ? equipmentAgeData.oldest[0].age.toFixed(1) + ' yrs' : '-'}</div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Oldest Equipment</div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon purple"><Icons.Calendar size={24} /></div>
-          <div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipmentAgeData.buckets.find(b => b.name === '< 1 year')?.value || 0}</div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Added This Year</div>
-          </div>
-        </div>
-      </div>
+  const renderEquipmentInsights = () => {
+    const filteredEquip = equipment.filter(e =>
+      e.equipment_name.toLowerCase().includes(insightSearch.toLowerCase()) ||
+      e.equipment_id.toLowerCase().includes(insightSearch.toLowerCase()) ||
+      (e.serial_number && e.serial_number.toLowerCase().includes(insightSearch.toLowerCase()))
+    );
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 480px), 1fr))', gap: 20 }}>
-        {/* Age distribution bar chart */}
-        <div className="card">
-          <div className="card-header">
-            <h3 className="card-title">Age Distribution</h3>
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Based on {equipment[0]?.purchase_date ? 'purchase date' : 'date added'}</span>
+    // Equipment selector
+    if (!insightEquipId || !insightData) {
+      return (
+        <div>
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Select Equipment to View Insights</h3>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{equipment.length} items</span>
+            </div>
+            <input
+              type="text"
+              placeholder="Search by name, ID, or serial number..."
+              value={insightSearch}
+              onChange={(e) => setInsightSearch(e.target.value)}
+              style={{ width: '100%', padding: '10px 14px', border: '1px solid var(--border-color)', borderRadius: 8, background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '0.9rem', marginBottom: 12, boxSizing: 'border-box' }}
+            />
+            <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+              {filteredEquip.length === 0 ? (
+                <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: 20 }}>No equipment found</p>
+              ) : (
+                filteredEquip.map(eq => {
+                  const eqMovements = movements.filter(m => m.equipment_name === eq.equipment_name || m.equipment_id === eq.equipment_id);
+                  const eqCheckouts = eqMovements.filter(m => m.action === 'OUT').length;
+                  const eqCal = calData.find(c => c.equipment_id === eq.id || c.equipment_id === eq.equipment_id);
+                  return (
+                    <button key={eq.id} onClick={() => fetchEquipmentInsight(eq)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '12px 14px', border: 'none', borderBottom: '1px solid var(--border-color)', background: 'transparent', cursor: 'pointer', textAlign: 'left', color: 'var(--text-primary)', transition: 'background 0.15s' }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-tertiary, rgba(0,0,0,0.03))'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{eq.equipment_name}</div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                          {eq.equipment_id}{eq.serial_number ? ` • S/N: ${eq.serial_number}` : ''}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+                        <span className="badge" style={{ background: eq.status === 'Available' ? '#2e7d32' : eq.status === 'Checked Out' ? '#ed6c02' : '#9e9e9e', fontSize: '0.7rem' }}>{eq.status}</span>
+                        {eqCheckouts > 0 && <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{eqCheckouts} uses</span>}
+                      </div>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2" width="16" height="16" style={{ flexShrink: 0 }}><polyline points="9 18 15 12 9 6" /></svg>
+                    </button>
+                  );
+                })
+              )}
+            </div>
           </div>
-          {equipmentAgeData.buckets.length === 0 ? (
-            <p style={{ color: 'var(--text-secondary)' }}>No age data available</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={isMobile ? 260 : 300}>
-              <BarChart data={equipmentAgeData.buckets} margin={{ top: 5, right: 20, left: 0, bottom: isMobile ? 20 : 5 }}>
+        </div>
+      );
+    }
+
+    if (insightLoading) {
+      return <div className="loading"><div className="spinner"></div>Loading equipment insights...</div>;
+    }
+
+    const d = insightData;
+    const eq = d.equipment;
+    return (
+      <div>
+        {/* Back button + equipment header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <button onClick={() => { setInsightEquipId(null); setInsightData(null); }}
+            className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>
+            Back
+          </button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2 style={{ margin: 0, fontSize: isMobile ? '1rem' : '1.25rem' }}>{eq.equipment_name}</h2>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+              {eq.equipment_id}{eq.serial_number ? ` • S/N: ${eq.serial_number}` : ''}
+              {eq.category_name ? ` • ${eq.category_name}` : ''}
+            </div>
+          </div>
+          <span className="badge" style={{ background: eq.status === 'Available' ? '#2e7d32' : eq.status === 'Checked Out' ? '#ed6c02' : eq.status === 'In Maintenance' ? '#1976d2' : '#9e9e9e', fontSize: '0.75rem' }}>{eq.status}</span>
+        </div>
+
+        {/* Stat cards */}
+        <div className="stats-grid">
+          <div className="stat-card">
+            <div className="stat-icon blue"><Icons.Package size={24} /></div>
+            <div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{d.checkoutCount}</div>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Times Checked Out</div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon green"><Icons.Check size={24} /></div>
+            <div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{d.checkinCount}</div>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Times Checked In</div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon orange"><Icons.Wrench size={24} /></div>
+            <div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{d.calibrationCount}</div>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Calibrations</div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon purple"><Icons.Wrench size={24} /></div>
+            <div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{d.maintenanceCount}</div>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Maintenance Records</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 480px), 1fr))', gap: 20 }}>
+          {/* Usage trend chart */}
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Usage Trend (12 Months)</h3>
+            </div>
+            <ResponsiveContainer width="100%" height={isMobile ? 240 : 280}>
+              <BarChart data={d.monthlyTrend} margin={{ top: 5, right: 20, left: 0, bottom: isMobile ? 20 : 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                <XAxis dataKey="name" tick={{ fontSize: isMobile ? 8 : 11 }} angle={isMobile ? -30 : 0} textAnchor={isMobile ? 'end' : 'middle'} height={isMobile ? 50 : 30} />
-                <YAxis allowDecimals={false} width={isMobile ? 30 : 60} />
+                <XAxis dataKey="label" tick={{ fontSize: isMobile ? 9 : 11 }} angle={isMobile ? -45 : 0} textAnchor={isMobile ? 'end' : 'middle'} height={isMobile ? 50 : 30} interval={isMobile ? 1 : 0} />
+                <YAxis allowDecimals={false} width={isMobile ? 30 : 40} />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="value" name="Equipment Count" fill="#1976d2" radius={[4, 4, 0, 0]}>
-                  {equipmentAgeData.buckets.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </Bar>
+                <Legend />
+                <Bar dataKey="checkouts" name="Check-Outs" fill="#d32f2f" />
+                <Bar dataKey="checkins" name="Check-Ins" fill="#2e7d32" />
               </BarChart>
             </ResponsiveContainer>
-          )}
+          </div>
+
+          {/* Users who used this equipment */}
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Used By</h3>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{d.users.length} user{d.users.length !== 1 ? 's' : ''}</span>
+            </div>
+            {d.users.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)' }}>No usage data</p>
+            ) : (
+              <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+                <table className="equipment-table">
+                  <thead><tr><th>User</th><th>Check-Outs</th><th>Last Used</th></tr></thead>
+                  <tbody>
+                    {d.users.map((u, i) => (
+                      <tr key={i}>
+                        <td>
+                          <div style={{ fontWeight: 600 }}>{u.name}</div>
+                          {u.empId && <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{u.empId}</div>}
+                        </td>
+                        <td style={{ fontWeight: 600 }}>{u.count}</td>
+                        <td style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{u.lastUsed ? formatDate(u.lastUsed) : '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Locations this equipment has been to */}
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Locations Visited</h3>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{d.locations.length} site{d.locations.length !== 1 ? 's' : ''}</span>
+            </div>
+            {d.locations.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)' }}>No location data</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={Math.max(180, d.locations.length * 32 + 40)}>
+                <BarChart data={d.locations} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" horizontal={false} />
+                  <XAxis type="number" allowDecimals={false} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: isMobile ? 10 : 12 }} width={yAxisWidth} tickFormatter={truncLabel} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="count" name="Check-Outs" fill="#1976d2" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          {/* Calibration history */}
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Calibration History</h3>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{d.calibrations.length} record{d.calibrations.length !== 1 ? 's' : ''}</span>
+            </div>
+            {d.calibrations.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)' }}>No calibration records</p>
+            ) : (
+              <div className="table-container" style={{ maxHeight: 300, overflowY: 'auto' }}>
+                <table className="equipment-table">
+                  <thead><tr><th>Date</th><th>Provider</th><th>Status</th><th>Expiry</th></tr></thead>
+                  <tbody>
+                    {d.calibrations.map((c, i) => (
+                      <tr key={i}>
+                        <td style={{ whiteSpace: 'nowrap' }}>{formatDate(c.calibration_date)}</td>
+                        <td>{truncate(c.calibration_provider || '-', 20)}</td>
+                        <td>
+                          <span className="badge" style={{ background: c.calibration_status === 'Valid' ? '#2e7d32' : c.calibration_status === 'Expired' ? '#d32f2f' : c.calibration_status === 'Due Soon' ? '#ed6c02' : '#9e9e9e', fontSize: '0.7rem' }}>{c.calibration_status}</span>
+                        </td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{formatDate(c.expiry_date)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Oldest equipment table */}
-        <div className="card">
-          <div className="card-header">
-            <h3 className="card-title">Oldest Equipment</h3>
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Top 10 by age</span>
-          </div>
-          {equipmentAgeData.oldest.length === 0 ? (
-            <p style={{ color: 'var(--text-secondary)' }}>No data</p>
-          ) : (
+        {/* Maintenance history */}
+        {d.maintenance.length > 0 && (
+          <div className="card" style={{ marginTop: 20 }}>
+            <div className="card-header">
+              <h3 className="card-title">Maintenance History</h3>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{d.maintenance.length} record{d.maintenance.length !== 1 ? 's' : ''}</span>
+            </div>
             <div className="table-container">
               <table className="equipment-table">
-                <thead>
-                  <tr>
-                    <th>Equipment</th>
-                    <th>Category</th>
-                    <th>Status</th>
-                    <th>Age</th>
-                  </tr>
-                </thead>
+                <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Status</th><th>Cost</th></tr></thead>
                 <tbody>
-                  {equipmentAgeData.oldest.map((e, i) => (
+                  {d.maintenance.map((m, i) => (
                     <tr key={i}>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatDate(m.maintenance_date)}</td>
+                      <td>{m.maintenance_type || '-'}</td>
+                      <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.description || '-'}</td>
                       <td>
-                        <div style={{ fontWeight: 600 }}>{truncate(e.name, 28)}</div>
-                        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{e.id}</div>
+                        <span className="badge" style={{ background: m.status === 'completed' ? '#2e7d32' : m.status === 'in_progress' ? '#1976d2' : '#ed6c02', fontSize: '0.7rem' }}>{m.status || '-'}</span>
                       </td>
-                      <td>{e.category || '-'}</td>
+                      <td>{m.cost ? `R${Number(m.cost).toFixed(2)}` : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Full movement timeline */}
+        <div className="card" style={{ marginTop: 20 }}>
+          <div className="card-header">
+            <h3 className="card-title">Full Movement Timeline</h3>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{d.history.length} movements</span>
+          </div>
+          {d.history.length === 0 ? (
+            <p style={{ color: 'var(--text-secondary)' }}>No movement history</p>
+          ) : (
+            <div className="table-container" style={{ maxHeight: 400, overflowY: 'auto' }}>
+              <table className="equipment-table">
+                <thead><tr><th>Date</th><th>Action</th><th>Location</th><th>Personnel</th><th>Notes</th></tr></thead>
+                <tbody>
+                  {d.history.map((h, i) => (
+                    <tr key={i}>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: '0.82rem' }}>{new Date(h.created_at).toLocaleString('en-ZA', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
                       <td>
-                        <span className="badge" style={{ background: e.status === 'Available' ? '#2e7d32' : e.status === 'Checked Out' ? '#ed6c02' : e.status === 'Retired' ? '#9e9e9e' : '#1976d2', fontSize: '0.7rem' }}>{e.status}</span>
+                        <span className="badge" style={{ background: h.action === 'OUT' ? '#d32f2f' : h.action === 'IN' ? '#2e7d32' : '#1976d2', fontSize: '0.7rem' }}>{h.action}</span>
                       </td>
-                      <td style={{ fontWeight: 600 }}>{e.age.toFixed(1)} yrs</td>
+                      <td>{h.location || '-'}</td>
+                      <td>{h.personnel || '-'}</td>
+                      <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.82rem' }}>{h.notes || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -896,8 +1138,8 @@ function EquipmentAnalytics() {
           )}
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderAvailability = () => (
     <div>
@@ -1147,8 +1389,8 @@ function EquipmentAnalytics() {
         );
       case 'location':
         return renderLocationUsage();
-      case 'age':
-        return renderEquipmentAge();
+      case 'insights':
+        return renderEquipmentInsights();
       case 'availability':
         return renderAvailability();
       case 'personal':
@@ -1191,8 +1433,8 @@ function EquipmentAnalytics() {
         <button className={`tab ${activeTab === 'location' ? 'active' : ''}`} onClick={() => setActiveTab('location')}>
           Usage by Location/Dept
         </button>
-        <button className={`tab ${activeTab === 'age' ? 'active' : ''}`} onClick={() => setActiveTab('age')}>
-          Equipment Age Profile
+        <button className={`tab ${activeTab === 'insights' ? 'active' : ''}`} onClick={() => setActiveTab('insights')}>
+          Equipment Insights
         </button>
         <button className={`tab ${activeTab === 'availability' ? 'active' : ''}`} onClick={() => setActiveTab('availability')}>
           Availability Calendar
