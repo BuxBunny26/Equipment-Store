@@ -255,6 +255,108 @@ function AssetAnalytics() {
     return { statusData, makeData, fuelData, monthlyCheckouts, fineTypeData, topDriverFines, serviceTypeData, mileage, licenseAlerts, serviceAlerts };
   }, [vehicles, checkouts, fines, services]);
 
+  // Extended vehicle analytics (driver usage, trip distance, destinations, etc.)
+  const vehicleDeep = useMemo(() => {
+    const returned = checkouts.filter(co => co.is_returned && co.start_odometer > 0 && co.end_odometer > 0);
+
+    // Trip distances
+    const distances = returned.map(co => co.end_odometer - co.start_odometer).filter(d => d > 0);
+    const totalKm = distances.reduce((s, d) => s + d, 0);
+    const avgTripKm = distances.length > 0 ? Math.round(totalKm / distances.length) : 0;
+    const maxTripKm = distances.length > 0 ? Math.max(...distances) : 0;
+
+    // Trip durations (hours)
+    const durations = returned.filter(co => co.return_date && co.checkout_date).map(co => {
+      const hrs = (new Date(co.return_date) - new Date(co.checkout_date)) / (1000 * 60 * 60);
+      return hrs > 0 ? hrs : null;
+    }).filter(Boolean);
+    const avgTripHrs = durations.length > 0 ? Math.round(durations.reduce((s, d) => s + d, 0) / durations.length * 10) / 10 : 0;
+
+    // Who checks out which vehicle the most
+    const driverVehicle = {};
+    checkouts.forEach(co => {
+      const driver = co.driver_name || 'Unknown';
+      const veh = co.vehicles ? `${co.vehicles.make} ${co.vehicles.model} (${co.vehicles.registration_number})` : `Vehicle #${co.vehicle_id}`;
+      const key = `${driver}|||${veh}`;
+      if (!driverVehicle[key]) driverVehicle[key] = { driver, vehicle: veh, trips: 0, totalKm: 0 };
+      driverVehicle[key].trips++;
+      if (co.is_returned && co.start_odometer > 0 && co.end_odometer > 0) {
+        const d = co.end_odometer - co.start_odometer;
+        if (d > 0) driverVehicle[key].totalKm += d;
+      }
+    });
+    const driverVehicleData = Object.values(driverVehicle).sort((a, b) => b.trips - a.trips).slice(0, 15);
+
+    // Most active drivers overall
+    const driverTrips = {};
+    checkouts.forEach(co => {
+      const driver = co.driver_name || 'Unknown';
+      if (!driverTrips[driver]) driverTrips[driver] = { trips: 0, totalKm: 0, lastTrip: null };
+      driverTrips[driver].trips++;
+      if (co.is_returned && co.start_odometer > 0 && co.end_odometer > 0) {
+        const d = co.end_odometer - co.start_odometer;
+        if (d > 0) driverTrips[driver].totalKm += d;
+      }
+      const cd = new Date(co.checkout_date || co.created_at);
+      if (!driverTrips[driver].lastTrip || cd > driverTrips[driver].lastTrip) driverTrips[driver].lastTrip = cd;
+    });
+    const topDrivers = Object.entries(driverTrips).map(([name, d]) => ({
+      name, trips: d.trips, totalKm: d.totalKm, avgKm: d.trips > 0 && d.totalKm > 0 ? Math.round(d.totalKm / d.trips) : 0, lastTrip: d.lastTrip,
+    })).sort((a, b) => b.trips - a.trips).slice(0, 10);
+
+    // Top destinations
+    const destCounts = {};
+    checkouts.forEach(co => {
+      const dest = (co.destination || '').trim();
+      if (!dest) return;
+      destCounts[dest] = (destCounts[dest] || 0) + 1;
+    });
+    const topDestinations = Object.entries(destCounts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
+
+    // Per-vehicle usage
+    const perVehicle = {};
+    checkouts.forEach(co => {
+      const vid = co.vehicle_id;
+      const vLabel = co.vehicles ? `${co.vehicles.make} ${co.vehicles.model}` : `#${vid}`;
+      const reg = co.vehicles?.registration_number || '';
+      if (!perVehicle[vid]) perVehicle[vid] = { name: vLabel, reg, trips: 0, totalKm: 0, drivers: new Set() };
+      perVehicle[vid].trips++;
+      perVehicle[vid].drivers.add(co.driver_name || 'Unknown');
+      if (co.is_returned && co.start_odometer > 0 && co.end_odometer > 0) {
+        const d = co.end_odometer - co.start_odometer;
+        if (d > 0) perVehicle[vid].totalKm += d;
+      }
+    });
+    const vehicleUsage = Object.values(perVehicle).map(v => ({
+      ...v, drivers: v.drivers.size, avgKm: v.trips > 0 && v.totalKm > 0 ? Math.round(v.totalKm / v.trips) : 0,
+    })).sort((a, b) => b.trips - a.trips);
+
+    // Trip distance distribution
+    const distBuckets = { '0-50 km': 0, '50-100 km': 0, '100-200 km': 0, '200-500 km': 0, '500+ km': 0 };
+    distances.forEach(d => {
+      if (d < 50) distBuckets['0-50 km']++;
+      else if (d < 100) distBuckets['50-100 km']++;
+      else if (d < 200) distBuckets['100-200 km']++;
+      else if (d < 500) distBuckets['200-500 km']++;
+      else distBuckets['500+ km']++;
+    });
+    const distData = Object.entries(distBuckets).filter(([, v]) => v > 0).map(([name, value]) => ({ name, value }));
+
+    // Reason for use breakdown
+    const reasonCounts = {};
+    checkouts.forEach(co => {
+      const reason = (co.reason_for_use || '').trim();
+      if (!reason) return;
+      reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+    });
+    const reasonData = Object.entries(reasonCounts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
+
+    // Currently out (unreturned)
+    const currentlyOut = checkouts.filter(co => !co.is_returned).length;
+
+    return { totalKm, avgTripKm, maxTripKm, avgTripHrs, driverVehicleData, topDrivers, topDestinations, vehicleUsage, distData, reasonData, currentlyOut, returnedCount: returned.length };
+  }, [checkouts]);
+
   // Cost breakdown
   const costData = useMemo(() => {
     const deviceCosts = [
@@ -743,27 +845,187 @@ function AssetAnalytics() {
         <div className="stat-card">
           <div className="stat-icon green"><Icons.Check size={24} /></div>
           <div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{vehicles.filter(v => v.is_active).length}</div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Active Vehicles</div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon orange"><Icons.Wrench size={24} /></div>
-          <div>
             <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{checkouts.length}</div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Total Checkouts</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Total Trips</div>
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon" style={{ background: 'rgba(211,47,47,0.12)', color: '#d32f2f' }}><Icons.Warning size={24} /></div>
+          <div className="stat-icon orange"><Icons.TrendingUp size={24} /></div>
           <div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{fines.length}</div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Total Fines</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{vehicleDeep.totalKm.toLocaleString()} km</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Total Distance</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon purple"><Icons.MapPin size={24} /></div>
+          <div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{vehicleDeep.avgTripKm.toLocaleString()} km</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Avg Trip Distance</div>
           </div>
         </div>
       </div>
 
+      {/* Secondary stats row */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+        <div style={{ background: 'var(--bg-secondary)', borderRadius: 10, padding: '14px 16px', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.2rem', fontWeight: 700 }}>{vehicleDeep.currentlyOut}</div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Currently Out</div>
+        </div>
+        <div style={{ background: 'var(--bg-secondary)', borderRadius: 10, padding: '14px 16px', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.2rem', fontWeight: 700 }}>{vehicleDeep.avgTripHrs}h</div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Avg Trip Duration</div>
+        </div>
+        <div style={{ background: 'var(--bg-secondary)', borderRadius: 10, padding: '14px 16px', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.2rem', fontWeight: 700 }}>{vehicleDeep.maxTripKm.toLocaleString()} km</div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Longest Trip</div>
+        </div>
+        <div style={{ background: 'var(--bg-secondary)', borderRadius: 10, padding: '14px 16px', textAlign: 'center' }}>
+          <div style={{ fontSize: '1.2rem', fontWeight: 700 }}>{fines.length}</div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Total Fines</div>
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: 20 }}>
+        {/* Driver-Vehicle affinity - who uses which vehicle most */}
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">Who Uses Which Vehicle Most</h3>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Top 15</span>
+          </div>
+          {vehicleDeep.driverVehicleData.length === 0 ? (
+            <p style={{ color: 'var(--text-secondary)' }}>No checkout data</p>
+          ) : (
+            <div className="table-container" style={{ maxHeight: 400, overflowY: 'auto' }}>
+              <table className="equipment-table">
+                <thead><tr><th>Driver</th><th>Vehicle</th><th>Trips</th><th>Total km</th></tr></thead>
+                <tbody>
+                  {vehicleDeep.driverVehicleData.map((d, i) => (
+                    <tr key={i}>
+                      <td style={{ fontWeight: 600 }}>{d.driver}</td>
+                      <td style={{ fontSize: '0.83rem' }}>{d.vehicle}</td>
+                      <td style={{ fontWeight: 600 }}>{d.trips}</td>
+                      <td style={{ fontFamily: 'monospace' }}>{d.totalKm > 0 ? `${d.totalKm.toLocaleString()}` : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Most active drivers */}
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">Most Active Drivers</h3>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>By trip count</span>
+          </div>
+          {vehicleDeep.topDrivers.length === 0 ? (
+            <p style={{ color: 'var(--text-secondary)' }}>No checkout data</p>
+          ) : (
+            <div className="table-container" style={{ maxHeight: 400, overflowY: 'auto' }}>
+              <table className="equipment-table">
+                <thead><tr><th>Driver</th><th>Trips</th><th>Total km</th><th>Avg km</th><th>Last Trip</th></tr></thead>
+                <tbody>
+                  {vehicleDeep.topDrivers.map((d, i) => (
+                    <tr key={i}>
+                      <td style={{ fontWeight: 600 }}>{d.name}</td>
+                      <td style={{ fontWeight: 600 }}>{d.trips}</td>
+                      <td style={{ fontFamily: 'monospace' }}>{d.totalKm > 0 ? d.totalKm.toLocaleString() : '-'}</td>
+                      <td style={{ fontFamily: 'monospace' }}>{d.avgKm > 0 ? d.avgKm.toLocaleString() : '-'}</td>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: '0.82rem' }}>{d.lastTrip ? formatDate(d.lastTrip) : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Per-vehicle usage */}
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">Vehicle Usage Breakdown</h3>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>All vehicles</span>
+          </div>
+          {vehicleDeep.vehicleUsage.length === 0 ? (
+            <p style={{ color: 'var(--text-secondary)' }}>No checkout data</p>
+          ) : (
+            <div className="table-container" style={{ maxHeight: 400, overflowY: 'auto' }}>
+              <table className="equipment-table">
+                <thead><tr><th>Vehicle</th><th>Reg</th><th>Trips</th><th>Total km</th><th>Avg km</th><th>Drivers</th></tr></thead>
+                <tbody>
+                  {vehicleDeep.vehicleUsage.map((v, i) => (
+                    <tr key={i}>
+                      <td style={{ fontWeight: 600 }}>{v.name}</td>
+                      <td style={{ fontFamily: 'monospace', fontSize: '0.83rem' }}>{v.reg}</td>
+                      <td style={{ fontWeight: 600 }}>{v.trips}</td>
+                      <td style={{ fontFamily: 'monospace' }}>{v.totalKm > 0 ? v.totalKm.toLocaleString() : '-'}</td>
+                      <td style={{ fontFamily: 'monospace' }}>{v.avgKm > 0 ? v.avgKm.toLocaleString() : '-'}</td>
+                      <td>{v.drivers}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Trip distance distribution */}
+        {vehicleDeep.distData.length > 0 && (
+          <div className="card">
+            <div className="card-header"><h3 className="card-title">Trip Distance Distribution</h3></div>
+            <ResponsiveContainer width="100%" height={isMobile ? 240 : 280}>
+              <BarChart data={vehicleDeep.distData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+                <XAxis dataKey="name" tick={{ fontSize: isMobile ? 9 : 11 }} />
+                <YAxis allowDecimals={false} width={isMobile ? 30 : 40} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="value" name="Trips" fill="#1976d2" radius={[4, 4, 0, 0]}>
+                  {vehicleDeep.distData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* Top destinations */}
+        {vehicleDeep.topDestinations.length > 0 && (
+          <div className="card">
+            <div className="card-header"><h3 className="card-title">Top Destinations</h3></div>
+            <ResponsiveContainer width="100%" height={Math.max(180, vehicleDeep.topDestinations.length * 32 + 40)}>
+              <BarChart data={vehicleDeep.topDestinations} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" horizontal={false} />
+                <XAxis type="number" allowDecimals={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: isMobile ? 10 : 12 }} width={yAxisWidth} tickFormatter={truncLabel} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="value" name="Trips" fill="#00796b" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* Reason for use */}
+        {vehicleDeep.reasonData.length > 0 && (
+          <div className="card">
+            <div className="card-header"><h3 className="card-title">Reason for Use</h3></div>
+            {renderPieDonut(vehicleDeep.reasonData, 'Reasons', isMobile ? 240 : 280)}
+          </div>
+        )}
+
+        {/* Checkout frequency */}
+        <div className="card">
+          <div className="card-header"><h3 className="card-title">Checkout Frequency (12 Months)</h3></div>
+          <ResponsiveContainer width="100%" height={isMobile ? 240 : 280}>
+            <LineChart data={vehicleStats.monthlyCheckouts} margin={{ top: 5, right: 20, left: 0, bottom: isMobile ? 20 : 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+              <XAxis dataKey="label" tick={{ fontSize: isMobile ? 9 : 11 }} angle={isMobile ? -45 : 0} textAnchor={isMobile ? 'end' : 'middle'} height={isMobile ? 50 : 30} interval={isMobile ? 1 : 0} />
+              <YAxis allowDecimals={false} width={isMobile ? 30 : 40} />
+              <Tooltip content={<CustomTooltip />} />
+              <Line type="monotone" dataKey="checkouts" name="Checkouts" stroke="#1976d2" strokeWidth={2} dot={{ fill: '#1976d2', r: 3 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
         {/* Fleet status */}
         <div className="card">
           <div className="card-header"><h3 className="card-title">Fleet Status</h3></div>
@@ -783,20 +1045,6 @@ function AssetAnalytics() {
                 {vehicleStats.makeData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
               </Bar>
             </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Checkout frequency */}
-        <div className="card">
-          <div className="card-header"><h3 className="card-title">Checkout Frequency (12 Months)</h3></div>
-          <ResponsiveContainer width="100%" height={isMobile ? 240 : 280}>
-            <LineChart data={vehicleStats.monthlyCheckouts} margin={{ top: 5, right: 20, left: 0, bottom: isMobile ? 20 : 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-              <XAxis dataKey="label" tick={{ fontSize: isMobile ? 9 : 11 }} angle={isMobile ? -45 : 0} textAnchor={isMobile ? 'end' : 'middle'} height={isMobile ? 50 : 30} interval={isMobile ? 1 : 0} />
-              <YAxis allowDecimals={false} width={isMobile ? 30 : 40} />
-              <Tooltip content={<CustomTooltip />} />
-              <Line type="monotone" dataKey="checkouts" name="Checkouts" stroke="#1976d2" strokeWidth={2} dot={{ fill: '#1976d2', r: 3 }} />
-            </LineChart>
           </ResponsiveContainer>
         </div>
 
