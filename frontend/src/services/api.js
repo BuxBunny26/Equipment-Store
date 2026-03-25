@@ -454,7 +454,7 @@ export const reportsApi = {
                 equipment_id: m.equipment?.equipment_id, equipment_name: m.equipment?.equipment_name,
                 category: m.equipment?.categories?.name, location: m.locations?.name,
                 personnel_name: m.personnel?.full_name, personnel_employee_id: m.personnel?.employee_id,
-                equipment: undefined, locations: undefined,
+                equipment: undefined, locations: undefined, personnel: undefined,
             }))
         }));
     },

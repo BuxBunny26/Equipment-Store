@@ -287,7 +287,7 @@ function EquipmentAnalytics() {
     // Count checkouts per person
     const personCounts = {};
     checkouts.forEach(m => {
-      const name = m.personnel || 'Unknown';
+      const name = m.personnel_name || 'Unknown';
       const empId = m.personnel_employee_id || '';
       const key = empId || name;
       if (!personCounts[key]) personCounts[key] = { name, empId, count: 0 };
