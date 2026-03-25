@@ -175,6 +175,64 @@ function EquipmentAnalytics() {
       .map(([name, checkouts]) => ({ name: name.length > 25 ? name.slice(0, 22) + '...' : name, checkouts }));
   }, [movements]);
 
+  // -- Site / Location checkout analytics --
+
+  // Which site currently has which equipment (grouped by location -> list of equipment)
+  const equipmentBySite = useMemo(() => {
+    const grouped = {};
+    equipment.forEach(e => {
+      const loc = e.current_location || 'Unknown';
+      if (!grouped[loc]) grouped[loc] = [];
+      grouped[loc].push(e);
+    });
+    return Object.entries(grouped)
+      .sort((a, b) => b[1].length - a[1].length)
+      .map(([site, items]) => ({ site, items, count: items.length }));
+  }, [equipment]);
+
+  // Which site checks out which category the most (stacked bar: site x category)
+  const siteCheckoutsByCategory = useMemo(() => {
+    const checkouts = movements.filter(m => m.action === 'OUT');
+    const siteCatCounts = {};
+    const allCategories = new Set();
+    checkouts.forEach(m => {
+      const site = m.location || 'Unknown';
+      const cat = m.category || 'Uncategorised';
+      allCategories.add(cat);
+      if (!siteCatCounts[site]) siteCatCounts[site] = {};
+      siteCatCounts[site][cat] = (siteCatCounts[site][cat] || 0) + 1;
+    });
+    const cats = [...allCategories].sort();
+    return {
+      data: Object.entries(siteCatCounts)
+        .map(([site, cats_]) => ({ site, ...cats_, total: Object.values(cats_).reduce((a, b) => a + b, 0) }))
+        .sort((a, b) => b.total - a.total),
+      categories: cats,
+    };
+  }, [movements]);
+
+  // Checkout dates heatmap data: date -> count of checkouts per site
+  const checkoutDatesBySite = useMemo(() => {
+    const checkouts = movements.filter(m => m.action === 'OUT');
+    const dateMap = {};
+    checkouts.forEach(m => {
+      const d = new Date(m.created_at);
+      const dateKey = d.toLocaleDateString('en-ZA');
+      const site = m.location || 'Unknown';
+      if (!dateMap[dateKey]) dateMap[dateKey] = { date: dateKey, sortKey: d.getTime() };
+      dateMap[dateKey][site] = (dateMap[dateKey][site] || 0) + 1;
+      dateMap[dateKey].total = (dateMap[dateKey].total || 0) + 1;
+    });
+    return Object.values(dateMap).sort((a, b) => b.sortKey - a.sortKey).slice(0, 30);
+  }, [movements]);
+
+  // Sites list from checkout data
+  const checkoutSites = useMemo(() => {
+    const sites = new Set();
+    movements.filter(m => m.action === 'OUT').forEach(m => sites.add(m.location || 'Unknown'));
+    return [...sites].sort();
+  }, [movements]);
+
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-ZA') : '-';
 
   const CustomTooltip = ({ active, payload, label }) => {
@@ -499,6 +557,141 @@ function EquipmentAnalytics() {
     </div>
   );
 
+  const renderLocationUsage = () => {
+    const catBarHeight = Math.max(280, siteCheckoutsByCategory.data.length * 40 + 60);
+    const dateBarHeight = Math.max(300, checkoutDatesBySite.length * 28 + 60);
+
+    return (
+      <div>
+        {/* Summary stat cards */}
+        <div className="stats-grid">
+          <div className="stat-card">
+            <div className="stat-icon blue"><Icons.MapPin size={24} /></div>
+            <div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipmentBySite.length}</div>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Active Sites</div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon green"><Icons.Package size={24} /></div>
+            <div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipment.length}</div>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Total Equipment</div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon orange"><Icons.TrendingUp size={24} /></div>
+            <div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{movements.filter(m => m.action === 'OUT').length}</div>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Total Check-Outs</div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon purple"><Icons.Calendar size={24} /></div>
+            <div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{checkoutDatesBySite.length}</div>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Active Checkout Days</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 480px), 1fr))', gap: 20 }}>
+          {/* Which site has which equipment */}
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Equipment Currently at Each Site</h3>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{equipmentBySite.length} sites</span>
+            </div>
+            {equipmentBySite.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)' }}>No equipment data</p>
+            ) : (
+              <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+                {equipmentBySite.map((s, si) => (
+                  <details key={si} style={{ marginBottom: 4, borderBottom: '1px solid var(--border-color)' }}>
+                    <summary style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+                      <span style={{ flex: 1 }}>{s.site}</span>
+                      <span className="badge" style={{ background: COLORS[si % COLORS.length] }}>{s.count}</span>
+                    </summary>
+                    <div style={{ padding: '4px 12px 12px' }}>
+                      <table style={{ width: '100%', fontSize: '0.82rem', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <th style={{ textAlign: 'left', padding: '4px 6px', color: 'var(--text-secondary)' }}>ID</th>
+                            <th style={{ textAlign: 'left', padding: '4px 6px', color: 'var(--text-secondary)' }}>Name</th>
+                            <th style={{ textAlign: 'left', padding: '4px 6px', color: 'var(--text-secondary)' }}>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {s.items.map((item, ii) => (
+                            <tr key={ii} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                              <td style={{ padding: '4px 6px', fontFamily: 'monospace', fontSize: '0.78rem' }}>{item.equipment_id}</td>
+                              <td style={{ padding: '4px 6px' }}>{truncate(item.equipment_name, 30)}</td>
+                              <td style={{ padding: '4px 6px' }}>
+                                <span className="badge" style={{ background: item.status === 'Available' ? '#2e7d32' : item.status === 'Checked Out' ? '#ed6c02' : '#9e9e9e', fontSize: '0.7rem' }}>{item.status}</span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Which site checks out which category the most - stacked horizontal bar */}
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title">Check-Outs by Site & Category</h3>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Which site checks out what</span>
+            </div>
+            {siteCheckoutsByCategory.data.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)' }}>No checkout data</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={catBarHeight}>
+                <BarChart data={siteCheckoutsByCategory.data} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" horizontal={false} />
+                  <XAxis type="number" allowDecimals={false} />
+                  <YAxis type="category" dataKey="site" tick={{ fontSize: 12 }} width={160} tickFormatter={(v) => truncate(v, 22)} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend />
+                  {siteCheckoutsByCategory.categories.map((cat, i) => (
+                    <Bar key={cat} dataKey={cat} name={cat} stackId="a" fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        {/* Checkout dates by site - recent 30 days with activity */}
+        <div className="card" style={{ marginTop: 20 }}>
+          <div className="card-header">
+            <h3 className="card-title">Check-Out Activity by Date & Site</h3>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Last {checkoutDatesBySite.length} active days</span>
+          </div>
+          {checkoutDatesBySite.length === 0 ? (
+            <p style={{ color: 'var(--text-secondary)' }}>No checkout data</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={dateBarHeight}>
+              <BarChart data={[...checkoutDatesBySite].reverse()} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" horizontal={false} />
+                <XAxis type="number" allowDecimals={false} />
+                <YAxis type="category" dataKey="date" tick={{ fontSize: 11 }} width={100} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend />
+                {checkoutSites.map((site, i) => (
+                  <Bar key={site} dataKey={site} name={site} stackId="a" fill={COLORS[i % COLORS.length]} />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderContent = () => {
     if (loading) {
       return (
@@ -527,11 +720,7 @@ function EquipmentAnalytics() {
           </div>
         );
       case 'location':
-        return (
-          <div className="card"><div className="card-header"><h3 className="card-title">Usage by Location/Department</h3></div>
-            <div style={{ color: 'var(--text-secondary)', padding: 24 }}>Usage by location/department analytics coming soon...</div>
-          </div>
-        );
+        return renderLocationUsage();
       case 'age':
         return (
           <div className="card"><div className="card-header"><h3 className="card-title">Equipment Age Profile</h3></div>
