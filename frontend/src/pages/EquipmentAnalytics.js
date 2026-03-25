@@ -62,7 +62,7 @@ function EquipmentAnalytics() {
   }, [equipment]);
 
   const calibrationSummary = useMemo(() => {
-    const counts = { Valid: 0, 'Due Soon': 0, Expired: 0, 'N/A': 0 };
+    const counts = { Valid: 0, 'Due Soon': 0, Expired: 0, 'Not Calibrated': 0, 'N/A': 0 };
     calData.forEach(c => {
       const s = c.calibration_status || 'N/A';
       counts[s] = (counts[s] || 0) + 1;
@@ -288,7 +288,7 @@ function EquipmentAnalytics() {
               <PieChart>
                 <Pie data={calibrationSummary} dataKey="value" nameKey="name" cx="50%" cy="45%" outerRadius={90} innerRadius={45} paddingAngle={2} label={renderPieLabel} labelLine={{ stroke: 'var(--text-secondary)', strokeWidth: 1 }}>
                   {calibrationSummary.map((entry, i) => {
-                    const colorMap = { Valid: '#2e7d32', 'Due Soon': '#ed6c02', Expired: '#d32f2f', 'N/A': '#9e9e9e' };
+                    const colorMap = { Valid: '#2e7d32', 'Due Soon': '#ed6c02', Expired: '#d32f2f', 'Not Calibrated': '#7b1fa2', 'N/A': '#9e9e9e' };
                     return <Cell key={i} fill={colorMap[entry.name] || COLORS[i]} />;
                   })}
                 </Pie>
@@ -507,6 +507,42 @@ function EquipmentAnalytics() {
       case 'distribution': return renderDistribution();
       case 'usage': return renderUsage();
       case 'overlaps': return renderOverlaps();
+      case 'maintenance':
+        return (
+          <div className="card"><div className="card-header"><h3 className="card-title">Maintenance/Downtime Trends</h3></div>
+            <div style={{ color: 'var(--text-secondary)', padding: 24 }}>Maintenance/downtime analytics coming soon...</div>
+          </div>
+        );
+      case 'location':
+        return (
+          <div className="card"><div className="card-header"><h3 className="card-title">Usage by Location/Department</h3></div>
+            <div style={{ color: 'var(--text-secondary)', padding: 24 }}>Usage by location/department analytics coming soon...</div>
+          </div>
+        );
+      case 'age':
+        return (
+          <div className="card"><div className="card-header"><h3 className="card-title">Equipment Age Profile</h3></div>
+            <div style={{ color: 'var(--text-secondary)', padding: 24 }}>Equipment age profile analytics coming soon...</div>
+          </div>
+        );
+      case 'availability':
+        return (
+          <div className="card"><div className="card-header"><h3 className="card-title">Availability Calendar</h3></div>
+            <div style={{ color: 'var(--text-secondary)', padding: 24 }}>Availability calendar/timeline coming soon...</div>
+          </div>
+        );
+      case 'personal':
+        return (
+          <div className="card"><div className="card-header"><h3 className="card-title">Personal vs Team Usage</h3></div>
+            <div style={{ color: 'var(--text-secondary)', padding: 24 }}>Personal vs team usage analytics coming soon...</div>
+          </div>
+        );
+      case 'failures':
+        return (
+          <div className="card"><div className="card-header"><h3 className="card-title">Reservation Failures/Downtime Reasons</h3></div>
+            <div style={{ color: 'var(--text-secondary)', padding: 24 }}>Reservation failure/downtime reason analytics coming soon...</div>
+          </div>
+        );
       default: return null;
     }
   };
@@ -528,10 +564,28 @@ function EquipmentAnalytics() {
           Distribution
         </button>
         <button className={`tab ${activeTab === 'usage' ? 'active' : ''}`} onClick={() => setActiveTab('usage')}>
-          Usage &amp; Trends
+          Usage & Trends
         </button>
         <button className={`tab ${activeTab === 'overlaps' ? 'active' : ''}`} onClick={() => setActiveTab('overlaps')}>
           Reservation Overlaps
+        </button>
+        <button className={`tab ${activeTab === 'maintenance' ? 'active' : ''}`} onClick={() => setActiveTab('maintenance')}>
+          Maintenance/Downtime
+        </button>
+        <button className={`tab ${activeTab === 'location' ? 'active' : ''}`} onClick={() => setActiveTab('location')}>
+          Usage by Location/Dept
+        </button>
+        <button className={`tab ${activeTab === 'age' ? 'active' : ''}`} onClick={() => setActiveTab('age')}>
+          Equipment Age Profile
+        </button>
+        <button className={`tab ${activeTab === 'availability' ? 'active' : ''}`} onClick={() => setActiveTab('availability')}>
+          Availability Calendar
+        </button>
+        <button className={`tab ${activeTab === 'personal' ? 'active' : ''}`} onClick={() => setActiveTab('personal')}>
+          Personal vs Team Usage
+        </button>
+        <button className={`tab ${activeTab === 'failures' ? 'active' : ''}`} onClick={() => setActiveTab('failures')}>
+          Reservation Failures
         </button>
       </div>
 
