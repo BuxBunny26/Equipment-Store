@@ -266,10 +266,16 @@ function AppContent() {
           <NavLink to="/reservations" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <Icons.Calendar /> Reservations
           </NavLink>
+          <NavLink to="/reports" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.Reports /> Reports
+          </NavLink>
+          <NavLink to="/customer-sites" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.Building /> Customer Sites
+          </NavLink>
         </div>
         
         <div className="nav-section">
-          <div className="nav-section-title">Stock</div>
+          <div className="nav-section-title">Operations</div>
           <NavLink to="/consumables" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <Icons.Consumables /> Consumables
           </NavLink>
@@ -302,19 +308,6 @@ function AppContent() {
             <Icons.CheckOut /> Pre-Trip Form
           </NavLink>
         </div>
-
-        <div className="nav-section">
-          <div className="nav-section-title">Analysis</div>
-          <NavLink to="/reports" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-            <Icons.Reports /> Reports
-          </NavLink>
-          <NavLink to="/customer-sites" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-            <Icons.Building /> Customer Sites
-          </NavLink>
-          <NavLink to="/audit-log" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-            <Icons.History /> Audit Log
-          </NavLink>
-        </div>
         
         <div className="nav-section">
           <div className="nav-section-title">System</div>
@@ -323,6 +316,9 @@ function AppContent() {
               <Icons.Users /> Users
             </NavLink>
           )}
+          <NavLink to="/audit-log" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.History /> Audit Log
+          </NavLink>
           <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <Icons.Settings /> Settings
           </NavLink>
