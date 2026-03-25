@@ -1,12 +1,22 @@
-import React, { useState, useRef, useEffect } from 'react';
+﻿import React, { useState, useRef, useEffect } from 'react';
 import { useOperator } from '../context/OperatorContext';
+
+// Derive the 4-digit PIN from an employee ID (same logic as OperatorModal)
+function derivePin(employeeId) {
+  const digits = (employeeId || '').replace(/\D/g, '');
+  return digits.padStart(4, '0').slice(-4);
+}
 
 function OperatorSelector() {
   const { operator, personnel, loading, selectOperator, clearOperator } = useOperator();
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [pendingPerson, setPendingPerson] = useState(null);
+  const [pin, setPin] = useState(['', '', '', '']);
+  const [pinError, setPinError] = useState('');
   const dropdownRef = useRef(null);
   const searchInputRef = useRef(null);
+  const pinRefs = [useRef(null), useRef(null), useRef(null), useRef(null)];
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -14,6 +24,7 @@ function OperatorSelector() {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsOpen(false);
         setSearchTerm('');
+        setPendingPerson(null);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -33,9 +44,74 @@ function OperatorSelector() {
   );
 
   const handleSelect = (person) => {
-    selectOperator(person);
-    setIsOpen(false);
-    setSearchTerm('');
+    // If selecting the same person, just close
+    if (operator?.id === person.id) {
+      setIsOpen(false);
+      setSearchTerm('');
+      return;
+    }
+    // Show PIN prompt for the new person
+    setPendingPerson(person);
+    setPin(['', '', '', '']);
+    setPinError('');
+    setTimeout(() => pinRefs[0].current?.focus(), 100);
+  };
+
+  const handlePinChange = (index, value) => {
+    if (value.length > 1) return;
+    if (value && !/^\d$/.test(value)) return;
+    const newPin = [...pin];
+    newPin[index] = value;
+    setPin(newPin);
+    setPinError('');
+    if (value && index < 3) {
+      pinRefs[index + 1].current?.focus();
+    }
+    if (value && index === 3 && newPin.every(d => d !== '')) {
+      const enteredPin = newPin.join('');
+      const correctPin = derivePin(pendingPerson.employee_id);
+      if (enteredPin === correctPin) {
+        selectOperator(pendingPerson);
+        setPendingPerson(null);
+        setIsOpen(false);
+        setSearchTerm('');
+      } else {
+        setPinError('Incorrect PIN');
+        setPin(['', '', '', '']);
+        setTimeout(() => pinRefs[0].current?.focus(), 100);
+      }
+    }
+  };
+
+  const handlePinKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !pin[index] && index > 0) {
+      pinRefs[index - 1].current?.focus();
+    }
+    if (e.key === 'Enter') {
+      const enteredPin = pin.join('');
+      if (enteredPin.length === 4) {
+        const correctPin = derivePin(pendingPerson.employee_id);
+        if (enteredPin === correctPin) {
+          selectOperator(pendingPerson);
+          setPendingPerson(null);
+          setIsOpen(false);
+          setSearchTerm('');
+        } else {
+          setPinError('Incorrect PIN');
+          setPin(['', '', '', '']);
+          setTimeout(() => pinRefs[0].current?.focus(), 100);
+        }
+      }
+    }
+    if (e.key === 'Escape') {
+      setPendingPerson(null);
+    }
+  };
+
+  const handleCancelPin = () => {
+    setPendingPerson(null);
+    setPin(['', '', '', '']);
+    setPinError('');
   };
 
   const handleClear = (e) => {
@@ -96,6 +172,49 @@ function OperatorSelector() {
 
       {isOpen && (
         <div className="operator-dropdown">
+          {pendingPerson ? (
+            <div style={{ padding: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <button onClick={handleCancelPin} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-secondary)' }} title="Back">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+                    <line x1="19" y1="12" x2="5" y2="12" />
+                    <polyline points="12 19 5 12 12 5" />
+                  </svg>
+                </button>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{pendingPerson.full_name}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{pendingPerson.employee_id}</div>
+                </div>
+              </div>
+              <div style={{ textAlign: 'center', marginBottom: 8, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Enter PIN to switch operator
+              </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 8 }}>
+                {pin.map((digit, i) => (
+                  <input
+                    key={i}
+                    ref={pinRefs[i]}
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handlePinChange(i, e.target.value)}
+                    onKeyDown={(e) => handlePinKeyDown(i, e)}
+                    style={{
+                      width: 40, height: 48, textAlign: 'center', fontSize: '1.2rem',
+                      border: `2px solid ${pinError ? '#d32f2f' : 'var(--border-color)'}`,
+                      borderRadius: 8, background: 'var(--bg-primary)', color: 'var(--text-primary)',
+                      outline: 'none',
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#1976d2'}
+                    onBlur={(e) => e.target.style.borderColor = pinError ? '#d32f2f' : 'var(--border-color)'}
+                  />
+                ))}
+              </div>
+              {pinError && <div style={{ color: '#d32f2f', fontSize: '0.8rem', textAlign: 'center' }}>{pinError}</div>}
+            </div>
+          ) : (
+          <>
           <div className="operator-dropdown-search">
             <input
               ref={searchInputRef}
@@ -141,6 +260,8 @@ function OperatorSelector() {
               ))
             )}
           </div>
+          </>
+          )}
         </div>
       )}
     </div>
