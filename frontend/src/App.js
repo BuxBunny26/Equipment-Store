@@ -31,6 +31,7 @@ import CellphoneAssignments from './pages/CellphoneAssignments';
 import Vehicles from './pages/Vehicles';
 import VehicleCheckoutForm from './pages/VehicleCheckoutForm';
 import AssetsDashboard from './pages/AssetsDashboard';
+import AssetAnalytics from './pages/AssetAnalytics';
 import EquipmentAnalytics from './pages/EquipmentAnalytics';
 
 // Icons as simple SVG components
@@ -314,6 +315,9 @@ function AppContent() {
           <NavLink to="/vehicle-checkout" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <Icons.CheckOut /> Pre-Trip Form
           </NavLink>
+          <NavLink to="/asset-analytics" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.Reports /> Analytics
+          </NavLink>
         </div>
         
         <div className="nav-section">
@@ -352,6 +356,7 @@ function AppContent() {
         <Route path="/vehicles" element={<Vehicles />} />
         <Route path="/vehicle-checkout" element={<VehicleCheckoutForm />} />
         <Route path="/assets" element={<AssetsDashboard />} />
+        <Route path="/asset-analytics" element={<AssetAnalytics />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     </main>
