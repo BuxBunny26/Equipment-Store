@@ -528,6 +528,11 @@ tr:hover {
   color: var(--secondary-color);
 }
 
+.badge-danger {
+  background: rgba(211, 47, 47, 0.1);
+  color: var(--error-color);
+}
+
 .badge-warning {
   background: rgba(255, 193, 7, 0.15);
   color: #b8860b;
