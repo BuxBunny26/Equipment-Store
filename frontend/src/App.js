@@ -31,6 +31,7 @@ import CellphoneAssignments from './pages/CellphoneAssignments';
 import Vehicles from './pages/Vehicles';
 import VehicleCheckoutForm from './pages/VehicleCheckoutForm';
 import AssetsDashboard from './pages/AssetsDashboard';
+import EquipmentAnalytics from './pages/EquipmentAnalytics';
 
 // Icons as simple SVG components
 const Icons = {
@@ -265,6 +266,9 @@ function AppContent() {
           <NavLink to="/reservations" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <Icons.Calendar /> Reservations
           </NavLink>
+          <NavLink to="/equipment-analytics" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.Reports /> Analytics
+          </NavLink>
         </div>
         
         <div className="nav-section">
@@ -337,6 +341,7 @@ function AppContent() {
         <Route path="/consumables" element={<Consumables />} />
         <Route path="/calibration" element={<Calibration />} />
         <Route path="/reservations" element={<Reservations />} />
+        <Route path="/equipment-analytics" element={<EquipmentAnalytics />} />
         <Route path="/maintenance" element={<Maintenance />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/customer-sites" element={<CustomerSites />} />
