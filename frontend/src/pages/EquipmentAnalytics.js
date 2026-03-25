@@ -193,10 +193,23 @@ function EquipmentAnalytics() {
 
   const truncate = (str, len = 20) => str && str.length > len ? str.slice(0, len - 1) + '…' : str;
 
-  const renderPieLabel = ({ name, percent, cx, x }) => {
-    const label = `${name} (${(percent * 100).toFixed(0)}%)`;
-    const anchor = x > cx ? 'start' : 'end';
-    return <text x={x} y={undefined} textAnchor={anchor} fill="var(--text-primary)" fontSize={12}>{label}</text>;
+  const renderCustomLegend = (props) => {
+    const { payload } = props;
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px 16px', paddingTop: 8 }}>
+        {payload.map((entry, i) => {
+          const total = props.total || 1;
+          const pct = ((entry.payload.value / total) * 100).toFixed(0);
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem' }}>
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: entry.color, display: 'inline-block', flexShrink: 0 }} />
+              <span style={{ color: 'var(--text-primary)' }}>{entry.value}</span>
+              <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{entry.payload.value} ({pct}%)</span>
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   const renderDistribution = () => {
@@ -265,11 +278,11 @@ function EquipmentAnalytics() {
           ) : (
             <ResponsiveContainer width="100%" height={320}>
               <PieChart>
-                <Pie data={statusSummary} dataKey="value" nameKey="name" cx="50%" cy="45%" outerRadius={90} innerRadius={45} paddingAngle={2} label={renderPieLabel} labelLine={{ stroke: 'var(--text-secondary)', strokeWidth: 1 }}>
+                <Pie data={statusSummary} dataKey="value" nameKey="name" cx="50%" cy="42%" outerRadius={90} innerRadius={45} paddingAngle={2}>
                   {statusSummary.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
                 <Tooltip />
-                <Legend wrapperStyle={{ paddingTop: 12 }} />
+                <Legend content={(props) => renderCustomLegend({ ...props, total: equipment.length })} />
               </PieChart>
             </ResponsiveContainer>
           )}
@@ -286,14 +299,14 @@ function EquipmentAnalytics() {
           ) : (
             <ResponsiveContainer width="100%" height={320}>
               <PieChart>
-                <Pie data={calibrationSummary} dataKey="value" nameKey="name" cx="50%" cy="45%" outerRadius={90} innerRadius={45} paddingAngle={2} label={renderPieLabel} labelLine={{ stroke: 'var(--text-secondary)', strokeWidth: 1 }}>
+                <Pie data={calibrationSummary} dataKey="value" nameKey="name" cx="50%" cy="42%" outerRadius={90} innerRadius={45} paddingAngle={2}>
                   {calibrationSummary.map((entry, i) => {
                     const colorMap = { Valid: '#2e7d32', 'Due Soon': '#ed6c02', Expired: '#d32f2f', 'Not Calibrated': '#7b1fa2', 'N/A': '#9e9e9e' };
                     return <Cell key={i} fill={colorMap[entry.name] || COLORS[i]} />;
                   })}
                 </Pie>
                 <Tooltip />
-                <Legend wrapperStyle={{ paddingTop: 12 }} />
+                <Legend content={(props) => renderCustomLegend({ ...props, total: calData.length })} />
               </PieChart>
             </ResponsiveContainer>
           )}
@@ -372,14 +385,14 @@ function EquipmentAnalytics() {
           ) : (
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
-                <Pie data={reservationStatusSummary} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}>
+                <Pie data={reservationStatusSummary} dataKey="value" nameKey="name" cx="50%" cy="42%" outerRadius={90} innerRadius={45} paddingAngle={2}>
                   {reservationStatusSummary.map((entry, i) => {
                     const colorMap = { Pending: '#ed6c02', Approved: '#1976d2', Active: '#2e7d32', Completed: '#9e9e9e', Cancelled: '#d32f2f' };
                     return <Cell key={i} fill={colorMap[entry.name] || COLORS[i]} />;
                   })}
                 </Pie>
                 <Tooltip />
-                <Legend />
+                <Legend content={(props) => renderCustomLegend({ ...props, total: reservations.length })} />
               </PieChart>
             </ResponsiveContainer>
           )}
