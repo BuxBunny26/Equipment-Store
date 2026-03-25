@@ -772,11 +772,10 @@ input[type="search"]::-webkit-search-results-decoration {
 /* Tabs */
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   border-bottom: 2px solid var(--border-color);
   margin-bottom: 20px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+  gap: 0;
 }
 
 .tabs::-webkit-scrollbar {
@@ -793,8 +792,6 @@ input[type="search"]::-webkit-search-results-decoration {
   cursor: pointer;
   position: relative;
   transition: var(--transition-fast);
-  white-space: nowrap;
-  flex-shrink: 0;
 }
 
 .tab:hover {
@@ -2229,6 +2226,10 @@ input[type="search"]::-webkit-search-results-decoration {
 @media (max-width: 768px) {
   /* Tabs: scroll horizontally, smaller padding */
   .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
     margin-left: -16px;
     margin-right: -16px;
     padding: 0 16px;
@@ -2238,6 +2239,8 @@ input[type="search"]::-webkit-search-results-decoration {
   .tab {
     padding: 10px 14px;
     font-size: 0.8rem;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   /* Stats grid: 2 columns on tablet */
