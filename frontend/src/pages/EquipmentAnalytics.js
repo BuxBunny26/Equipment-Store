@@ -9,10 +9,30 @@ import { useOperator } from '../context/OperatorContext';
 
 const COLORS = ['#1976d2', '#2e7d32', '#ed6c02', '#d32f2f', '#9c27b0', '#00796b', '#5d4037', '#455a64', '#c2185b', '#0288d1'];
 
+function useWindowWidth() {
+  const [width, setWidth] = useState(window.innerWidth);
+  useEffect(() => {
+    let timeout;
+    const handleResize = () => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => setWidth(window.innerWidth), 150);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => { window.removeEventListener('resize', handleResize); clearTimeout(timeout); };
+  }, []);
+  return width;
+}
+
 function EquipmentAnalytics() {
   const [activeTab, setActiveTab] = useState('distribution');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const windowWidth = useWindowWidth();
+  const isMobile = windowWidth <= 768;
+  const isSmall = windowWidth <= 480;
+  const yAxisWidth = isSmall ? 80 : isMobile ? 110 : 160;
+  const pieRadius = isSmall ? 65 : isMobile ? 75 : 90;
+  const pieInner = isSmall ? 30 : isMobile ? 38 : 45;
   const { operator } = useOperator();
 
   // Data stores
@@ -322,7 +342,7 @@ function EquipmentAnalytics() {
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
     return (
-      <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 8, padding: '10px 14px', boxShadow: 'var(--shadow-md)' }}>
+      <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 8, padding: isMobile ? '8px 10px' : '10px 14px', boxShadow: 'var(--shadow-md)', maxWidth: isMobile ? 200 : 'none', fontSize: isMobile ? '0.8rem' : 'inherit' }}>
         <p style={{ margin: 0, fontWeight: 600, marginBottom: 4 }}>{label}</p>
         {payload.map((p, i) => (
           <p key={i} style={{ margin: 0, color: p.color, fontSize: '0.85rem' }}>
@@ -333,18 +353,19 @@ function EquipmentAnalytics() {
     );
   };
 
+  const truncLabel = (str) => truncate(str, isSmall ? 12 : isMobile ? 16 : 22);
   const truncate = (str, len = 20) => str && str.length > len ? str.slice(0, len - 1) + '…' : str;
 
   const renderCustomLegend = (props) => {
     const { payload } = props;
     return (
-      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px 16px', paddingTop: 8 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: isMobile ? '6px 10px' : '8px 16px', paddingTop: 8 }}>
         {payload.map((entry, i) => {
           const total = props.total || 1;
           const pct = ((entry.payload.value / total) * 100).toFixed(0);
           return (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem' }}>
-              <span style={{ width: 10, height: 10, borderRadius: 2, background: entry.color, display: 'inline-block', flexShrink: 0 }} />
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 6, fontSize: isMobile ? '0.72rem' : '0.82rem' }}>
+              <span style={{ width: isMobile ? 8 : 10, height: isMobile ? 8 : 10, borderRadius: 2, background: entry.color, display: 'inline-block', flexShrink: 0 }} />
               <span style={{ color: 'var(--text-primary)' }}>{entry.value}</span>
               <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{entry.payload.value} ({pct}%)</span>
             </div>
@@ -376,7 +397,7 @@ function EquipmentAnalytics() {
               <BarChart data={locSorted} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" horizontal={false} />
                 <XAxis type="number" allowDecimals={false} />
-                <YAxis type="category" dataKey="location" tick={{ fontSize: 12 }} width={160} tickFormatter={(v) => truncate(v, 22)} />
+                <YAxis type="category" dataKey="location" tick={{ fontSize: isMobile ? 10 : 12 }} width={yAxisWidth} tickFormatter={truncLabel} />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend />
                 <Bar dataKey="available" name="Available" fill="#2e7d32" stackId="a" radius={[0, 4, 4, 0]} />
@@ -399,7 +420,7 @@ function EquipmentAnalytics() {
               <BarChart data={catSorted} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" horizontal={false} />
                 <XAxis type="number" allowDecimals={false} />
-                <YAxis type="category" dataKey="category" tick={{ fontSize: 12 }} width={160} tickFormatter={(v) => truncate(v, 22)} />
+                <YAxis type="category" dataKey="category" tick={{ fontSize: isMobile ? 10 : 12 }} width={yAxisWidth} tickFormatter={truncLabel} />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend />
                 <Bar dataKey="available" name="Available" fill="#1976d2" stackId="a" radius={[0, 4, 4, 0]} />
@@ -420,7 +441,7 @@ function EquipmentAnalytics() {
           ) : (
             <ResponsiveContainer width="100%" height={320}>
               <PieChart>
-                <Pie data={statusSummary} dataKey="value" nameKey="name" cx="50%" cy="42%" outerRadius={90} innerRadius={45} paddingAngle={2}>
+                <Pie data={statusSummary} dataKey="value" nameKey="name" cx="50%" cy="42%" outerRadius={pieRadius} innerRadius={pieInner} paddingAngle={2}>
                   {statusSummary.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
                 <Tooltip />
@@ -441,7 +462,7 @@ function EquipmentAnalytics() {
           ) : (
             <ResponsiveContainer width="100%" height={320}>
               <PieChart>
-                <Pie data={calibrationSummary} dataKey="value" nameKey="name" cx="50%" cy="42%" outerRadius={90} innerRadius={45} paddingAngle={2}>
+                <Pie data={calibrationSummary} dataKey="value" nameKey="name" cx="50%" cy="42%" outerRadius={pieRadius} innerRadius={pieInner} paddingAngle={2}>
                   {calibrationSummary.map((entry, i) => {
                     const colorMap = { Valid: '#2e7d32', 'Due Soon': '#ed6c02', Expired: '#d32f2f', 'Not Calibrated': '#7b1fa2', 'N/A': '#9e9e9e' };
                     return <Cell key={i} fill={colorMap[entry.name] || COLORS[i]} />;
@@ -466,15 +487,15 @@ function EquipmentAnalytics() {
           <div className="card-header">
             <h3 className="card-title">Monthly Check-Out / Check-In Trend</h3>
           </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={movementTrend} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+          <ResponsiveContainer width="100%" height={isMobile ? 260 : 300}>
+            <LineChart data={movementTrend} margin={{ top: 5, right: 20, left: 0, bottom: isMobile ? 20 : 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-              <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-              <YAxis allowDecimals={false} />
+              <XAxis dataKey="label" tick={{ fontSize: isMobile ? 9 : 12 }} angle={isMobile ? -45 : 0} textAnchor={isMobile ? 'end' : 'middle'} height={isMobile ? 50 : 30} interval={isMobile ? 1 : 0} />
+              <YAxis allowDecimals={false} width={isMobile ? 30 : 60} />
               <Tooltip content={<CustomTooltip />} />
               <Legend />
-              <Line type="monotone" dataKey="checkouts" name="Check-Outs" stroke="#d32f2f" strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="checkins" name="Check-Ins" stroke="#2e7d32" strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="checkouts" name="Check-Outs" stroke="#d32f2f" strokeWidth={2} dot={{ r: isMobile ? 2 : 3 }} />
+              <Line type="monotone" dataKey="checkins" name="Check-Ins" stroke="#2e7d32" strokeWidth={2} dot={{ r: isMobile ? 2 : 3 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -484,11 +505,11 @@ function EquipmentAnalytics() {
           <div className="card-header">
             <h3 className="card-title">Reservations vs Actual Usage</h3>
           </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={usageVsReservations} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+          <ResponsiveContainer width="100%" height={isMobile ? 260 : 300}>
+            <BarChart data={usageVsReservations} margin={{ top: 5, right: 20, left: 0, bottom: isMobile ? 20 : 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-              <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-              <YAxis allowDecimals={false} />
+              <XAxis dataKey="label" tick={{ fontSize: isMobile ? 9 : 12 }} angle={isMobile ? -45 : 0} textAnchor={isMobile ? 'end' : 'middle'} height={isMobile ? 50 : 30} interval={isMobile ? 1 : 0} />
+              <YAxis allowDecimals={false} width={isMobile ? 30 : 60} />
               <Tooltip content={<CustomTooltip />} />
               <Legend />
               <Bar dataKey="reservations" name="Reservations" fill="#1976d2" />
@@ -509,7 +530,7 @@ function EquipmentAnalytics() {
               <BarChart data={topEquipment} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
                 <XAxis type="number" allowDecimals={false} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={140} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: isMobile ? 9 : 11 }} width={isSmall ? 80 : isMobile ? 100 : 140} />
                 <Tooltip content={<CustomTooltip />} />
                 <Bar dataKey="checkouts" name="Check-Outs" fill="#9c27b0" />
               </BarChart>
@@ -527,7 +548,7 @@ function EquipmentAnalytics() {
           ) : (
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
-                <Pie data={reservationStatusSummary} dataKey="value" nameKey="name" cx="50%" cy="42%" outerRadius={90} innerRadius={45} paddingAngle={2}>
+                <Pie data={reservationStatusSummary} dataKey="value" nameKey="name" cx="50%" cy="42%" outerRadius={pieRadius} innerRadius={pieInner} paddingAngle={2}>
                   {reservationStatusSummary.map((entry, i) => {
                     const colorMap = { Pending: '#ed6c02', Approved: '#1976d2', Active: '#2e7d32', Completed: '#9e9e9e', Cancelled: '#d32f2f' };
                     return <Cell key={i} fill={colorMap[entry.name] || COLORS[i]} />;
@@ -696,8 +717,8 @@ function EquipmentAnalytics() {
                       <span style={{ flex: 1 }}>{s.site}</span>
                       <span className="badge" style={{ background: COLORS[si % COLORS.length] }}>{s.count}</span>
                     </summary>
-                    <div style={{ padding: '4px 12px 12px' }}>
-                      <table style={{ width: '100%', fontSize: '0.82rem', borderCollapse: 'collapse' }}>
+                    <div style={{ padding: '4px 12px 12px', overflowX: isMobile ? 'auto' : 'visible', WebkitOverflowScrolling: 'touch' }}>
+                      <table style={{ width: '100%', fontSize: isMobile ? '0.75rem' : '0.82rem', borderCollapse: 'collapse', minWidth: isMobile ? 320 : 'auto' }}>
                         <thead>
                           <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
                             <th style={{ textAlign: 'left', padding: '4px 6px', color: 'var(--text-secondary)' }}>ID</th>
@@ -737,7 +758,7 @@ function EquipmentAnalytics() {
                 <BarChart data={siteCheckoutsByCategory.data} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" horizontal={false} />
                   <XAxis type="number" allowDecimals={false} />
-                  <YAxis type="category" dataKey="site" tick={{ fontSize: 12 }} width={160} tickFormatter={(v) => truncate(v, 22)} />
+                  <YAxis type="category" dataKey="site" tick={{ fontSize: isMobile ? 10 : 12 }} width={yAxisWidth} tickFormatter={truncLabel} />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend />
                   {siteCheckoutsByCategory.categories.map((cat, i) => (
@@ -762,7 +783,7 @@ function EquipmentAnalytics() {
               <BarChart data={[...checkoutDatesBySite].reverse()} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" horizontal={false} />
                 <XAxis type="number" allowDecimals={false} />
-                <YAxis type="category" dataKey="date" tick={{ fontSize: 11 }} width={100} />
+                <YAxis type="category" dataKey="date" tick={{ fontSize: isMobile ? 9 : 11 }} width={isSmall ? 70 : 100} />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend />
                 {checkoutSites.map((site, i) => (
@@ -820,11 +841,11 @@ function EquipmentAnalytics() {
           {equipmentAgeData.buckets.length === 0 ? (
             <p style={{ color: 'var(--text-secondary)' }}>No age data available</p>
           ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={equipmentAgeData.buckets} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+            <ResponsiveContainer width="100%" height={isMobile ? 260 : 300}>
+              <BarChart data={equipmentAgeData.buckets} margin={{ top: 5, right: 20, left: 0, bottom: isMobile ? 20 : 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                <YAxis allowDecimals={false} />
+                <XAxis dataKey="name" tick={{ fontSize: isMobile ? 8 : 11 }} angle={isMobile ? -30 : 0} textAnchor={isMobile ? 'end' : 'middle'} height={isMobile ? 50 : 30} />
+                <YAxis allowDecimals={false} width={isMobile ? 30 : 60} />
                 <Tooltip content={<CustomTooltip />} />
                 <Bar dataKey="value" name="Equipment Count" fill="#1976d2" radius={[4, 4, 0, 0]}>
                   {equipmentAgeData.buckets.map((_, i) => (
@@ -917,11 +938,11 @@ function EquipmentAnalytics() {
           <h3 className="card-title">30-Day Availability Forecast</h3>
           <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Equipment availability vs reservations</span>
         </div>
-        <ResponsiveContainer width="100%" height={350}>
+        <ResponsiveContainer width="100%" height={isMobile ? 280 : 350}>
           <BarChart data={availabilityCalendar} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={2} angle={-45} textAnchor="end" height={60} />
-            <YAxis allowDecimals={false} />
+            <XAxis dataKey="label" tick={{ fontSize: isMobile ? 8 : 10 }} interval={isMobile ? 3 : 2} angle={-45} textAnchor="end" height={isMobile ? 50 : 60} />
+            <YAxis allowDecimals={false} width={isMobile ? 30 : 60} />
             <Tooltip content={<CustomTooltip />} />
             <Legend />
             <Bar dataKey="available" name="Available" stackId="a" fill="#2e7d32" />
@@ -1036,7 +1057,7 @@ function EquipmentAnalytics() {
               <BarChart data={personalVsTeam.top10} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" horizontal={false} />
                 <XAxis type="number" allowDecimals={false} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={140} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: isMobile ? 9 : 11 }} width={isSmall ? 80 : isMobile ? 100 : 140} />
                 <Tooltip content={<CustomTooltip />} />
                 <Bar dataKey="checkouts" name="Check-Outs" radius={[0, 4, 4, 0]}>
                   {personalVsTeam.top10.map((entry, i) => (

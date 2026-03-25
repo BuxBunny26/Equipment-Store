@@ -774,6 +774,13 @@ input[type="search"]::-webkit-search-results-decoration {
   display: flex;
   border-bottom: 2px solid var(--border-color);
   margin-bottom: 20px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tab {
@@ -786,6 +793,8 @@ input[type="search"]::-webkit-search-results-decoration {
   cursor: pointer;
   position: relative;
   transition: var(--transition-fast);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .tab:hover {
@@ -2211,6 +2220,84 @@ input[type="search"]::-webkit-search-results-decoration {
   .stat-card {
     padding: 12px;
   }
+}
+
+/* ============================================
+   ANALYTICS / CHARTS MOBILE
+   ============================================ */
+
+@media (max-width: 768px) {
+  /* Tabs: scroll horizontally, smaller padding */
+  .tabs {
+    margin-left: -16px;
+    margin-right: -16px;
+    padding: 0 16px;
+    gap: 0;
+  }
+
+  .tab {
+    padding: 10px 14px;
+    font-size: 0.8rem;
+  }
+
+  /* Stats grid: 2 columns on tablet */
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px;
+  }
+
+  /* Chart card headers */
+  .card .card-header {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .card .card-title {
+    font-size: 0.95rem;
+  }
+
+  /* Recharts container min‑height so charts don't collapse */
+  .recharts-responsive-container {
+    min-height: 250px;
+  }
+
+  /* Constrain wide horizontal-bar Y-axis labels */
+  .recharts-yAxis .recharts-cartesian-axis-tick text {
+    font-size: 10px !important;
+  }
+
+  /* Legend wraps nicely */
+  .recharts-legend-wrapper {
+    padding-top: 4px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .tabs {
+    margin-left: -12px;
+    margin-right: -12px;
+    padding: 0 12px;
+  }
+
+  .tab {
+    padding: 8px 12px;
+    font-size: 0.75rem;
+  }
+
+  /* Stats grid: single column on small phones */
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .card .card-title {
+    font-size: 0.88rem;
+  }
+
+  /* Recharts: smaller tick fonts */
+  .recharts-cartesian-axis-tick text {
+    font-size: 9px !important;
+  }
+}
   
   .stat-value {
     font-size: 1.25rem;
