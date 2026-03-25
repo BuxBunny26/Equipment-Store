@@ -298,6 +298,8 @@ function LaptopAssignments() {
       { label: 'Accessories', accessor: 'accessories' },
       { label: 'Insurance Policy', accessor: 'insurance_policy' },
       { label: 'Insurance Expiry', accessor: r => r.insurance_expiry ? new Date(r.insurance_expiry).toLocaleDateString() : '' },
+      { label: 'Setup Account', accessor: 'setup_account' },
+      { label: 'MFA Phone', accessor: 'mfa_phone' },
       { label: 'Notes', accessor: 'notes' },
     ];
     exportData(format, sortedFiltered, exportColumns, 'laptop_assignments', 'Laptop Assignments Report');
@@ -890,6 +892,7 @@ function LaptopAssignments() {
           item={editItem}
           personnel={personnel}
           allAssignments={assignments}
+          operatorRole={operatorRole}
           onClose={() => { setShowModal(false); setEditItem(null); }}
           onSuccess={() => { setShowModal(false); setEditItem(null); fetchData(); }}
         />
@@ -1014,7 +1017,8 @@ function ReassignModal({ item, personnel, onClose, onSuccess }) {
   );
 }
 
-function LaptopModal({ item, personnel, allAssignments, onClose, onSuccess }) {
+function LaptopModal({ item, personnel, allAssignments, operatorRole, onClose, onSuccess }) {
+  const isAdmin = operatorRole?.toLowerCase() === 'admin';
   const [form, setForm] = useState({
     employee_name: item?.employee_name || '',
     employee_id: item?.employee_id || '',
@@ -1043,6 +1047,9 @@ function LaptopModal({ item, personnel, allAssignments, onClose, onSuccess }) {
     accessories: item?.accessories || '',
     insurance_policy: item?.insurance_policy || '',
     insurance_expiry: item?.insurance_expiry || '',
+    setup_account: item?.setup_account || '',
+    laptop_pin: item?.laptop_pin || '',
+    mfa_phone: item?.mfa_phone || '',
   });
   const [saving, setSaving] = useState(false);
   const [serialMatch, setSerialMatch] = useState(null);
@@ -1139,6 +1146,9 @@ function LaptopModal({ item, personnel, allAssignments, onClose, onSuccess }) {
       if (!payload.accessories) payload.accessories = null;
       if (!payload.insurance_policy) payload.insurance_policy = null;
       if (!payload.insurance_expiry) payload.insurance_expiry = null;
+      if (!payload.setup_account) payload.setup_account = null;
+      if (!payload.laptop_pin) payload.laptop_pin = null;
+      if (!payload.mfa_phone) payload.mfa_phone = null;
 
       if (item) {
         // If status changed, use updateStatus to log history
@@ -1418,6 +1428,31 @@ function LaptopModal({ item, personnel, allAssignments, onClose, onSuccess }) {
               </div>
             </div>
 
+            {/* IT Department Fields */}
+            <div style={{ border: '1px solid var(--border-color)', borderRadius: 8, padding: 12, marginBottom: 8, background: 'var(--bg-secondary)' }}>
+              <div style={{ fontSize: '0.82rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <Icons.Shield size={14} style={{ marginRight: 4, verticalAlign: 'middle' }} /> IT Setup Info
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                  <label className="form-label">Setup Account</label>
+                  <input type="text" name="setup_account" value={form.setup_account} onChange={handleChange} className="form-input" placeholder="e.g. user@company.com" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Laptop PIN {!isAdmin && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>(Admin only)</span>}</label>
+                  {isAdmin ? (
+                    <input type="text" name="laptop_pin" value={form.laptop_pin} onChange={handleChange} className="form-input" placeholder="Device PIN" />
+                  ) : (
+                    <input type="text" className="form-input" value={form.laptop_pin ? '••••••' : ''} disabled placeholder="Hidden" style={{ opacity: 0.5 }} />
+                  )}
+                </div>
+                <div className="form-group">
+                  <label className="form-label">MFA Phone Number</label>
+                  <input type="text" name="mfa_phone" value={form.mfa_phone} onChange={handleChange} className="form-input" placeholder="e.g. +27 82 123 4567" />
+                </div>
+              </div>
+            </div>
+
             <div className="form-group">
               <label className="form-label">Laptop Status</label>
               <select
@@ -1676,7 +1711,8 @@ function ImportModal({ onClose, onSuccess }) {
     'employee_name', 'laptop_brand', 'laptop_model', 'serial_number',
     'employee_id', 'employee_email', 'asset_tag', 'date_assigned', 'laptop_status',
     'device_cost', 'monthly_cost', 'warranty_end_date', 'contract_start_date', 'contract_end_date',
-    'device_condition', 'accessories', 'insurance_policy', 'insurance_expiry', 'notes',
+    'device_condition', 'accessories', 'insurance_policy', 'insurance_expiry',
+    'setup_account', 'laptop_pin', 'mfa_phone', 'notes',
     'setup_laptop', 'setup_m365', 'setup_adobe', 'setup_zoho', 'setup_smartsheet', 'setup_distribution_lists'
   ];
 
@@ -1771,6 +1807,9 @@ function ImportModal({ onClose, onSuccess }) {
           accessories: row.accessories || null,
           insurance_policy: row.insurance_policy || null,
           insurance_expiry: row.insurance_expiry || null,
+          setup_account: row.setup_account || null,
+          laptop_pin: row.laptop_pin || null,
+          mfa_phone: row.mfa_phone || null,
           notes: row.notes || null,
         });
       } catch (err) {
