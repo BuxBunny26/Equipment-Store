@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { reportsApi, reservationsApi, equipmentApi, calibrationApi } from '../services/api';
 import { Icons } from '../components/Icons';
+import { useOperator } from '../context/OperatorContext';
 
 const COLORS = ['#1976d2', '#2e7d32', '#ed6c02', '#d32f2f', '#9c27b0', '#00796b', '#5d4037', '#455a64', '#c2185b', '#0288d1'];
 
@@ -12,6 +13,7 @@ function EquipmentAnalytics() {
   const [activeTab, setActiveTab] = useState('distribution');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { operator } = useOperator();
 
   // Data stores
   const [locationData, setLocationData] = useState([]);
@@ -232,6 +234,88 @@ function EquipmentAnalytics() {
     movements.filter(m => m.action === 'OUT').forEach(m => sites.add(m.location || 'Unknown'));
     return [...sites].sort();
   }, [movements]);
+
+  // -- Equipment Age Profile --
+  const equipmentAgeData = useMemo(() => {
+    const now = new Date();
+    const ageBuckets = { '< 1 year': 0, '1-2 years': 0, '2-3 years': 0, '3-5 years': 0, '5-10 years': 0, '10+ years': 0 };
+    const ageList = [];
+    equipment.forEach(e => {
+      const dateStr = e.purchase_date || e.created_at;
+      if (!dateStr) return;
+      const acquired = new Date(dateStr);
+      const ageYears = (now - acquired) / (1000 * 60 * 60 * 24 * 365.25);
+      ageList.push({ name: e.equipment_name, id: e.equipment_id, age: ageYears, status: e.status, category: e.category_name });
+      if (ageYears < 1) ageBuckets['< 1 year']++;
+      else if (ageYears < 2) ageBuckets['1-2 years']++;
+      else if (ageYears < 3) ageBuckets['2-3 years']++;
+      else if (ageYears < 5) ageBuckets['3-5 years']++;
+      else if (ageYears < 10) ageBuckets['5-10 years']++;
+      else ageBuckets['10+ years']++;
+    });
+    const buckets = Object.entries(ageBuckets).filter(([, v]) => v > 0).map(([name, value]) => ({ name, value }));
+    const oldest = [...ageList].sort((a, b) => b.age - a.age).slice(0, 10);
+    const avgAge = ageList.length > 0 ? ageList.reduce((s, e) => s + e.age, 0) / ageList.length : 0;
+    return { buckets, oldest, avgAge, total: ageList.length };
+  }, [equipment]);
+
+  // -- Availability Calendar: next 30 days --
+  const availabilityCalendar = useMemo(() => {
+    const now = new Date();
+    const days = [];
+    const activeRes = reservations.filter(r => r.status !== 'cancelled' && r.status !== 'completed');
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+      const dateStr = d.toISOString().split('T')[0];
+      const label = d.toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' });
+      const reservedCount = activeRes.filter(r => {
+        const start = new Date(r.start_date);
+        const end = new Date(r.end_date);
+        return d >= start && d <= end;
+      }).length;
+      const checkedOutCount = equipment.filter(e => e.status === 'Checked Out').length;
+      const totalCount = equipment.length;
+      const availableCount = Math.max(0, totalCount - checkedOutCount - reservedCount);
+      days.push({ date: dateStr, label, reserved: reservedCount, available: availableCount, checkedOut: checkedOutCount });
+    }
+    return days;
+  }, [reservations, equipment]);
+
+  // -- Personal vs Team Usage --
+  const personalVsTeam = useMemo(() => {
+    const checkouts = movements.filter(m => m.action === 'OUT');
+    // Count checkouts per person
+    const personCounts = {};
+    checkouts.forEach(m => {
+      const name = m.personnel || 'Unknown';
+      const empId = m.personnel_employee_id || '';
+      const key = empId || name;
+      if (!personCounts[key]) personCounts[key] = { name, empId, count: 0 };
+      personCounts[key].count++;
+    });
+    const allPersons = Object.values(personCounts).sort((a, b) => b.count - a.count);
+    const totalCheckouts = checkouts.length;
+    const avgPerPerson = allPersons.length > 0 ? totalCheckouts / allPersons.length : 0;
+
+    // Current operator stats
+    let myCount = 0;
+    let myRank = 0;
+    if (operator) {
+      const myKey = operator.employee_id || operator.full_name;
+      const myEntry = personCounts[myKey];
+      myCount = myEntry ? myEntry.count : 0;
+      myRank = allPersons.findIndex(p => (p.empId || p.name) === myKey) + 1;
+    }
+
+    // Top 10 for comparison chart
+    const top10 = allPersons.slice(0, 10).map(p => ({
+      name: p.name.length > 20 ? p.name.slice(0, 17) + '...' : p.name,
+      checkouts: p.count,
+      isMe: operator && (p.empId === operator.employee_id || p.name === operator.full_name),
+    }));
+
+    return { allPersons, top10, totalCheckouts, avgPerPerson, myCount, myRank, totalPersons: allPersons.length };
+  }, [movements, operator]);
 
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-ZA') : '-';
 
@@ -692,6 +776,327 @@ function EquipmentAnalytics() {
     );
   };
 
+  const renderEquipmentAge = () => (
+    <div>
+      {/* Stat cards */}
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-icon blue"><Icons.Package size={24} /></div>
+          <div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipmentAgeData.total}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Equipment Tracked</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon green"><Icons.Clock size={24} /></div>
+          <div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipmentAgeData.avgAge.toFixed(1)} yrs</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Average Age</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon orange"><Icons.Warning size={24} /></div>
+          <div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipmentAgeData.oldest.length > 0 ? equipmentAgeData.oldest[0].age.toFixed(1) + ' yrs' : '-'}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Oldest Equipment</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon purple"><Icons.Calendar size={24} /></div>
+          <div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipmentAgeData.buckets.find(b => b.name === '< 1 year')?.value || 0}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Added This Year</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 480px), 1fr))', gap: 20 }}>
+        {/* Age distribution bar chart */}
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">Age Distribution</h3>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Based on {equipment[0]?.purchase_date ? 'purchase date' : 'date added'}</span>
+          </div>
+          {equipmentAgeData.buckets.length === 0 ? (
+            <p style={{ color: 'var(--text-secondary)' }}>No age data available</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={equipmentAgeData.buckets} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="value" name="Equipment Count" fill="#1976d2" radius={[4, 4, 0, 0]}>
+                  {equipmentAgeData.buckets.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Oldest equipment table */}
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">Oldest Equipment</h3>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Top 10 by age</span>
+          </div>
+          {equipmentAgeData.oldest.length === 0 ? (
+            <p style={{ color: 'var(--text-secondary)' }}>No data</p>
+          ) : (
+            <div className="table-container">
+              <table className="equipment-table">
+                <thead>
+                  <tr>
+                    <th>Equipment</th>
+                    <th>Category</th>
+                    <th>Status</th>
+                    <th>Age</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {equipmentAgeData.oldest.map((e, i) => (
+                    <tr key={i}>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{truncate(e.name, 28)}</div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{e.id}</div>
+                      </td>
+                      <td>{e.category || '-'}</td>
+                      <td>
+                        <span className="badge" style={{ background: e.status === 'Available' ? '#2e7d32' : e.status === 'Checked Out' ? '#ed6c02' : e.status === 'Retired' ? '#9e9e9e' : '#1976d2', fontSize: '0.7rem' }}>{e.status}</span>
+                      </td>
+                      <td style={{ fontWeight: 600 }}>{e.age.toFixed(1)} yrs</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderAvailability = () => (
+    <div>
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-icon green"><Icons.Check size={24} /></div>
+          <div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipment.filter(e => e.status === 'Available').length}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Available Now</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon orange"><Icons.Package size={24} /></div>
+          <div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipment.filter(e => e.status === 'Checked Out').length}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Checked Out</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon blue"><Icons.Calendar size={24} /></div>
+          <div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{reservations.filter(r => r.status !== 'cancelled' && r.status !== 'completed').length}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Active Reservations</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon red"><Icons.Wrench size={24} /></div>
+          <div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipment.filter(e => e.status === 'In Maintenance').length}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>In Maintenance</div>
+          </div>
+        </div>
+      </div>
+
+      {/* 30-day availability timeline */}
+      <div className="card">
+        <div className="card-header">
+          <h3 className="card-title">30-Day Availability Forecast</h3>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Equipment availability vs reservations</span>
+        </div>
+        <ResponsiveContainer width="100%" height={350}>
+          <BarChart data={availabilityCalendar} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+            <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={2} angle={-45} textAnchor="end" height={60} />
+            <YAxis allowDecimals={false} />
+            <Tooltip content={<CustomTooltip />} />
+            <Legend />
+            <Bar dataKey="available" name="Available" stackId="a" fill="#2e7d32" />
+            <Bar dataKey="reserved" name="Reserved" stackId="a" fill="#1976d2" />
+            <Bar dataKey="checkedOut" name="Checked Out" stackId="a" fill="#ed6c02" />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Upcoming reservations list */}
+      <div className="card" style={{ marginTop: 20 }}>
+        <div className="card-header">
+          <h3 className="card-title">Upcoming Reservations</h3>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Next 30 days</span>
+        </div>
+        {(() => {
+          const now = new Date();
+          const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30);
+          const upcoming = reservations
+            .filter(r => r.status !== 'cancelled' && r.status !== 'completed' && new Date(r.start_date) <= cutoff)
+            .sort((a, b) => new Date(a.start_date) - new Date(b.start_date));
+
+          if (upcoming.length === 0) {
+            return (
+              <div className="empty-state">
+                <h3>No upcoming reservations</h3>
+                <p>No equipment reserved in the next 30 days</p>
+              </div>
+            );
+          }
+          return (
+            <div className="table-container">
+              <table className="equipment-table">
+                <thead>
+                  <tr>
+                    <th>Equipment</th>
+                    <th>Reserved By</th>
+                    <th>Start</th>
+                    <th>End</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {upcoming.map((r, i) => (
+                    <tr key={i}>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{truncate(r.equipment_name, 28)}</div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{r.equipment_code}</div>
+                      </td>
+                      <td>{r.personnel_name || '-'}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatDate(r.start_date)}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatDate(r.end_date)}</td>
+                      <td>
+                        <span className="badge" style={{ background: r.status === 'approved' ? '#1976d2' : r.status === 'active' ? '#2e7d32' : '#ed6c02', fontSize: '0.7rem' }}>{r.status}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
+      </div>
+    </div>
+  );
+
+  const renderPersonalVsTeam = () => (
+    <div>
+      {/* Stat cards */}
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-icon blue"><Icons.Users size={24} /></div>
+          <div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{personalVsTeam.totalPersons}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Active Users</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon green"><Icons.TrendingUp size={24} /></div>
+          <div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{personalVsTeam.totalCheckouts}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Total Check-Outs</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon orange"><Icons.BarChart size={24} /></div>
+          <div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{personalVsTeam.avgPerPerson.toFixed(1)}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Avg per Person</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon purple"><Icons.Check size={24} /></div>
+          <div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{operator ? `${personalVsTeam.myCount} (#${personalVsTeam.myRank || '-'})` : 'Select operator'}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{operator ? 'Your Check-Outs (Rank)' : 'No operator selected'}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 480px), 1fr))', gap: 20 }}>
+        {/* Top 10 users bar chart */}
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">Top 10 Most Active Users</h3>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>By check-out count</span>
+          </div>
+          {personalVsTeam.top10.length === 0 ? (
+            <p style={{ color: 'var(--text-secondary)' }}>No usage data</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={Math.max(280, personalVsTeam.top10.length * 36 + 60)}>
+              <BarChart data={personalVsTeam.top10} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" horizontal={false} />
+                <XAxis type="number" allowDecimals={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={140} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="checkouts" name="Check-Outs" radius={[0, 4, 4, 0]}>
+                  {personalVsTeam.top10.map((entry, i) => (
+                    <Cell key={i} fill={entry.isMe ? '#d32f2f' : COLORS[i % COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+          {operator && <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: 8, textAlign: 'center' }}>Your bar is highlighted in red</p>}
+        </div>
+
+        {/* All users table */}
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">All Users Usage</h3>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{personalVsTeam.totalPersons} users</span>
+          </div>
+          {personalVsTeam.allPersons.length === 0 ? (
+            <p style={{ color: 'var(--text-secondary)' }}>No data</p>
+          ) : (
+            <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+              <table className="equipment-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Check-Outs</th>
+                    <th>vs Avg</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {personalVsTeam.allPersons.map((p, i) => {
+                    const isMe = operator && (p.empId === operator.employee_id || p.name === operator.full_name);
+                    const diff = p.count - personalVsTeam.avgPerPerson;
+                    return (
+                      <tr key={i} style={isMe ? { background: 'var(--highlight-bg, rgba(25, 118, 210, 0.08))' } : {}}>
+                        <td style={{ fontWeight: 600 }}>{i + 1}</td>
+                        <td>
+                          <span style={{ fontWeight: isMe ? 700 : 400 }}>{p.name}</span>
+                          {isMe && <span className="badge" style={{ background: '#d32f2f', fontSize: '0.65rem', marginLeft: 6 }}>You</span>}
+                        </td>
+                        <td style={{ fontWeight: 600 }}>{p.count}</td>
+                        <td>
+                          <span style={{ color: diff >= 0 ? '#2e7d32' : '#d32f2f', fontWeight: 600 }}>
+                            {diff >= 0 ? '+' : ''}{diff.toFixed(1)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   const renderContent = () => {
     if (loading) {
       return (
@@ -722,23 +1127,11 @@ function EquipmentAnalytics() {
       case 'location':
         return renderLocationUsage();
       case 'age':
-        return (
-          <div className="card"><div className="card-header"><h3 className="card-title">Equipment Age Profile</h3></div>
-            <div style={{ color: 'var(--text-secondary)', padding: 24 }}>Equipment age profile analytics coming soon...</div>
-          </div>
-        );
+        return renderEquipmentAge();
       case 'availability':
-        return (
-          <div className="card"><div className="card-header"><h3 className="card-title">Availability Calendar</h3></div>
-            <div style={{ color: 'var(--text-secondary)', padding: 24 }}>Availability calendar/timeline coming soon...</div>
-          </div>
-        );
+        return renderAvailability();
       case 'personal':
-        return (
-          <div className="card"><div className="card-header"><h3 className="card-title">Personal vs Team Usage</h3></div>
-            <div style={{ color: 'var(--text-secondary)', padding: 24 }}>Personal vs team usage analytics coming soon...</div>
-          </div>
-        );
+        return renderPersonalVsTeam();
       case 'failures':
         return (
           <div className="card"><div className="card-header"><h3 className="card-title">Reservation Failures/Downtime Reasons</h3></div>

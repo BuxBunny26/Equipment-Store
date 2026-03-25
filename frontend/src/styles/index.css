@@ -1649,6 +1649,7 @@ input[type="search"]::-webkit-search-results-decoration {
     margin: 0;
     max-height: calc(100vh - 16px);
     box-sizing: border-box;
+    overflow-x: hidden;
   }
 
   .modal-header {

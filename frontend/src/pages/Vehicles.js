@@ -1491,8 +1491,8 @@ function VehicleModal({ item, onClose, onSuccess }) {
           <button className="btn btn-sm btn-secondary" onClick={onClose}><Icons.Close size={16} /></button>
         </div>
         <form onSubmit={handleSubmit}>
-          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '70vh', overflowY: 'auto' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div className="form-grid-2">
               <div className="form-group">
                 <label className="form-label">Make *</label>
                 <select name="make" value={form.make} onChange={handleChange} className="form-input" required>
@@ -1508,7 +1508,7 @@ function VehicleModal({ item, onClose, onSuccess }) {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="form-grid-2">
               <div className="form-group">
                 <label className="form-label">Registration Number *</label>
                 <input type="text" name="registration_number" value={form.registration_number} onChange={handleChange} className="form-input" placeholder="e.g. BR 02 GL ZN" required />
@@ -1519,7 +1519,7 @@ function VehicleModal({ item, onClose, onSuccess }) {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="form-grid-2">
               <div className="form-group">
                 <label className="form-label">Color</label>
                 <input type="text" name="color" value={form.color} onChange={handleChange} className="form-input" placeholder="e.g. White" />
@@ -1535,7 +1535,7 @@ function VehicleModal({ item, onClose, onSuccess }) {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="form-grid-2">
               <div className="form-group">
                 <label className="form-label">VIN Number</label>
                 <input type="text" name="vin_number" value={form.vin_number} onChange={handleChange} className="form-input" placeholder="Vehicle Identification Number" />
@@ -1546,7 +1546,7 @@ function VehicleModal({ item, onClose, onSuccess }) {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="form-grid-2">
               <div className="form-group">
                 <label className="form-label">QR Code</label>
                 <input type="text" name="qr_code" value={form.qr_code} onChange={handleChange} className="form-input" placeholder="QR code identifier" />
@@ -1557,7 +1557,7 @@ function VehicleModal({ item, onClose, onSuccess }) {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="form-grid-2">
               <div className="form-group">
                 <label className="form-label">License Disk Expiry</label>
                 <input type="date" name="license_disk_expiry" value={form.license_disk_expiry} onChange={handleChange} className="form-input" />
@@ -1568,7 +1568,7 @@ function VehicleModal({ item, onClose, onSuccess }) {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="form-grid-2">
               <div className="form-group">
                 <label className="form-label">Next Service Date</label>
                 <input type="date" name="next_service_date" value={form.next_service_date} onChange={handleChange} className="form-input" />
@@ -1767,7 +1767,7 @@ function CheckoutModal({ item, vehicles, personnel, onClose, onSuccess }) {
           <button className="btn btn-sm btn-secondary" onClick={onClose}><Icons.Close size={16} /></button>
         </div>
         <form onSubmit={handleSubmit}>
-          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '75vh', overflowY: 'auto' }}>
+          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
             {/* Vehicle Selection */}
             <div className="form-group">
@@ -1781,7 +1781,7 @@ function CheckoutModal({ item, vehicles, personnel, onClose, onSuccess }) {
             </div>
 
             {/* Driver Info */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="form-grid-2">
               <div className="form-group">
                 <label className="form-label">Driver *</label>
                 <select onChange={handleDriverSelect} className="form-input" value={personnel.find(p => p.full_name === form.driver_name)?.id || ''}>
@@ -1802,7 +1802,7 @@ function CheckoutModal({ item, vehicles, personnel, onClose, onSuccess }) {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="form-grid-2">
               <div className="form-group">
                 <label className="form-label">Driver License Number</label>
                 <input type="text" name="driver_license_number" value={form.driver_license_number} onChange={handleChange} className="form-input" placeholder="License number" />
@@ -1818,7 +1818,7 @@ function CheckoutModal({ item, vehicles, personnel, onClose, onSuccess }) {
               </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+            <div className="form-grid-3">
               <div className="form-group">
                 <label className="form-label">Date *</label>
                 <input type="date" name="checkout_date" value={form.checkout_date} onChange={handleChange} className="form-input" required />
@@ -1835,7 +1835,7 @@ function CheckoutModal({ item, vehicles, personnel, onClose, onSuccess }) {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="form-grid-2">
               <div className="form-group">
                 <label className="form-label">Destination</label>
                 <input type="text" name="destination" value={form.destination} onChange={handleChange} className="form-input" placeholder="e.g. Two Rivers" />
@@ -1849,7 +1849,7 @@ function CheckoutModal({ item, vehicles, personnel, onClose, onSuccess }) {
             {/* Pre-Trip Inspection Checklist */}
             <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '12px' }}>
               <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem' }}>Pre-Trip Inspection Checklist</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <div className="form-grid-2">
                 {inspectionChecks.map(check => (
                   <div key={check.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
                     <label style={{ fontSize: '0.85rem', flex: 1 }}>{check.label}</label>
@@ -2122,7 +2122,7 @@ function FineModal({ item, vehicles, personnel, onClose, onSuccess }) {
           <button className="btn btn-sm btn-secondary" onClick={onClose}><Icons.Close size={16} /></button>
         </div>
         <form onSubmit={handleSubmit}>
-          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '70vh', overflowY: 'auto' }}>
+          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div className="form-group">
               <label className="form-label">Vehicle *</label>
               <select name="vehicle_id" value={form.vehicle_id} onChange={handleChange} className="form-input" required>
@@ -2132,7 +2132,7 @@ function FineModal({ item, vehicles, personnel, onClose, onSuccess }) {
                 ))}
               </select>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="form-grid-2">
               <div className="form-group">
                 <label className="form-label">Driver *</label>
                 <select name="driver_name" value={form.driver_name} onChange={handleChange} className="form-input" required>
@@ -2147,7 +2147,7 @@ function FineModal({ item, vehicles, personnel, onClose, onSuccess }) {
                 <input type="date" name="fine_date" value={form.fine_date} onChange={handleChange} className="form-input" required />
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="form-grid-2">
               <div className="form-group">
                 <label className="form-label">Fine Type</label>
                 <select name="fine_type" value={form.fine_type} onChange={handleChange} className="form-input">
@@ -2162,7 +2162,7 @@ function FineModal({ item, vehicles, personnel, onClose, onSuccess }) {
                 <input type="number" name="fine_amount" value={form.fine_amount} onChange={handleChange} className="form-input" step="0.01" placeholder="e.g. 500.00" />
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="form-grid-2">
               <div className="form-group">
                 <label className="form-label">Reference Number</label>
                 <input type="text" name="fine_reference" value={form.fine_reference} onChange={handleChange} className="form-input" placeholder="Fine reference #" />
@@ -2275,7 +2275,7 @@ function ServiceModal({ item, vehicles, onClose, onSuccess }) {
           <button className="btn btn-sm btn-secondary" onClick={onClose}><Icons.Close size={16} /></button>
         </div>
         <form onSubmit={handleSubmit}>
-          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '70vh', overflowY: 'auto' }}>
+          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div className="form-group">
               <label className="form-label">Vehicle *</label>
               <select name="vehicle_id" value={form.vehicle_id} onChange={handleChange} className="form-input" required>
@@ -2285,7 +2285,7 @@ function ServiceModal({ item, vehicles, onClose, onSuccess }) {
                 ))}
               </select>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="form-grid-2">
               <div className="form-group">
                 <label className="form-label">Type</label>
                 <select name="service_type" value={form.service_type} onChange={handleChange} className="form-input">
@@ -2303,7 +2303,7 @@ function ServiceModal({ item, vehicles, onClose, onSuccess }) {
                 <input type="date" name="service_date" value={form.service_date} onChange={handleChange} className="form-input" required />
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="form-grid-2">
               <div className="form-group">
                 <label className="form-label">Odometer at Service (km)</label>
                 <input type="number" name="odometer_at_service" value={form.odometer_at_service} onChange={handleChange} className="form-input" placeholder="e.g. 50000" />
@@ -2321,7 +2321,7 @@ function ServiceModal({ item, vehicles, onClose, onSuccess }) {
               <label className="form-label">Description</label>
               <textarea name="description" value={form.description} onChange={handleChange} className="form-input" rows="3" placeholder="What was done..." />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="form-grid-2">
               <div className="form-group">
                 <label className="form-label">Next Service Date</label>
                 <input type="date" name="next_service_date" value={form.next_service_date} onChange={handleChange} className="form-input" />
