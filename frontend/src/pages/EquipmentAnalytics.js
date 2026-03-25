@@ -190,48 +190,64 @@ function EquipmentAnalytics() {
     );
   };
 
-  const renderDistribution = () => (
+  const truncate = (str, len = 20) => str && str.length > len ? str.slice(0, len - 1) + '…' : str;
+
+  const renderPieLabel = ({ name, percent, cx, x }) => {
+    const label = `${name} (${(percent * 100).toFixed(0)}%)`;
+    const anchor = x > cx ? 'start' : 'end';
+    return <text x={x} y={undefined} textAnchor={anchor} fill="var(--text-primary)" fontSize={12}>{label}</text>;
+  };
+
+  const renderDistribution = () => {
+    const locSorted = [...locationData].filter(l => l.total_items > 0).sort((a, b) => b.total_items - a.total_items);
+    const catSorted = [...categoryData].filter(c => c.total_items > 0).sort((a, b) => b.total_items - a.total_items);
+    const locHeight = Math.max(280, locSorted.length * 36 + 60);
+    const catHeight = Math.max(280, catSorted.length * 36 + 60);
+
+    return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: 20 }}>
-        {/* By Location */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 480px), 1fr))', gap: 20 }}>
+        {/* By Location - horizontal */}
         <div className="card">
           <div className="card-header">
             <h3 className="card-title">Equipment by Location</h3>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{locSorted.reduce((s, l) => s + l.total_items, 0)} total</span>
           </div>
-          {locationData.length === 0 ? (
+          {locSorted.length === 0 ? (
             <p style={{ color: 'var(--text-secondary)' }}>No location data</p>
           ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={locationData} margin={{ top: 5, right: 20, left: 0, bottom: 60 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                <XAxis dataKey="location" tick={{ fontSize: 11 }} angle={-35} textAnchor="end" interval={0} />
-                <YAxis allowDecimals={false} />
+            <ResponsiveContainer width="100%" height={locHeight}>
+              <BarChart data={locSorted} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" horizontal={false} />
+                <XAxis type="number" allowDecimals={false} />
+                <YAxis type="category" dataKey="location" tick={{ fontSize: 12 }} width={160} tickFormatter={(v) => truncate(v, 22)} />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend />
-                <Bar dataKey="available" name="Available" fill="#2e7d32" stackId="a" />
-                <Bar dataKey="checked_out" name="Checked Out" fill="#ed6c02" stackId="a" />
+                <Bar dataKey="available" name="Available" fill="#2e7d32" stackId="a" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="checked_out" name="Checked Out" fill="#ed6c02" stackId="a" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
         </div>
 
-        {/* By Category */}
+        {/* By Category - horizontal */}
         <div className="card">
           <div className="card-header">
             <h3 className="card-title">Equipment by Category</h3>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{catSorted.reduce((s, c) => s + c.total_items, 0)} total</span>
           </div>
-          {categoryData.length === 0 ? (
+          {catSorted.length === 0 ? (
             <p style={{ color: 'var(--text-secondary)' }}>No category data</p>
           ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={categoryData.filter(c => c.total_items > 0)} margin={{ top: 5, right: 20, left: 0, bottom: 60 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                <XAxis dataKey="category" tick={{ fontSize: 11 }} angle={-35} textAnchor="end" interval={0} />
-                <YAxis allowDecimals={false} />
+            <ResponsiveContainer width="100%" height={catHeight}>
+              <BarChart data={catSorted} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" horizontal={false} />
+                <XAxis type="number" allowDecimals={false} />
+                <YAxis type="category" dataKey="category" tick={{ fontSize: 12 }} width={160} tickFormatter={(v) => truncate(v, 22)} />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend />
-                <Bar dataKey="available" name="Available" fill="#1976d2" stackId="a" />
-                <Bar dataKey="checked_out" name="Checked Out" fill="#d32f2f" stackId="a" />
+                <Bar dataKey="available" name="Available" fill="#1976d2" stackId="a" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="checked_out" name="Checked Out" fill="#d32f2f" stackId="a" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -241,17 +257,18 @@ function EquipmentAnalytics() {
         <div className="card">
           <div className="card-header">
             <h3 className="card-title">Status Breakdown</h3>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{equipment.length} items</span>
           </div>
           {statusSummary.length === 0 ? (
             <p style={{ color: 'var(--text-secondary)' }}>No data</p>
           ) : (
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={320}>
               <PieChart>
-                <Pie data={statusSummary} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}>
+                <Pie data={statusSummary} dataKey="value" nameKey="name" cx="50%" cy="45%" outerRadius={90} innerRadius={45} paddingAngle={2} label={renderPieLabel} labelLine={{ stroke: 'var(--text-secondary)', strokeWidth: 1 }}>
                   {statusSummary.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
                 <Tooltip />
-                <Legend />
+                <Legend wrapperStyle={{ paddingTop: 12 }} />
               </PieChart>
             </ResponsiveContainer>
           )}
@@ -261,31 +278,33 @@ function EquipmentAnalytics() {
         <div className="card">
           <div className="card-header">
             <h3 className="card-title">Calibration Status</h3>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{calData.length} records</span>
           </div>
           {calibrationSummary.length === 0 ? (
             <p style={{ color: 'var(--text-secondary)' }}>No calibration data</p>
           ) : (
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={320}>
               <PieChart>
-                <Pie data={calibrationSummary} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}>
+                <Pie data={calibrationSummary} dataKey="value" nameKey="name" cx="50%" cy="45%" outerRadius={90} innerRadius={45} paddingAngle={2} label={renderPieLabel} labelLine={{ stroke: 'var(--text-secondary)', strokeWidth: 1 }}>
                   {calibrationSummary.map((entry, i) => {
                     const colorMap = { Valid: '#2e7d32', 'Due Soon': '#ed6c02', Expired: '#d32f2f', 'N/A': '#9e9e9e' };
                     return <Cell key={i} fill={colorMap[entry.name] || COLORS[i]} />;
                   })}
                 </Pie>
                 <Tooltip />
-                <Legend />
+                <Legend wrapperStyle={{ paddingTop: 12 }} />
               </PieChart>
             </ResponsiveContainer>
           )}
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   const renderUsage = () => (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 480px), 1fr))', gap: 20 }}>
         {/* Movement Trend */}
         <div className="card">
           <div className="card-header">
