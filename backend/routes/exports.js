@@ -2,6 +2,21 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../database/db');
 const ExcelJS = require('exceljs');
+const multer = require('multer');
+
+// Configure multer for Excel file uploads (memory storage)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+        file.originalname.endsWith('.xlsx')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only .xlsx files are allowed'));
+    }
+  }
+});
 
 // Export equipment list to Excel
 router.get('/equipment', async (req, res) => {
@@ -676,6 +691,336 @@ router.get('/equipment-template', async (req, res) => {
   } catch (error) {
     console.error('Error generating template:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// ASSIGNMENT IMPORT TEMPLATE & IMPORT
+// ============================================
+
+// Download assignment import template (Equipment + Employee + Location + Date)
+router.get('/assignment-template', async (req, res) => {
+  try {
+    const [eqRes, pRes, lRes, cRes] = await Promise.all([
+      pool.query(`
+        SELECT e.equipment_id, e.equipment_name, e.serial_number, c.name AS category, e.status
+        FROM equipment e
+        LEFT JOIN categories c ON e.category_id = c.id
+        ORDER BY e.equipment_id
+      `),
+      pool.query(`SELECT employee_id, full_name, job_title, site FROM personnel WHERE is_active = true ORDER BY full_name`),
+      pool.query(`SELECT name, type FROM locations WHERE is_active = true ORDER BY name`),
+      pool.query(`SELECT customer_number, display_name FROM customers WHERE is_active = true ORDER BY display_name`)
+    ]);
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Equipment Store';
+    workbook.created = new Date();
+
+    // ── Import sheet ──
+    const ws = workbook.addWorksheet('Import', { properties: { tabColor: { argb: 'FF4CAF50' } } });
+    ws.columns = [
+      { header: 'Equipment ID *', key: 'equipment_id', width: 18 },
+      { header: 'Employee ID *', key: 'employee_id', width: 16 },
+      { header: 'Location *', key: 'location', width: 25 },
+      { header: 'Customer', key: 'customer', width: 25 },
+      { header: 'Checkout Date *', key: 'checkout_date', width: 18 },
+      { header: 'Expected Return Date', key: 'expected_return_date', width: 22 },
+      { header: 'Notes', key: 'notes', width: 35 },
+    ];
+
+    const headerRow = ws.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1565C0' } };
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+    headerRow.height = 28;
+
+    // Example rows
+    ws.addRow({ equipment_id: 'EQ-001', employee_id: 'EMP001', location: 'Middelburg Lab', customer: '', checkout_date: new Date('2026-01-15'), expected_return_date: '', notes: 'Example row - delete before importing' });
+    ws.addRow({ equipment_id: 'EQ-002', employee_id: 'EMP002', location: 'Secunda Site', customer: 'Sasol', checkout_date: new Date('2026-02-01'), expected_return_date: new Date('2026-06-30'), notes: 'Example row - delete before importing' });
+
+    [2, 3].forEach(r => {
+      const row = ws.getRow(r);
+      row.font = { italic: true, color: { argb: 'FF999999' } };
+      row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF9C4' } };
+    });
+
+    ws.getColumn('checkout_date').numFmt = 'YYYY-MM-DD';
+    ws.getColumn('expected_return_date').numFmt = 'YYYY-MM-DD';
+
+    // Data validation dropdowns from reference sheets
+    for (let row = 4; row <= 500; row++) {
+      if (eqRes.rows.length > 0) {
+        ws.getCell(`A${row}`).dataValidation = {
+          type: 'list', formulae: [`Equipment!$A$2:$A$${eqRes.rows.length + 1}`],
+          showErrorMessage: true, errorTitle: 'Invalid', error: 'Select from Equipment sheet'
+        };
+      }
+      if (pRes.rows.length > 0) {
+        ws.getCell(`B${row}`).dataValidation = {
+          type: 'list', formulae: [`Employees!$A$2:$A$${pRes.rows.length + 1}`],
+          showErrorMessage: true, errorTitle: 'Invalid', error: 'Select from Employees sheet'
+        };
+      }
+      if (lRes.rows.length > 0) {
+        ws.getCell(`C${row}`).dataValidation = {
+          type: 'list', formulae: [`Locations!$A$2:$A$${lRes.rows.length + 1}`],
+          showErrorMessage: true, errorTitle: 'Invalid', error: 'Select from Locations sheet'
+        };
+      }
+    }
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+
+    // ── Instructions sheet ──
+    const instrWs = workbook.addWorksheet('Instructions', { properties: { tabColor: { argb: 'FFFFAB40' } } });
+    instrWs.getColumn(1).width = 85;
+    const instrLines = [
+      'EQUIPMENT ASSIGNMENT IMPORT TEMPLATE',
+      '',
+      'PURPOSE:',
+      'Bulk-import current equipment assignments to populate live data.',
+      'Each row = one piece of equipment checked out to an employee at a location on a date.',
+      '',
+      'REQUIRED FIELDS (marked *):',
+      '  Equipment ID  — Must match an existing Equipment ID (see Equipment sheet)',
+      '  Employee ID   — Must match an existing Employee ID (see Employees sheet)',
+      '  Location      — Must match an existing Location name (see Locations sheet)',
+      '  Checkout Date — Date the equipment was assigned (YYYY-MM-DD or Excel date)',
+      '',
+      'OPTIONAL FIELDS:',
+      '  Customer             — Customer name (if at a customer site)',
+      '  Expected Return Date — When equipment should be returned',
+      '  Notes                — Any additional notes',
+      '',
+      'HOW TO USE:',
+      '1. Delete the 2 yellow example rows on the Import sheet',
+      '2. Fill in your data starting from row 2',
+      '3. Use the dropdown lists — they pull from the reference sheets',
+      '4. Save the file',
+      '5. Go to Equipment Store > Equipment page > Import Assignments button',
+      '6. Upload this file',
+      '',
+      'WHAT HAPPENS ON IMPORT:',
+      '- Equipment set to "Checked Out" status',
+      '- Employee assigned as current holder',
+      '- Location updated on the equipment record',
+      '- A checkout movement record is created with the date you specified',
+      '- If Equipment ID appears multiple times, only the last row is used',
+    ];
+    instrLines.forEach((line, i) => {
+      const cell = instrWs.getCell(`A${i + 1}`);
+      cell.value = line;
+      if (i === 0) cell.font = { bold: true, size: 14, color: { argb: 'FF1565C0' } };
+      else if (line.endsWith(':') && line === line.toUpperCase()) cell.font = { bold: true, size: 11 };
+    });
+
+    // ── Reference sheets ──
+    const styleRef = (sheet) => {
+      const h = sheet.getRow(1);
+      h.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+      h.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF546E7A' } };
+      h.alignment = { horizontal: 'center' };
+      h.height = 24;
+      sheet.views = [{ state: 'frozen', ySplit: 1 }];
+    };
+
+    const eqWs = workbook.addWorksheet('Equipment', { properties: { tabColor: { argb: 'FF90CAF9' } } });
+    eqWs.columns = [
+      { header: 'Equipment ID', key: 'equipment_id', width: 18 },
+      { header: 'Name', key: 'equipment_name', width: 30 },
+      { header: 'Serial Number', key: 'serial_number', width: 20 },
+      { header: 'Category', key: 'category', width: 20 },
+      { header: 'Current Status', key: 'status', width: 15 },
+    ];
+    styleRef(eqWs);
+    eqWs.addRows(eqRes.rows);
+
+    const empWs = workbook.addWorksheet('Employees', { properties: { tabColor: { argb: 'FFA5D6A7' } } });
+    empWs.columns = [
+      { header: 'Employee ID', key: 'employee_id', width: 16 },
+      { header: 'Full Name', key: 'full_name', width: 30 },
+      { header: 'Job Title', key: 'job_title', width: 25 },
+      { header: 'Site', key: 'site', width: 20 },
+    ];
+    styleRef(empWs);
+    empWs.addRows(pRes.rows);
+
+    const locWs = workbook.addWorksheet('Locations', { properties: { tabColor: { argb: 'FFCE93D8' } } });
+    locWs.columns = [
+      { header: 'Location Name', key: 'name', width: 30 },
+      { header: 'Type', key: 'type', width: 15 },
+    ];
+    styleRef(locWs);
+    locWs.addRows(lRes.rows);
+
+    const custWs = workbook.addWorksheet('Customers', { properties: { tabColor: { argb: 'FFFFAB91' } } });
+    custWs.columns = [
+      { header: 'Customer Number', key: 'customer_number', width: 20 },
+      { header: 'Display Name', key: 'display_name', width: 35 },
+    ];
+    styleRef(custWs);
+    custWs.addRows(cRes.rows);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=assignment_import_template.xlsx');
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error('Error generating assignment template:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Import assignments from filled-in template
+router.post('/import-assignments', upload.single('file'), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(req.file.buffer);
+
+    const ws = workbook.getWorksheet('Import') || workbook.getWorksheet(1);
+    if (!ws) {
+      return res.status(400).json({ error: 'Could not find "Import" worksheet' });
+    }
+
+    // Parse rows (skip header row 1)
+    const rows = [];
+    const errors = [];
+
+    ws.eachRow((row, rowNum) => {
+      if (rowNum === 1) return; // skip header
+
+      const equipmentId = row.getCell(1).text?.trim();
+      const employeeId = row.getCell(2).text?.trim();
+      const location = row.getCell(3).text?.trim();
+      const customer = row.getCell(4).text?.trim();
+      let checkoutDate = row.getCell(5).value;
+      let expectedReturnDate = row.getCell(6).value;
+      const notes = row.getCell(7).text?.trim();
+
+      // Skip empty rows
+      if (!equipmentId && !employeeId) return;
+
+      // Validate required fields
+      if (!equipmentId) { errors.push(`Row ${rowNum}: Missing Equipment ID`); return; }
+      if (!employeeId) { errors.push(`Row ${rowNum}: Missing Employee ID`); return; }
+      if (!location) { errors.push(`Row ${rowNum}: Missing Location`); return; }
+      if (!checkoutDate) { errors.push(`Row ${rowNum}: Missing Checkout Date`); return; }
+
+      // Parse dates
+      if (checkoutDate instanceof Date) {
+        checkoutDate = checkoutDate.toISOString().split('T')[0];
+      } else if (typeof checkoutDate === 'object' && checkoutDate.result) {
+        checkoutDate = new Date(checkoutDate.result).toISOString().split('T')[0];
+      } else {
+        checkoutDate = String(checkoutDate).trim();
+      }
+
+      if (expectedReturnDate instanceof Date) {
+        expectedReturnDate = expectedReturnDate.toISOString().split('T')[0];
+      } else if (typeof expectedReturnDate === 'object' && expectedReturnDate?.result) {
+        expectedReturnDate = new Date(expectedReturnDate.result).toISOString().split('T')[0];
+      } else if (expectedReturnDate) {
+        expectedReturnDate = String(expectedReturnDate).trim() || null;
+      } else {
+        expectedReturnDate = null;
+      }
+
+      rows.push({ equipmentId, employeeId, location, customer, checkoutDate, expectedReturnDate, notes, rowNum });
+    });
+
+    if (rows.length === 0) {
+      return res.status(400).json({ error: 'No valid data rows found', errors });
+    }
+
+    // Process in a transaction
+    await client.query('BEGIN');
+
+    const results = { success: 0, skipped: 0, errors: [] };
+
+    for (const row of rows) {
+      try {
+        // Look up equipment
+        const eqRes = await client.query('SELECT id, status FROM equipment WHERE equipment_id = $1', [row.equipmentId]);
+        if (eqRes.rows.length === 0) {
+          results.errors.push(`Row ${row.rowNum}: Equipment "${row.equipmentId}" not found`);
+          results.skipped++;
+          continue;
+        }
+        const equipmentPk = eqRes.rows[0].id;
+
+        // Look up employee
+        const empRes = await client.query('SELECT id FROM personnel WHERE employee_id = $1', [row.employeeId]);
+        if (empRes.rows.length === 0) {
+          results.errors.push(`Row ${row.rowNum}: Employee "${row.employeeId}" not found`);
+          results.skipped++;
+          continue;
+        }
+        const personnelId = empRes.rows[0].id;
+
+        // Look up location
+        const locRes = await client.query('SELECT id FROM locations WHERE name = $1', [row.location]);
+        if (locRes.rows.length === 0) {
+          results.errors.push(`Row ${row.rowNum}: Location "${row.location}" not found`);
+          results.skipped++;
+          continue;
+        }
+        const locationId = locRes.rows[0].id;
+
+        // Look up customer (optional)
+        let customerId = null;
+        if (row.customer) {
+          const custRes = await client.query('SELECT id FROM customers WHERE display_name = $1', [row.customer]);
+          if (custRes.rows.length === 0) {
+            results.errors.push(`Row ${row.rowNum}: Customer "${row.customer}" not found (row imported without customer)`);
+          } else {
+            customerId = custRes.rows[0].id;
+          }
+        }
+
+        // Update equipment: set status, holder, location
+        await client.query(`
+          UPDATE equipment 
+          SET status = 'Checked Out',
+              current_holder_id = $1,
+              current_location_id = $2,
+              last_action = 'OUT',
+              last_action_timestamp = $3,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = $4
+        `, [personnelId, locationId, row.checkoutDate, equipmentPk]);
+
+        // Create movement record
+        await client.query(`
+          INSERT INTO equipment_movements (equipment_id, action, quantity, location_id, personnel_id, customer_id, notes, expected_return_date, created_at, created_by)
+          VALUES ($1, 'OUT', 1, $2, $3, $4, $5, $6, $7, 'Excel Import')
+        `, [equipmentPk, locationId, personnelId, customerId, row.notes || null, row.expectedReturnDate, row.checkoutDate]);
+
+        results.success++;
+      } catch (rowErr) {
+        results.errors.push(`Row ${row.rowNum}: ${rowErr.message}`);
+        results.skipped++;
+      }
+    }
+
+    await client.query('COMMIT');
+
+    res.json({
+      message: `Import complete: ${results.success} assignments imported, ${results.skipped} skipped`,
+      totalRows: rows.length,
+      ...results,
+      parseErrors: errors
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error importing assignments:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
   }
 });
 

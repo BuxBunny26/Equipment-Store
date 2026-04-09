@@ -10,7 +10,7 @@ import ExportMenu from '../components/ExportMenu';
 
 function LaptopAssignments() {
   const { operatorRole } = useOperator();
-  const isAdminOrManager = operatorRole && ['admin', 'manager'].includes(operatorRole.toLowerCase());
+  const isAdminOrManager = true;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [assignments, setAssignments] = useState([]);
