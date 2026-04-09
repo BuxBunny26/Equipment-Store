@@ -1037,8 +1037,6 @@ function LaptopModal({ item, personnel, allAssignments, operatorRole, onClose, o
     notes: item?.notes || '',
     device_cost: item?.device_cost || '',
     warranty_end_date: item?.warranty_end_date || '',
-    contract_start_date: item?.contract_start_date || '',
-    contract_end_date: item?.contract_end_date || '',
     device_condition: item?.device_condition || '',
     accessories: item?.accessories || '',
     setup_account: item?.setup_account || '',
@@ -1133,8 +1131,6 @@ function LaptopModal({ item, personnel, allAssignments, operatorRole, onClose, o
       if (!payload.notes) payload.notes = null;
       payload.device_cost = payload.device_cost ? parseFloat(payload.device_cost) : null;
       if (!payload.warranty_end_date) payload.warranty_end_date = null;
-      if (!payload.contract_start_date) payload.contract_start_date = null;
-      if (!payload.contract_end_date) payload.contract_end_date = null;
       if (!payload.device_condition) payload.device_condition = null;
       if (!payload.accessories) payload.accessories = null;
       if (!payload.setup_account) payload.setup_account = null;
@@ -1369,16 +1365,8 @@ function LaptopModal({ item, personnel, allAssignments, operatorRole, onClose, o
               </div>
             </div>
 
-            {/* Contract / Warranty */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-              <div className="form-group">
-                <label className="form-label">Contract Start</label>
-                <input type="date" name="contract_start_date" value={form.contract_start_date} onChange={handleChange} className="form-input" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Contract End</label>
-                <input type="date" name="contract_end_date" value={form.contract_end_date} onChange={handleChange} className="form-input" />
-              </div>
+            {/* Warranty */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
               <div className="form-group">
                 <label className="form-label">Warranty End</label>
                 <input type="date" name="warranty_end_date" value={form.warranty_end_date} onChange={handleChange} className="form-input" />
