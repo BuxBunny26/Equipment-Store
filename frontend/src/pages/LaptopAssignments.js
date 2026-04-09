@@ -70,9 +70,10 @@ function LaptopAssignments() {
   const getLaptopAgeColor = (dateAssigned, status) => {
     if (!dateAssigned || status !== 'Active') return 'var(--text-secondary)';
     const months = getLaptopAgeMonths(dateAssigned);
-    if (months >= 48) return '#e74c3c';
-    if (months >= 36) return '#e67e22';
-    if (months >= 24) return '#f39c12';
+    if (months >= 60) return '#8b0000';        // 5+ years: DARK RED
+    if (months >= 48) return '#e74c3c';         // 4+ years: RED
+    if (months >= 36) return '#e67e22';         // 3+ years: ORANGE
+    if (months >= 24) return '#f39c12';         // 2+ years: AMBER
     return 'var(--success-color)';
   };
 
@@ -80,8 +81,9 @@ function LaptopAssignments() {
   const getUpgradeStatus = (item) => {
     if (!item.date_assigned || item.laptop_status !== 'Active') return 'ok';
     const months = getLaptopAgeMonths(item.date_assigned);
-    if (months >= 48) return 'due';
-    if (months >= 36) return 'approaching';
+    if (months >= 60) return 'overdue';         // 5+ years: REPLACE OVERDUE
+    if (months >= 48) return 'due';              // 4+ years: REFRESH DUE
+    if (months >= 36) return 'approaching';      // 3+ years: REFRESH SOON
     return 'ok';
   };
 
@@ -732,6 +734,11 @@ function LaptopAssignments() {
                             <span style={{ fontWeight: 600, color: ageColor, fontSize: '0.85rem' }}>
                               {getLaptopAgeLabel(item.date_assigned)}
                             </span>
+                            {upgradeStatus === 'overdue' && (
+                              <span style={{ fontSize: '0.65rem', padding: '1px 6px', borderRadius: '10px', background: 'rgba(139,0,0,0.18)', color: '#8b0000', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                REPLACE OVERDUE
+                              </span>
+                            )}
                             {upgradeStatus === 'due' && (
                               <span style={{ fontSize: '0.65rem', padding: '1px 6px', borderRadius: '10px', background: 'rgba(231,76,60,0.15)', color: '#e74c3c', fontWeight: 600, whiteSpace: 'nowrap' }}>
                                 REFRESH DUE

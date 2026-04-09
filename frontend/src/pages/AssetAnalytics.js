@@ -133,14 +133,15 @@ function AssetAnalytics() {
   const laptopStats = useMemo(() => {
     const statusCounts = {};
     const brandCounts = {};
-    const upgradeStatus = { Due: 0, Approaching: 0, OK: 0 };
+    const upgradeStatus = { Overdue: 0, Due: 0, Approaching: 0, OK: 0 };
     laptops.forEach(l => {
       statusCounts[l.laptop_status] = (statusCounts[l.laptop_status] || 0) + 1;
       const brand = l.laptop_brand || 'Unknown';
       brandCounts[brand] = (brandCounts[brand] || 0) + 1;
       if (l.laptop_status === 'Active' && l.date_assigned) {
         const months = ageMonths(l.date_assigned);
-        if (months >= 48) upgradeStatus.Due++;
+        if (months >= 60) upgradeStatus.Overdue++;
+        else if (months >= 48) upgradeStatus.Due++;
         else if (months >= 36) upgradeStatus.Approaching++;
         else upgradeStatus.OK++;
       }
@@ -511,12 +512,21 @@ function AssetAnalytics() {
         <div className="card">
           <div className="card-header"><h3 className="card-title">Alerts & Attention Needed</h3></div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '8px 0' }}>
+            {laptopStats.upgradeStatus.Overdue > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'rgba(139,0,0,0.1)', borderRadius: 8 }}>
+                <Icons.Warning size={18} style={{ color: '#8b0000', flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>{laptopStats.upgradeStatus.Overdue} laptop{laptopStats.upgradeStatus.Overdue !== 1 ? 's' : ''} overdue for replacement</div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>5+ years old</div>
+                </div>
+              </div>
+            )}
             {laptopStats.upgradeStatus.Due > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'rgba(211,47,47,0.08)', borderRadius: 8 }}>
                 <Icons.Warning size={18} style={{ color: '#d32f2f', flexShrink: 0 }} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>{laptopStats.upgradeStatus.Due} laptop{laptopStats.upgradeStatus.Due !== 1 ? 's' : ''} due for upgrade</div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>4+ years old</div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>4 years old</div>
                 </div>
               </div>
             )}
@@ -565,7 +575,7 @@ function AssetAnalytics() {
                 </div>
               </div>
             )}
-            {laptopStats.upgradeStatus.Due === 0 && cellphoneStats.upgradeStatus.Due === 0 && vehicleStats.licenseAlerts.length === 0 && vehicleStats.serviceAlerts.length === 0 && overviewStats.unpaidFineCount === 0 && costData.warrantyAlerts.length === 0 && (
+            {laptopStats.upgradeStatus.Overdue === 0 && laptopStats.upgradeStatus.Due === 0 && cellphoneStats.upgradeStatus.Due === 0 && vehicleStats.licenseAlerts.length === 0 && vehicleStats.serviceAlerts.length === 0 && overviewStats.unpaidFineCount === 0 && costData.warrantyAlerts.length === 0 && (
               <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 20 }}>
                 <Icons.Check size={28} style={{ color: '#2e7d32', marginBottom: 8 }} /><br />
                 No alerts - all assets are in good standing
@@ -632,7 +642,7 @@ function AssetAnalytics() {
         <div className="stat-card">
           <div className="stat-icon orange"><Icons.Warning size={24} /></div>
           <div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{laptopStats.upgradeStatus.Due}</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{laptopStats.upgradeStatus.Overdue + laptopStats.upgradeStatus.Due}</div>
             <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Upgrade Due (4+ yrs)</div>
           </div>
         </div>
@@ -674,7 +684,7 @@ function AssetAnalytics() {
             <div className="card-header"><h3 className="card-title">Upgrade Status (Active Laptops)</h3></div>
             {renderPieDonut(laptopStats.upgradeData.map(d => ({
               ...d,
-              fill: d.name === 'Due' ? '#d32f2f' : d.name === 'Approaching' ? '#ed6c02' : '#2e7d32',
+              fill: d.name === 'Overdue' ? '#8b0000' : d.name === 'Due' ? '#d32f2f' : d.name === 'Approaching' ? '#ed6c02' : '#2e7d32',
             })), 'Upgrade', isMobile ? 220 : 260)}
           </div>
         )}
