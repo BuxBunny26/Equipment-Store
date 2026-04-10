@@ -1736,6 +1736,12 @@ function ImportModal({ onClose, onSuccess }) {
     }
   };
 
+  const parseDate = (v) => {
+    if (!v || v.toLowerCase() === 'unknown' || v === '-' || v === 'N/A') return null;
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
+  };
+
   const handleImport = async () => {
     setImporting(true);
     const total = parsedRows.length;
@@ -1753,7 +1759,7 @@ function ImportModal({ onClose, onSuccess }) {
           laptop_model: row.laptop_model || '',
           serial_number: row.serial_number || '',
           asset_tag: row.asset_tag || '',
-          date_assigned: row.date_assigned || new Date().toISOString().split('T')[0],
+          date_assigned: parseDate(row.date_assigned) || new Date().toISOString().split('T')[0],
           laptop_status: row.laptop_status || 'Active',
           setup_laptop: row.setup_laptop === 'true' || row.setup_laptop === 'Yes',
           setup_m365: row.setup_m365 === 'true' || row.setup_m365 === 'Yes',
@@ -1762,9 +1768,9 @@ function ImportModal({ onClose, onSuccess }) {
           setup_smartsheet: row.setup_smartsheet === 'true' || row.setup_smartsheet === 'Yes',
           setup_distribution_lists: row.setup_distribution_lists === 'true' || row.setup_distribution_lists === 'Yes',
           device_cost: row.device_cost ? parseFloat(row.device_cost) : null,
-          warranty_end_date: row.warranty_end_date || null,
-          contract_start_date: row.contract_start_date || null,
-          contract_end_date: row.contract_end_date || null,
+          warranty_end_date: parseDate(row.warranty_end_date),
+          contract_start_date: parseDate(row.contract_start_date),
+          contract_end_date: parseDate(row.contract_end_date),
           device_condition: row.device_condition || null,
           accessories: row.accessories || null,
           setup_account: row.setup_account || null,
