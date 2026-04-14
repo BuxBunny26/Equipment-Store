@@ -73,6 +73,13 @@ function SoftwareLicenses() {
   // Filters (catalog tab)
   const [catSearch, setCatSearch] = useState('');
 
+  // Bulk assign modal
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkForLicense, setBulkForLicense] = useState(null);
+  const [bulkSelected, setBulkSelected] = useState(new Set());
+  const [bulkSearch, setBulkSearch] = useState('');
+  const [bulkSaving, setBulkSaving] = useState(false);
+
   // ── Data fetching ──────────────────────────────────────────────────────────
 
   const fetchData = useCallback(async () => {
@@ -281,6 +288,61 @@ function SoftwareLicenses() {
     }
   };
 
+  // ── Bulk Assign ────────────────────────────────────────────────────────────
+
+  const openBulkAssign = (lic) => {
+    setBulkForLicense(lic);
+    // Pre-tick employees already assigned
+    const alreadyAssigned = new Set(
+      assignments
+        .filter(a => a.software_license_id === lic.id && a.is_active && a.personnel_id)
+        .map(a => a.personnel_id)
+    );
+    setBulkSelected(new Set(alreadyAssigned));
+    setBulkSearch('');
+    setShowBulkModal(true);
+  };
+
+  const saveBulkAssign = async () => {
+    setBulkSaving(true);
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      // Existing active assignments for this license
+      const existing = assignments.filter(
+        a => a.software_license_id === bulkForLicense.id && a.is_active
+      );
+      const existingByPersonnel = new Map(existing.map(a => [a.personnel_id, a]));
+
+      // Revoke assignments for unselected employees who were previously assigned
+      const toRevoke = existing.filter(a => a.personnel_id && !bulkSelected.has(a.personnel_id));
+      for (const a of toRevoke) {
+        await softwareAssignmentsApi.update(a.id, { is_active: false });
+      }
+
+      // Create assignments for newly selected employees
+      for (const pid of bulkSelected) {
+        if (existingByPersonnel.has(pid)) continue; // already assigned
+        const person = personnel.find(p => p.id === pid);
+        if (!person) continue;
+        await softwareAssignmentsApi.create({
+          software_license_id: bulkForLicense.id,
+          personnel_id: person.id,
+          employee_name: person.full_name,
+          employee_id: person.employee_id || '',
+          assigned_date: today,
+          is_active: true,
+        });
+      }
+
+      setShowBulkModal(false);
+      fetchData();
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
   const revokeAssignment = async (a) => {
     if (!window.confirm(`Revoke ${a.software_name} for ${a.employee_name}?`)) return;
     try {
@@ -376,6 +438,7 @@ function SoftwareLicenses() {
                 key={lic.id}
                 lic={lic}
                 onAssign={() => openAssign(lic)}
+                onBulkAssign={() => openBulkAssign(lic)}
                 onEdit={() => openEditLicense(lic)}
                 isAdmin={isAdmin}
               />
@@ -498,9 +561,14 @@ function SoftwareLicenses() {
                       <td>
                         <div style={{ display: 'flex', gap: 6 }}>
                           {isAdmin && lic.is_active && (
-                            <button className="btn btn-secondary btn-sm" onClick={() => openAssign(lic)} title="Assign">
+                          <>
+                            <button className="btn btn-secondary btn-sm" onClick={() => openBulkAssign(lic)} title="Bulk Assign">
+                              <Icons.Users size={13} /> Bulk Assign
+                            </button>
+                            <button className="btn btn-secondary btn-sm" onClick={() => openAssign(lic)} title="Assign one">
                               <Icons.Plus size={13} /> Assign
                             </button>
+                          </>
                           )}
                           {isAdmin && (
                             <>
@@ -725,6 +793,108 @@ function SoftwareLicenses() {
       )}
 
       {/* ══════════════════════════════════════════════════════════════════
+          MODAL: Bulk Assign
+         ══════════════════════════════════════════════════════════════════ */}
+      {showBulkModal && bulkForLicense && (() => {
+        const alreadyRevoked = assignments
+          .filter(a => a.software_license_id === bulkForLicense.id && a.is_active && a.personnel_id)
+          .map(a => a.personnel_id);
+        const filtered = personnel.filter(p =>
+          !bulkSearch ||
+          p.full_name?.toLowerCase().includes(bulkSearch.toLowerCase()) ||
+          p.employee_id?.toLowerCase().includes(bulkSearch.toLowerCase())
+        );
+        const allFiltered = filtered.every(p => bulkSelected.has(p.id));
+        return (
+          <div className="modal-overlay" onClick={() => setShowBulkModal(false)}>
+            <div className="modal-content" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Bulk Assign — {bulkForLicense.name}</h2>
+                <button className="modal-close" onClick={() => setShowBulkModal(false)}>
+                  <Icons.Close size={16} />
+                </button>
+              </div>
+              <div className="modal-body" style={{ padding: '12px 20px' }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 10 }}>
+                  Tick employees to assign. Unticking a currently assigned employee will revoke their licence.
+                </p>
+                {/* Search + select-all */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center' }}>
+                  <div className="search-box" style={{ flex: 1 }}>
+                    <Icons.Search size={13} />
+                    <input
+                      placeholder="Search employees…"
+                      value={bulkSearch}
+                      onChange={e => setBulkSearch(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', whiteSpace: 'nowrap', fontSize: '0.85rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={allFiltered && filtered.length > 0}
+                      onChange={e => {
+                        setBulkSelected(prev => {
+                          const next = new Set(prev);
+                          if (e.target.checked) filtered.forEach(p => next.add(p.id));
+                          else filtered.forEach(p => next.delete(p.id));
+                          return next;
+                        });
+                      }}
+                    />
+                    Select all
+                  </label>
+                </div>
+                {/* Employee list */}
+                <div style={{ maxHeight: 340, overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: 6 }}>
+                  {filtered.length === 0 && (
+                    <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>No employees found.</div>
+                  )}
+                  {filtered.map((p, i) => (
+                    <label key={p.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '9px 14px',
+                      background: i % 2 === 0 ? 'transparent' : 'var(--table-row-alt, rgba(0,0,0,0.02))',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid var(--border-color)',
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={bulkSelected.has(p.id)}
+                        onChange={e => {
+                          setBulkSelected(prev => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.add(p.id);
+                            else next.delete(p.id);
+                            return next;
+                          });
+                        }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{p.full_name}</div>
+                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
+                          {p.employee_id || ''}{p.division ? ` · ${p.division}` : ''}
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <div style={{ marginTop: 8, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                  {bulkSelected.size} employee{bulkSelected.size !== 1 ? 's' : ''} selected
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-secondary" onClick={() => setShowBulkModal(false)}>Cancel</button>
+                <button className="btn btn-primary" onClick={saveBulkAssign} disabled={bulkSaving}>
+                  {bulkSaving ? 'Saving…' : `Save Assignments`}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ══════════════════════════════════════════════════════════════════
           MODAL: Assign Software to Employee
          ══════════════════════════════════════════════════════════════════ */}
       {showAssignModal && assignForLicense && (
@@ -803,7 +973,7 @@ function StatCard({ label, value, icon, color, small }) {
   );
 }
 
-function LicenseSummaryCard({ lic, onAssign, onEdit, isAdmin }) {
+function LicenseSummaryCard({ lic, onAssign, onBulkAssign, onEdit, isAdmin }) {
   const monthly = monthlyCost(lic);
   const annual = annualCost(lic);
   const renewal = getRenewalStatus(lic.renewal_date);
@@ -843,9 +1013,14 @@ function LicenseSummaryCard({ lic, onAssign, onEdit, isAdmin }) {
       </div>
 
       {isAdmin && (
-        <button className="btn btn-secondary btn-sm" style={{ marginTop: 4 }} onClick={onAssign}>
-          <Icons.Plus size={12} /> Assign to Employee
-        </button>
+        <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+          <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={onBulkAssign}>
+            <Icons.Users size={12} /> Bulk Assign
+          </button>
+          <button className="btn btn-secondary btn-sm icon-btn" onClick={onAssign} title="Assign single employee">
+            <Icons.Plus size={12} />
+          </button>
+        </div>
       )}
     </div>
   );

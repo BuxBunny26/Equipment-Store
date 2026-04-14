@@ -41,3 +41,10 @@ VALUES
   ('Zoho One', 'Zoho', 'Per User', 185.00, 'Monthly', 'Zoho suite'),
   ('Smartsheet', 'Smartsheet', 'Per User', 250.00, 'Monthly', 'Project / work management')
 ON CONFLICT DO NOTHING;
+
+-- Enable RLS and allow all (matches existing table setup)
+ALTER TABLE software_licenses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE software_assignments ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "allow_all" ON software_licenses FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "allow_all" ON software_assignments FOR ALL USING (true) WITH CHECK (true);
