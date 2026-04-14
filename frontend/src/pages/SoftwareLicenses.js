@@ -409,7 +409,7 @@ function SoftwareLicenses() {
       </div>
 
       {/* ── Tabs ────────────────────────────────────────────────────────── */}
-      <div className="tabs-container" style={{ marginBottom: 16 }}>
+      <div className="tabs" style={{ marginBottom: 20 }}>
         {[
           { key: 'overview', label: 'Overview' },
           { key: 'catalog', label: 'Catalog' },
@@ -417,7 +417,7 @@ function SoftwareLicenses() {
         ].map(t => (
           <button
             key={t.key}
-            className={`tab-btn ${activeTab === t.key ? 'active' : ''}`}
+            className={`tab ${activeTab === t.key ? 'active' : ''}`}
             onClick={() => setActiveTab(t.key)}
           >
             {t.label}
@@ -689,43 +689,43 @@ function SoftwareLicenses() {
          ══════════════════════════════════════════════════════════════════ */}
       {showLicenseModal && (
         <div className="modal-overlay" onClick={() => setShowLicenseModal(false)}>
-          <div className="modal-content" style={{ maxWidth: 540 }} onClick={e => e.stopPropagation()}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 560 }}>
             <div className="modal-header">
               <h2>{editLicense ? 'Edit Software License' : 'Add Software License'}</h2>
-              <button className="modal-close" onClick={() => setShowLicenseModal(false)}>
+              <button className="btn btn-sm btn-secondary" onClick={() => setShowLicenseModal(false)}>
                 <Icons.Close size={16} />
               </button>
             </div>
-            <div className="modal-body">
-              <div className="form-grid" style={{ gap: 14 }}>
-                <div className="form-group" style={{ gridColumn: '1/-1' }}>
-                  <label>Software Name *</label>
-                  <input
-                    className="form-control"
-                    value={licenseForm.name || ''}
-                    onChange={e => setLicenseForm(f => ({ ...f, name: e.target.value }))}
-                    placeholder="e.g. Microsoft 365 Business"
-                  />
-                </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: '70vh', overflowY: 'auto' }}>
+              <div className="form-group" style={{ gridColumn: '1/-1' }}>
+                <label className="form-label">Software Name *</label>
+                <input
+                  className="form-input"
+                  value={licenseForm.name || ''}
+                  onChange={e => setLicenseForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. Microsoft 365 Business"
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="form-group">
-                  <label>Vendor</label>
+                  <label className="form-label">Vendor</label>
                   <input
-                    className="form-control"
+                    className="form-input"
                     value={licenseForm.vendor || ''}
                     onChange={e => setLicenseForm(f => ({ ...f, vendor: e.target.value }))}
                     placeholder="e.g. Microsoft"
                   />
                 </div>
                 <div className="form-group">
-                  <label>License Type</label>
-                  <select className="form-control" value={licenseForm.license_type || 'Per User'} onChange={e => setLicenseForm(f => ({ ...f, license_type: e.target.value }))}>
+                  <label className="form-label">License Type</label>
+                  <select className="form-input" value={licenseForm.license_type || 'Per User'} onChange={e => setLicenseForm(f => ({ ...f, license_type: e.target.value }))}>
                     {LICENSE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>Cost per Seat (ZAR)</label>
+                  <label className="form-label">Cost per Seat (ZAR)</label>
                   <input
-                    className="form-control"
+                    className="form-input"
                     type="number"
                     min="0"
                     step="0.01"
@@ -735,15 +735,15 @@ function SoftwareLicenses() {
                   />
                 </div>
                 <div className="form-group">
-                  <label>Billing Cycle</label>
-                  <select className="form-control" value={licenseForm.billing_cycle || 'Monthly'} onChange={e => setLicenseForm(f => ({ ...f, billing_cycle: e.target.value }))}>
+                  <label className="form-label">Billing Cycle</label>
+                  <select className="form-input" value={licenseForm.billing_cycle || 'Monthly'} onChange={e => setLicenseForm(f => ({ ...f, billing_cycle: e.target.value }))}>
                     {BILLING_CYCLES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>Total Seats Purchased</label>
+                  <label className="form-label">Total Seats Purchased</label>
                   <input
-                    className="form-control"
+                    className="form-input"
                     type="number"
                     min="0"
                     value={licenseForm.total_seats ?? ''}
@@ -752,37 +752,37 @@ function SoftwareLicenses() {
                   />
                 </div>
                 <div className="form-group">
-                  <label>Renewal Date</label>
+                  <label className="form-label">Renewal Date</label>
                   <input
-                    className="form-control"
+                    className="form-input"
                     type="date"
                     value={licenseForm.renewal_date || ''}
                     onChange={e => setLicenseForm(f => ({ ...f, renewal_date: e.target.value }))}
                   />
                 </div>
-                <div className="form-group" style={{ gridColumn: '1/-1' }}>
-                  <label>Notes</label>
-                  <textarea
-                    className="form-control"
-                    rows={2}
-                    value={licenseForm.notes || ''}
-                    onChange={e => setLicenseForm(f => ({ ...f, notes: e.target.value }))}
-                    placeholder="Optional notes"
+              </div>
+              <div className="form-group">
+                <label className="form-label">Notes</label>
+                <textarea
+                  className="form-input"
+                  rows={2}
+                  value={licenseForm.notes || ''}
+                  onChange={e => setLicenseForm(f => ({ ...f, notes: e.target.value }))}
+                  placeholder="Optional notes"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={licenseForm.is_active !== false}
+                    onChange={e => setLicenseForm(f => ({ ...f, is_active: e.target.checked }))}
                   />
-                </div>
-                <div className="form-group">
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={licenseForm.is_active !== false}
-                      onChange={e => setLicenseForm(f => ({ ...f, is_active: e.target.checked }))}
-                    />
-                    Active
-                  </label>
-                </div>
+                  Active
+                </label>
               </div>
             </div>
-            <div className="modal-footer">
+            <div className="modal-footer" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button className="btn btn-secondary" onClick={() => setShowLicenseModal(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={saveLicense} disabled={licSaving}>
                 {licSaving ? 'Saving…' : editLicense ? 'Update' : 'Add Software'}
@@ -807,10 +807,10 @@ function SoftwareLicenses() {
         const allFiltered = filtered.every(p => bulkSelected.has(p.id));
         return (
           <div className="modal-overlay" onClick={() => setShowBulkModal(false)}>
-            <div className="modal-content" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
+            <div className="modal" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
               <div className="modal-header">
                 <h2>Bulk Assign — {bulkForLicense.name}</h2>
-                <button className="modal-close" onClick={() => setShowBulkModal(false)}>
+                <button className="btn btn-sm btn-secondary" onClick={() => setShowBulkModal(false)}>
                   <Icons.Close size={16} />
                 </button>
               </div>
@@ -899,51 +899,49 @@ function SoftwareLicenses() {
          ══════════════════════════════════════════════════════════════════ */}
       {showAssignModal && assignForLicense && (
         <div className="modal-overlay" onClick={() => setShowAssignModal(false)}>
-          <div className="modal-content" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 440 }}>
             <div className="modal-header">
               <h2>{editAssignment ? 'Edit Assignment' : `Assign ${assignForLicense.name}`}</h2>
-              <button className="modal-close" onClick={() => setShowAssignModal(false)}>
+              <button className="btn btn-sm btn-secondary" onClick={() => setShowAssignModal(false)}>
                 <Icons.Close size={16} />
               </button>
             </div>
-            <div className="modal-body">
-              <div className="form-grid" style={{ gap: 14 }}>
-                <div className="form-group" style={{ gridColumn: '1/-1' }}>
-                  <label>Employee *</label>
-                  <select
-                    className="form-control"
-                    value={assignForm.personnel_id || ''}
-                    onChange={e => setAssignForm(f => ({ ...f, personnel_id: e.target.value }))}
-                  >
-                    <option value="">Select employee…</option>
-                    {personnel.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.full_name} ({p.employee_id || 'no ID'})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label>Assigned Date</label>
-                  <input
-                    className="form-control"
-                    type="date"
-                    value={assignForm.assigned_date || ''}
-                    onChange={e => setAssignForm(f => ({ ...f, assigned_date: e.target.value }))}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Notes</label>
-                  <input
-                    className="form-control"
-                    value={assignForm.notes || ''}
-                    onChange={e => setAssignForm(f => ({ ...f, notes: e.target.value }))}
-                    placeholder="Optional"
-                  />
-                </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div className="form-group">
+                <label className="form-label">Employee *</label>
+                <select
+                  className="form-input"
+                  value={assignForm.personnel_id || ''}
+                  onChange={e => setAssignForm(f => ({ ...f, personnel_id: e.target.value }))}
+                >
+                  <option value="">Select employee…</option>
+                  {personnel.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.full_name} ({p.employee_id || 'no ID'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Assigned Date</label>
+                <input
+                  className="form-input"
+                  type="date"
+                  value={assignForm.assigned_date || ''}
+                  onChange={e => setAssignForm(f => ({ ...f, assigned_date: e.target.value }))}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Notes</label>
+                <input
+                  className="form-input"
+                  value={assignForm.notes || ''}
+                  onChange={e => setAssignForm(f => ({ ...f, notes: e.target.value }))}
+                  placeholder="Optional"
+                />
               </div>
             </div>
-            <div className="modal-footer">
+            <div className="modal-footer" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button className="btn btn-secondary" onClick={() => setShowAssignModal(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={saveAssignment} disabled={assignSaving}>
                 {assignSaving ? 'Saving…' : editAssignment ? 'Update' : 'Assign'}
