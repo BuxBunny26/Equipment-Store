@@ -1321,4 +1321,57 @@ export const vehicleServicesApi = {
     ),
 };
 
+// ============================================
+// Software License Tracking
+// ============================================
+export const softwareLicensesApi = {
+    getAll: (activeOnly = true) => {
+        let query = supabase.from('software_licenses').select('*').order('name');
+        if (activeOnly) query = query.eq('is_active', true);
+        return wrap(query);
+    },
+    getById: (id) => wrap(
+        supabase.from('software_licenses').select('*').eq('id', id).single()
+    ),
+    create: (data) => wrap(
+        supabase.from('software_licenses').insert(data).select().single()
+    ),
+    update: (id, data) => wrap(
+        supabase.from('software_licenses').update(data).eq('id', id).select().single()
+    ),
+    delete: (id) => wrap(
+        supabase.from('software_licenses').delete().eq('id', id)
+    ),
+};
+
+export const softwareAssignmentsApi = {
+    getAll: (softwareId = null, activeOnly = true) => {
+        let query = supabase
+            .from('software_assignments')
+            .select('*, software_licenses(name, vendor, cost_per_seat, billing_cycle)')
+            .order('employee_name');
+        if (softwareId) query = query.eq('software_license_id', softwareId);
+        if (activeOnly) query = query.eq('is_active', true);
+        return wrap(query).then(res => ({
+            data: (res.data || []).map(a => ({
+                ...a,
+                software_name: a.software_licenses?.name,
+                vendor: a.software_licenses?.vendor,
+                cost_per_seat: a.software_licenses?.cost_per_seat,
+                billing_cycle: a.software_licenses?.billing_cycle,
+                software_licenses: undefined,
+            })),
+        }));
+    },
+    create: (data) => wrap(
+        supabase.from('software_assignments').insert(data).select().single()
+    ),
+    update: (id, data) => wrap(
+        supabase.from('software_assignments').update(data).eq('id', id).select().single()
+    ),
+    delete: (id) => wrap(
+        supabase.from('software_assignments').delete().eq('id', id)
+    ),
+};
+
 export default supabase;

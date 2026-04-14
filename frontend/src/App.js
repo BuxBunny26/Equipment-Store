@@ -33,6 +33,7 @@ import VehicleCheckoutForm from './pages/VehicleCheckoutForm';
 import AssetsDashboard from './pages/AssetsDashboard';
 import AssetAnalytics from './pages/AssetAnalytics';
 import EquipmentAnalytics from './pages/EquipmentAnalytics';
+import SoftwareLicenses from './pages/SoftwareLicenses';
 
 // Icons as simple SVG components
 const Icons = {
@@ -146,6 +147,14 @@ const Icons = {
   Vehicle: () => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M5 17h14M5 17a2 2 0 01-2-2V9a2 2 0 012-2h1l2-3h8l2 3h1a2 2 0 012 2v6a2 2 0 01-2 2M5 17a2 2 0 100 4 2 2 0 000-4zm14 0a2 2 0 100 4 2 2 0 000-4z" />
+    </svg>
+  ),
+  Software: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
     </svg>
   ),
   Menu: () => (
@@ -307,6 +316,9 @@ function AppContent() {
           <NavLink to="/vehicle-checkout" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <Icons.CheckOut /> Pre-Trip Form
           </NavLink>
+          <NavLink to="/software-licenses" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            <Icons.Software /> Software
+          </NavLink>
         </div>
         
         <div className="nav-section">
@@ -349,6 +361,7 @@ function AppContent() {
         <Route path="/vehicle-checkout" element={<VehicleCheckoutForm />} />
         <Route path="/assets" element={<AssetsDashboard />} />
         <Route path="/asset-analytics" element={<AssetAnalytics />} />
+        <Route path="/software-licenses" element={<SoftwareLicenses />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     </main>
