@@ -126,6 +126,7 @@ export const equipmentApi = {
                 is_quantity_tracked, total_quantity, available_quantity, unit, reorder_level,
                 status, current_location_id, locations(name),
                 current_holder_id, personnel(full_name, employee_id),
+                current_customer_id, customers(display_name),
                 last_action, last_action_timestamp,
                 notes, created_at, updated_at, manufacturer, model
             `)
@@ -148,27 +149,28 @@ export const equipmentApi = {
                 is_checkout_allowed: e.categories?.is_checkout_allowed,
                 is_consumable: e.categories?.is_consumable,
                 subcategory_name: e.subcategories?.name,
-                current_location: e.locations?.name,
+                current_location: e.locations?.name || e.customers?.display_name || null,
                 current_holder: e.personnel?.full_name,
                 holder_employee_id: e.personnel?.employee_id,
                 categories: undefined, subcategories: undefined,
-                locations: undefined, personnel: undefined,
+                locations: undefined, personnel: undefined, customers: undefined,
             }))
         }));
     },
 
     getById: (id) => wrap(
         supabase.from('equipment')
-            .select(`*, categories(name, is_checkout_allowed, is_consumable), subcategories(name), locations(name), personnel(full_name, employee_id, email)`)
+            .select(`*, categories(name, is_checkout_allowed, is_consumable), subcategories(name), locations(name), personnel(full_name, employee_id, email), customers(display_name)`)
             .eq('id', id).single()
     ).then(res => {
         const e = res.data;
         return { data: { ...e,
             category_name: e.categories?.name, is_checkout_allowed: e.categories?.is_checkout_allowed,
             is_consumable: e.categories?.is_consumable, subcategory_name: e.subcategories?.name,
-            current_location: e.locations?.name, current_holder: e.personnel?.full_name,
+            current_location: e.locations?.name || e.customers?.display_name || null,
+            current_holder: e.personnel?.full_name,
             holder_employee_id: e.personnel?.employee_id, holder_email: e.personnel?.email,
-            categories: undefined, subcategories: undefined, locations: undefined, personnel: undefined,
+            categories: undefined, subcategories: undefined, locations: undefined, personnel: undefined, customers: undefined,
         }};
     }),
 
