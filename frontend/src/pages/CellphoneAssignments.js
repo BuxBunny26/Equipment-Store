@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { cellphoneAssignmentsApi, personnelApi } from '../services/api';
+import { cellphoneAssignmentsApi, personnelApi, usersApi } from '../services/api';
 import * as XLSX from 'xlsx';
 import { useOperator } from '../context/OperatorContext';
 import { Icons } from '../components/Icons';
@@ -1876,8 +1876,18 @@ function AddToPersonnelModal({ item, onClose, onSuccess }) {
     email: item.employee_email || '',
     department: '',
   });
+  const [createLogin, setCreateLogin] = useState(true);
+  const [username, setUsername] = useState('');
+  const [roleId, setRoleId] = useState(3);
+  const [roles, setRoles] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    usersApi.getRoles().then(res => setRoles(res.data || [])).catch(() => {});
+    const base = (item.employee_name || '').toLowerCase().replace(/[^a-z0-9]/g, '.');
+    setUsername(base);
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -1886,20 +1896,30 @@ function AddToPersonnelModal({ item, onClose, onSuccess }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.employee_id || !form.full_name) {
-      setError('Employee ID and Full Name are required');
-      return;
-    }
+    if (!form.employee_id || !form.full_name) { setError('Employee ID and Full Name are required'); return; }
+    if (createLogin && !form.email) { setError('Email is required to create a login'); return; }
+    if (createLogin && !username) { setError('Username is required to create a login'); return; }
     try {
       setSaving(true);
       setError(null);
-      await personnelApi.create({
+      const personnelRes = await personnelApi.create({
         employee_id: form.employee_id.trim(),
         full_name: form.full_name.trim(),
         email: form.email.trim() || null,
         department: form.department.trim() || null,
         is_active: true,
       });
+      if (createLogin) {
+        await usersApi.create({
+          username: username.trim(),
+          email: form.email.trim(),
+          full_name: form.full_name.trim(),
+          role_id: roleId,
+          personnel_id: personnelRes.data?.id || null,
+          is_active: true,
+          department: form.department.trim() || null,
+        });
+      }
       onSuccess();
     } catch (err) {
       setError(err.message);
@@ -1910,16 +1930,13 @@ function AddToPersonnelModal({ item, onClose, onSuccess }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
         <div className="modal-header">
-          <h2>Add to Personnel</h2>
+          <h2>Add Employee</h2>
           <button className="btn btn-sm btn-secondary" onClick={onClose}><Icons.Close size={16} /></button>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
-              This will add <strong>{item.employee_name}</strong> to the Personnel list so they can be linked to equipment and log in.
-            </p>
             {error && <div className="alert alert-error" style={{ margin: 0 }}>{error}</div>}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div className="form-group">
@@ -1933,7 +1950,7 @@ function AddToPersonnelModal({ item, onClose, onSuccess }) {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div className="form-group">
-                <label className="form-label">Email</label>
+                <label className="form-label">Email {createLogin ? '*' : ''}</label>
                 <input type="email" name="email" className="form-input" value={form.email} onChange={handleChange} />
               </div>
               <div className="form-group">
@@ -1941,10 +1958,32 @@ function AddToPersonnelModal({ item, onClose, onSuccess }) {
                 <input type="text" name="department" className="form-input" value={form.department} onChange={handleChange} />
               </div>
             </div>
+            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600 }}>
+                <input type="checkbox" checked={createLogin} onChange={e => setCreateLogin(e.target.checked)} />
+                Also create a login account so they can access the system
+              </label>
+            </div>
+            {createLogin && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group">
+                  <label className="form-label">Username *</label>
+                  <input type="text" className="form-input" value={username} onChange={e => setUsername(e.target.value)} required />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Role</label>
+                  <select className="form-input" value={roleId} onChange={e => setRoleId(Number(e.target.value))}>
+                    {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving...' : 'Add to Personnel'}</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? 'Saving...' : createLogin ? 'Add Employee & Create Login' : 'Add to Personnel'}
+            </button>
           </div>
         </form>
       </div>
