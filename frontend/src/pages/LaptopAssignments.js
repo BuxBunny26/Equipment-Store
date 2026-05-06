@@ -1176,7 +1176,7 @@ function LaptopModal({ item, personnel, allAssignments, operatorRole, onClose, o
               <label className="form-label">Employee *</label>
               <select
                 name="employee_name"
-                value={personnel.find(p => p.full_name === form.employee_name)?.id || ''}
+                value={personnel.find(p => (form.employee_id && p.employee_id === form.employee_id) || p.full_name === form.employee_name)?.id || ''}
                 onChange={handlePersonnelSelect}
                 className="form-input"
                 required
