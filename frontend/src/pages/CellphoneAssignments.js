@@ -39,6 +39,7 @@ function CellphoneAssignments() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showBrandChart, setShowBrandChart] = useState(false);
   const [showCostSummary, setShowCostSummary] = useState(false);
+  const [addPersonnelItem, setAddPersonnelItem] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [hiddenColumns, setHiddenColumns] = useState(new Set());
@@ -146,6 +147,23 @@ function CellphoneAssignments() {
 
   const divLookup = buildDivisionLookup(personnel);
   const getDivision = (item) => lookupDivision(divLookup, item, 'employee_name');
+
+  // Detect cellphone assignment records not linked to any personnel entry
+  const unlinkedEmployees = useMemo(() => {
+    const seen = new Set();
+    return assignments
+      .filter(a => a.phone_status === 'Active')
+      .filter(a => {
+        const linked = personnel.some(
+          p => (a.employee_id && p.employee_id === a.employee_id) || p.full_name === a.employee_name
+        );
+        if (linked) return false;
+        if (!a.employee_name || seen.has(a.employee_name)) return false;
+        seen.add(a.employee_name);
+        return true;
+      })
+      .map(a => ({ employee_name: a.employee_name, employee_id: a.employee_id || '', employee_email: a.employee_email || '' }));
+  }, [assignments, personnel]);
 
   // Get unique divisions and brands for filter dropdowns
   // Include divisions from both personnel and assignment notes
@@ -469,7 +487,31 @@ function CellphoneAssignments() {
         </div>
       )}
 
-      {/* Filters */}
+      {/* Unlinked employees alert */}
+      {unlinkedEmployees.length > 0 && (
+        <div style={{ background: 'rgba(243,156,18,0.12)', border: '1px solid #f39c12', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <Icons.Warning size={16} style={{ color: '#f39c12', flexShrink: 0 }} />
+            <strong style={{ fontSize: '0.9rem' }}>{unlinkedEmployees.length} employee{unlinkedEmployees.length !== 1 ? 's have' : ' has'} cellphone records but {unlinkedEmployees.length !== 1 ? 'are' : 'is'} not in the Personnel list</strong>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {unlinkedEmployees.map(emp => (
+              <div key={emp.employee_name} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '4px 10px', fontSize: '0.85rem' }}>
+                <span>{emp.employee_name}{emp.employee_id ? ` (${emp.employee_id})` : ''}</span>
+                <button
+                  className="btn btn-sm btn-primary"
+                  style={{ padding: '2px 8px', fontSize: '0.75rem' }}
+                  onClick={() => setAddPersonnelItem(emp)}
+                >
+                  + Add to Personnel
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Filters */}}
       <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
           <input
@@ -1172,7 +1214,16 @@ function CellphoneAssignments() {
         />
       )}
 
-      {/* Reassign Modal */}
+      {/* Add to Personnel Modal */}
+      {addPersonnelItem && (
+        <AddToPersonnelModal
+          item={addPersonnelItem}
+          onClose={() => setAddPersonnelItem(null)}
+          onSuccess={() => { setAddPersonnelItem(null); fetchData(); }}
+        />
+      )}
+
+      {/* Reassign Modal */}}
       {showReassignModal && reassignItem && (
         <ReassignModal
           item={reassignItem}
@@ -1394,7 +1445,7 @@ function CellphoneModal({ item, personnel, allAssignments, onClose, onSuccess })
               <label className="form-label">Employee *</label>
               <select
                 name="employee_name"
-                value={personnel.find(p => p.full_name === form.employee_name)?.id || ''}
+                value={personnel.find(p => (form.employee_id && p.employee_id === form.employee_id) || p.full_name === form.employee_name)?.id || ''}
                 onChange={handlePersonnelSelect}
                 className="form-input"
                 required
@@ -1811,6 +1862,89 @@ function CellphoneModal({ item, personnel, allAssignments, onClose, onSuccess })
                 {saving ? 'Saving...' : (item ? 'Update' : 'Assign Cellphone')}
               </button>
             )}
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function AddToPersonnelModal({ item, onClose, onSuccess }) {
+  const [form, setForm] = useState({
+    employee_id: item.employee_id || '',
+    full_name: item.employee_name || '',
+    email: item.employee_email || '',
+    department: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.employee_id || !form.full_name) {
+      setError('Employee ID and Full Name are required');
+      return;
+    }
+    try {
+      setSaving(true);
+      setError(null);
+      await personnelApi.create({
+        employee_id: form.employee_id.trim(),
+        full_name: form.full_name.trim(),
+        email: form.email.trim() || null,
+        department: form.department.trim() || null,
+        is_active: true,
+      });
+      onSuccess();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+        <div className="modal-header">
+          <h2>Add to Personnel</h2>
+          <button className="btn btn-sm btn-secondary" onClick={onClose}><Icons.Close size={16} /></button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
+              This will add <strong>{item.employee_name}</strong> to the Personnel list so they can be linked to equipment and log in.
+            </p>
+            {error && <div className="alert alert-error" style={{ margin: 0 }}>{error}</div>}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="form-group">
+                <label className="form-label">Employee ID *</label>
+                <input type="text" name="employee_id" className="form-input" value={form.employee_id} onChange={handleChange} required />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Full Name *</label>
+                <input type="text" name="full_name" className="form-input" value={form.full_name} onChange={handleChange} required />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="form-group">
+                <label className="form-label">Email</label>
+                <input type="email" name="email" className="form-input" value={form.email} onChange={handleChange} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Department</label>
+                <input type="text" name="department" className="form-input" value={form.department} onChange={handleChange} />
+              </div>
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving...' : 'Add to Personnel'}</button>
           </div>
         </form>
       </div>
