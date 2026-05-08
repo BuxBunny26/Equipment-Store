@@ -387,6 +387,45 @@ export const movementsApi = {
         const { data } = supabase.storage.from('movement-photos').getPublicUrl(`movement_${movementId}.jpg`);
         return data?.publicUrl || '';
     },
+
+    // Update expected return date on the latest OUT movement for a given equipment
+    updateExpectedReturn: (movementId, expectedReturnDate) => wrap(
+        supabase.from('equipment_movements')
+            .update({ expected_return_date: expectedReturnDate })
+            .eq('id', movementId)
+            .select('id, expected_return_date')
+            .single()
+    ),
+
+    // Fetch overdue items for a specific personnel (checked out, past expected return or > 14 days old)
+    getOverdueForPersonnel: (personnelId) => wrap(
+        supabase.from('equipment_movements')
+            .select(`
+                id, created_at, expected_return_date, notes,
+                equipment:equipment_id(id, equipment_id, equipment_name, categories(name)),
+                locations(name), customers(display_name)
+            `)
+            .eq('personnel_id', personnelId)
+            .eq('action', 'OUT')
+            .order('created_at', { ascending: false })
+    ).then(res => {
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 14);
+        const data = (res.data || []).filter(m => {
+            if (m.expected_return_date) return new Date(m.expected_return_date) < today;
+            return new Date(m.created_at) < cutoff;
+        });
+        return { data: data.map(m => ({
+            ...m,
+            equipment_pk: m.equipment?.id,
+            equipment_code: m.equipment?.equipment_id,
+            equipment_name: m.equipment?.equipment_name,
+            category: m.equipment?.categories?.name,
+            location: m.locations?.name || m.customers?.display_name || null,
+            days_out: Math.floor((Date.now() - new Date(m.created_at)) / 86400000),
+            equipment: undefined, locations: undefined, customers: undefined,
+        })) };
+    }),
 };
 
 // Reports

@@ -10,6 +10,7 @@ import { ThemeProvider } from './context/ThemeContext';
 // Components
 import OperatorSelector from './components/OperatorSelector';
 import OperatorModal from './components/OperatorModal';
+import OverdueReturnPrompt from './components/OverdueReturnPrompt';
 
 // Pages
 import Dashboard from './pages/Dashboard';
@@ -213,6 +214,9 @@ function AppContent() {
       {showOperatorModal && (
         <OperatorModal onClose={() => setShowOperatorModal(false)} />
       )}
+
+      {/* Overdue Equipment Prompt — shown on login if operator has overdue items */}
+      <OverdueReturnPrompt />
 
       {/* Mobile Header */}
       <header className="mobile-header">

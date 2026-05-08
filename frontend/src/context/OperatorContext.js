@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { personnelApi, usersApi } from '../services/api';
+import { personnelApi, usersApi, movementsApi } from '../services/api';
 import { setOperatorName } from '../services/supabaseClient';
 
 const OperatorContext = createContext();
@@ -14,6 +14,7 @@ export function OperatorProvider({ children }) {
   const [operatorRole, setOperatorRole] = useState(null);
   const [personnel, setPersonnel] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [overdueItems, setOverdueItems] = useState([]);
 
   // Load personnel list on mount
   useEffect(() => {
@@ -113,11 +114,20 @@ export function OperatorProvider({ children }) {
       usersApi.recordLogin(person.id).catch(err =>
         console.error('Failed to record login:', err)
       );
+      // Check for overdue equipment belonging to this person
+      try {
+        const res = await movementsApi.getOverdueForPersonnel(person.id);
+        setOverdueItems(res.data || []);
+      } catch (err) {
+        console.error('Failed to fetch overdue items:', err);
+        setOverdueItems([]);
+      }
     } else {
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(ACTIVITY_KEY);
       localStorage.removeItem(ROLE_KEY);
       setOperatorRole(null);
+      setOverdueItems([]);
     }
   };
 
@@ -128,7 +138,10 @@ export function OperatorProvider({ children }) {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(ACTIVITY_KEY);
     localStorage.removeItem(ROLE_KEY);
+    setOverdueItems([]);
   };
+
+  const clearOverdueItems = () => setOverdueItems([]);
 
   const value = {
     operator,
@@ -138,6 +151,9 @@ export function OperatorProvider({ children }) {
     selectOperator,
     clearOperator,
     isOperatorSelected: !!operator,
+    overdueItems,
+    clearOverdueItems,
+    setOverdueItems,
   };
 
   return (
