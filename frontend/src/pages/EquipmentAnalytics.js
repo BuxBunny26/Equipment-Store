@@ -291,9 +291,10 @@ function EquipmentAnalytics() {
   // -- Site / Location checkout analytics --
 
   // Which site currently has which equipment (grouped by location -> list of equipment)
+  // Only include checked-out equipment — available/in-storage items have no meaningful site
   const equipmentBySite = useMemo(() => {
     const grouped = {};
-    equipment.forEach(e => {
+    equipment.filter(e => e.status === 'Checked Out').forEach(e => {
       const loc = e.current_location || 'Unknown';
       if (!grouped[loc]) grouped[loc] = [];
       grouped[loc].push(e);
