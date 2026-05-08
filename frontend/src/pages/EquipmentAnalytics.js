@@ -1379,9 +1379,9 @@ function EquipmentAnalytics() {
           {/* Calendar header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button className="btn btn-sm btn-secondary" onClick={prevMonth} style={{ padding: '4px 10px' }}>â€¹</button>
+              <button className="btn btn-sm btn-secondary" onClick={prevMonth} style={{ padding: '4px 10px' }}>{'<'}</button>
               <span style={{ fontWeight: 700, fontSize: '1.05rem', minWidth: 160, textAlign: 'center' }}>{monthLabel}</span>
-              <button className="btn btn-sm btn-secondary" onClick={nextMonth} style={{ padding: '4px 10px' }}>â€º</button>
+              <button className="btn btn-sm btn-secondary" onClick={nextMonth} style={{ padding: '4px 10px' }}>{'>'}</button>
               <button className="btn btn-sm btn-secondary" onClick={goToday} style={{ marginLeft: 4 }}>Today</button>
             </div>
           </div>
