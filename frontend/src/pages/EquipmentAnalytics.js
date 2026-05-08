@@ -1233,7 +1233,7 @@ function EquipmentAnalytics() {
     const monthLabel = new Date(year, month, 1).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
     const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-    const selectedDayData = calSelectedDay ? calendarData.find(d => d && d.date === calSelectedDay) : null;
+    const selectedDayData = calSelectedDay ? calendarData.find(d => d && d.dateStr === calSelectedDay) : null;
 
     const prevMonth = () => setCalViewDate(v => {
       const d = new Date(v.year, v.month - 1, 1);
