@@ -10,6 +10,12 @@
   # Publish directory (relative to base)
   publish = "build"
 
+# Prevent index.html from being cached so users always get the latest build
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
 # Handle React Router - redirect all paths to index.html
 [[redirects]]
   from = "/*"
