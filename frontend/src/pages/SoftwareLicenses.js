@@ -11,7 +11,7 @@ const LICENSE_TYPES = ['Per User', 'Per Device', 'Site License', 'Concurrent'];
 
 function monthlyCost(lic) {
   if (!lic || !lic.cost_per_seat) return 0;
-  const seats = lic.assigned_count || 0;
+  const seats = lic.total_seats || 0;
   if (lic.billing_cycle === 'Annual') return (lic.cost_per_seat / 12) * seats;
   if (lic.billing_cycle === 'One-time') return 0;
   return lic.cost_per_seat * seats;
@@ -19,7 +19,7 @@ function monthlyCost(lic) {
 
 function annualCost(lic) {
   if (!lic || !lic.cost_per_seat) return 0;
-  const seats = lic.assigned_count || 0;
+  const seats = lic.total_seats || 0;
   if (lic.billing_cycle === 'Annual') return lic.cost_per_seat * seats;
   if (lic.billing_cycle === 'One-time') return 0;
   return (lic.cost_per_seat * seats) * 12;
@@ -111,7 +111,9 @@ function SoftwareLicenses() {
   const enrichedLicenses = useMemo(() => {
     return licenses.map(lic => {
       const active = assignments.filter(a => a.software_license_id === lic.id && a.is_active);
-      return { ...lic, assigned_count: active.length };
+      // seats_used is a manual override for when individual assignment records aren't entered
+      const assigned_count = Math.max(active.length, lic.seats_used || 0);
+      return { ...lic, assigned_count };
     });
   }, [licenses, assignments]);
 
