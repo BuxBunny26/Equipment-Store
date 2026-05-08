@@ -214,14 +214,17 @@ export const equipmentApi = {
 
     getHistory: (id, limit = 50) => wrap(
         supabase.from('equipment_movements')
-            .select(`id, action, quantity, notes, photo_url, created_at, created_by, expected_checkout_date, expected_return_date, locations(name), personnel(full_name, employee_id)`)
+            .select(`id, action, quantity, notes, photo_url, created_at, created_by, expected_checkout_date, expected_return_date, locations(name), customers(display_name), personnel(full_name, employee_id)`)
             .eq('equipment_id', id)
             .order('created_at', { ascending: false })
             .limit(limit)
     ).then(res => ({
         data: (res.data || []).map(m => ({
-            ...m, location: m.locations?.name, personnel: m.personnel?.full_name,
-            personnel_employee_id: m.personnel?.employee_id, locations: undefined,
+            ...m,
+            location: m.locations?.name || m.customers?.display_name || null,
+            personnel: m.personnel?.full_name,
+            personnel_employee_id: m.personnel?.employee_id,
+            locations: undefined, customers: undefined,
         }))
     })),
 
@@ -445,7 +448,7 @@ export const reportsApi = {
         let query = supabase.from('equipment_movements')
             .select(`id, action, quantity, notes, created_at, created_by,
                 equipment(equipment_id, equipment_name, categories(name)),
-                locations(name), personnel(full_name, employee_id)`)
+                locations(name), customers(display_name), personnel(full_name, employee_id)`)
             .order('created_at', { ascending: false }).limit(limit);
         if (from_date) query = query.gte('created_at', from_date);
         if (to_date) query = query.lte('created_at', to_date);
@@ -454,9 +457,10 @@ export const reportsApi = {
         return wrap(query).then(res => ({
             data: (res.data || []).map(m => ({ ...m,
                 equipment_id: m.equipment?.equipment_id, equipment_name: m.equipment?.equipment_name,
-                category: m.equipment?.categories?.name, location: m.locations?.name,
+                category: m.equipment?.categories?.name,
+                location: m.locations?.name || m.customers?.display_name || null,
                 personnel_name: m.personnel?.full_name, personnel_employee_id: m.personnel?.employee_id,
-                equipment: undefined, locations: undefined, personnel: undefined,
+                equipment: undefined, locations: undefined, customers: undefined, personnel: undefined,
             }))
         }));
     },
