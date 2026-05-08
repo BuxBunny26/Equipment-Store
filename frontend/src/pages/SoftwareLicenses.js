@@ -42,6 +42,15 @@ function getRenewalStatus(date) {
   return 'ok';
 }
 
+function renewalDaysLabel(date) {
+  if (!date) return null;
+  const days = Math.ceil((new Date(date) - new Date()) / (1000 * 60 * 60 * 24));
+  if (days < 0) return `Expired ${Math.abs(days)}d ago`;
+  if (days === 0) return 'Expires today';
+  if (days <= 30) return `Due in ${days} day${days === 1 ? '' : 's'}`;
+  return new Date(date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 function SoftwareLicenses() {
@@ -430,6 +439,7 @@ function SoftwareLicenses() {
         'Vendor': a.vendor || '',
         'Cost per Seat (ZAR)': a.cost_per_seat ?? '',
         'Billing Cycle': a.billing_cycle || '',
+        'Monthly Cost (ZAR)': a.cost_per_seat != null ? +(a.billing_cycle === 'Annual' ? a.cost_per_seat / 12 : a.billing_cycle === 'One-time' ? 0 : a.cost_per_seat).toFixed(2) : '',
         'Assigned Date': a.assigned_date || '',
         'Notes': a.notes || '',
       }));
@@ -702,42 +712,9 @@ function SoftwareLicenses() {
             )}
           </div>
 
-          {/* Division cost breakdown */}
-          {divisionBreakdown.length > 0 && (
-            <>
-              <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: '0 0 12px' }}>Monthly Cost by Division</h3>
-              <div className="table-container">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Division</th>
-                      <th>Assigned Seats</th>
-                      <th>Monthly Cost</th>
-                      <th>Annual Cost</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {divisionBreakdown.map(row => (
-                      <tr key={row.division}>
-                        <td>{row.division}</td>
-                        <td>{row.count}</td>
-                        <td>{fmtCurrency(row.monthly)}</td>
-                        <td>{fmtCurrency(row.monthly * 12)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ fontWeight: 600, borderTop: '2px solid var(--border-color)' }}>
-                      <td>Total</td>
-                      <td>{divisionBreakdown.reduce((s, r) => s + r.count, 0)}</td>
-                      <td>{fmtCurrency(divisionBreakdown.reduce((s, r) => s + r.monthly, 0))}</td>
-                      <td>{fmtCurrency(divisionBreakdown.reduce((s, r) => s + r.monthly * 12, 0))}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </>
-          )}
+          {/* Budget overview stacked bar */}
+          <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: '0 0 12px' }}>Monthly Budget Overview</h3>
+          <CostBreakdownBar costAllocation={costAllocation} />
         </div>
       )}
 
@@ -807,9 +784,7 @@ function SoftwareLicenses() {
                       <td>
                         {lic.renewal_date ? (
                           <span style={{ color: renewal === 'expired' ? 'var(--error-color)' : renewal === 'due-soon' ? 'var(--warning-color)' : 'inherit' }}>
-                            {lic.renewal_date}
-                            {renewal === 'expired' && ' (Expired)'}
-                            {renewal === 'due-soon' && ' (Due Soon)'}
+                            {renewalDaysLabel(lic.renewal_date)}
                           </span>
                         ) : '-'}
                       </td>
@@ -901,6 +876,7 @@ function SoftwareLicenses() {
                   <th>Vendor</th>
                   <th>Cost / Seat</th>
                   <th>Billing</th>
+                  <th>Monthly Cost</th>
                   <th>Assigned Date</th>
                   <th>Notes</th>
                   {isAdmin && <th>Actions</th>}
@@ -908,7 +884,7 @@ function SoftwareLicenses() {
               </thead>
               <tbody>
                 {filteredAssignments.length === 0 && (
-                  <tr><td colSpan={10} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 32 }}>No assignments found.</td></tr>
+                  <tr><td colSpan={11} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 32 }}>No assignments found.</td></tr>
                 )}
                 {filteredAssignments.map(a => {
                   const div = lookupDivision(divLookup, { employee_name: a.employee_name }, 'employee_name') || '-';
@@ -921,6 +897,7 @@ function SoftwareLicenses() {
                       <td>{a.vendor || '-'}</td>
                       <td>{a.cost_per_seat != null ? fmtCurrency(a.cost_per_seat) : '-'}</td>
                       <td>{a.billing_cycle || '-'}</td>
+                      <td>{a.cost_per_seat != null ? fmtCurrency(a.billing_cycle === 'Annual' ? a.cost_per_seat / 12 : a.billing_cycle === 'One-time' ? 0 : a.cost_per_seat) : '-'}</td>
                       <td>{a.assigned_date || '-'}</td>
                       <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{a.notes || ''}</td>
                       {isAdmin && (
@@ -949,12 +926,32 @@ function SoftwareLicenses() {
          ══════════════════════════════════════════════════════════════════ */}
       {activeTab === 'cost-allocation' && (
         <div>
-          <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 20 }}>
-            <StatCard label="AFS Monthly" value={fmtCurrency(costAllocation.afsTotals.monthly)} icon={<Icons.TrendingUp size={18} />} color="#e74c3c" small />
-            <StatCard label="RS Monthly" value={fmtCurrency(costAllocation.rsTotals.monthly)} icon={<Icons.TrendingUp size={18} />} color="#2980b9" small />
-            <StatCard label="Unallocated Monthly" value={fmtCurrency(costAllocation.unallocTotals.monthly)} icon={<Icons.TrendingUp size={18} />} color="#95a5a6" small />
-            <StatCard label="Grand Total Monthly" value={fmtCurrency(costAllocation.afsTotals.monthly + costAllocation.rsTotals.monthly + costAllocation.unallocTotals.monthly + costAllocation.expenseTotals.monthly)} icon={<Icons.BarChart size={18} />} color="#27ae60" small />
-          </div>
+          {(() => {
+            const grandTotal = costAllocation.afsTotals.monthly + costAllocation.rsTotals.monthly + costAllocation.unallocTotals.monthly + costAllocation.expenseTotals.monthly;
+            const pct = (v) => grandTotal > 0 ? `${Math.round(v / grandTotal * 100)}%` : '—';
+            const costCards = [
+              { label: 'AFS Monthly', value: costAllocation.afsTotals.monthly, color: '#e74c3c' },
+              { label: 'RS Monthly', value: costAllocation.rsTotals.monthly, color: '#2980b9' },
+              { label: 'Unallocated', value: costAllocation.unallocTotals.monthly, color: '#95a5a6' },
+              { label: 'Expense Claims', value: costAllocation.expenseTotals.monthly, color: '#27ae60' },
+            ];
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 20 }}>
+                {costCards.map(c => (
+                  <div key={c.label} className="stat-card" style={{ borderLeft: `4px solid ${c.color}` }}>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{c.label}</div>
+                    <div style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>{fmtCurrency(c.value)}</div>
+                    <div style={{ fontSize: '0.78rem', color: c.color, fontWeight: 500, marginTop: 3 }}>{pct(c.value)} of total</div>
+                  </div>
+                ))}
+                <div className="stat-card" style={{ borderLeft: '4px solid #27ae60', background: 'rgba(39,174,96,0.04)' }}>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Grand Total Monthly</div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>{fmtCurrency(grandTotal)}</div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: 3 }}>{fmtCurrency(grandTotal * 12)} / year</div>
+                </div>
+              </div>
+            );
+          })()}
 
           <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 12 }}>Department Breakdown by Product</h3>
           <div className="table-container" style={{ marginBottom: 28 }}>
@@ -976,7 +973,7 @@ function SoftwareLicenses() {
                   <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 28 }}>No department-allocated licenses yet. Edit licenses and set their Department to AFS or RS.</td></tr>
                 )}
                 {costAllocation.products.map(p => (
-                  <tr key={p.name}>
+                  <tr key={p.name} style={{ background: (p.afs && !p.rs) || (!p.afs && p.rs) ? 'rgba(230,126,34,0.06)' : 'inherit' }}>
                     <td style={{ fontWeight: 500 }}>{p.name}</td>
                     <td>{p.vendor || '-'}</td>
                     <td style={{ background: 'rgba(231,76,60,0.04)' }}>{p.afs ? p.afs.seats : <span style={{ color: 'var(--text-secondary)' }}>-</span>}</td>
@@ -1406,7 +1403,7 @@ function LicenseSummaryCard({ lic, onAssign, onBulkAssign, onEdit, isAdmin }) {
         <KV label="Monthly" value={fmtCurrency(monthly)} strong />
         <KV label="Annual" value={fmtCurrency(annual)} />
         {lic.renewal_date && (
-          <KV label="Renewal" value={lic.renewal_date}
+          <KV label="Renewal" value={renewalDaysLabel(lic.renewal_date)}
             valueStyle={{ color: renewal === 'expired' ? 'var(--error-color)' : renewal === 'due-soon' ? 'var(--warning-color)' : 'inherit' }}
           />
         )}
@@ -1414,20 +1411,26 @@ function LicenseSummaryCard({ lic, onAssign, onBulkAssign, onEdit, isAdmin }) {
 
       {utilPct !== null && (
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 3 }}>
-            <span>Seat utilization</span>
-            <span style={{ color: overLimit ? 'var(--error-color)' : 'inherit', fontWeight: overLimit ? 600 : 400 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: 4 }}>
+            <span style={{ color: 'var(--text-secondary)' }}>{lic.assigned_count} / {lic.total_seats} seats</span>
+            <span style={{ color: barColor, fontWeight: 600 }}>
               {Math.round(utilPct)}%{overLimit ? ' — over limit' : ''}
             </span>
           </div>
-          <div style={{ height: 5, background: 'var(--border-color)', borderRadius: 3 }}>
+          <div style={{ height: 8, background: 'var(--border-color)', borderRadius: 4 }}>
             <div style={{
-              height: '100%', borderRadius: 3,
-              width: `${utilPct}%`,
+              height: '100%', borderRadius: 4,
+              width: `${Math.min(100, utilPct)}%`,
               background: barColor,
               transition: 'width 0.4s ease',
             }} />
           </div>
+        </div>
+      )}
+
+      {lic.notes && (
+        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', borderTop: '1px solid var(--border-color)', paddingTop: 8, marginTop: 2, fontStyle: 'italic', lineHeight: 1.4 }} title={lic.notes}>
+          {lic.notes.length > 90 ? lic.notes.slice(0, 90) + '…' : lic.notes}
         </div>
       )}
 
@@ -1450,6 +1453,55 @@ function KV({ label, value, strong, valueStyle }) {
     <div>
       <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: 1 }}>{label}</div>
       <div style={{ fontWeight: strong ? 600 : 400, ...valueStyle }}>{value}</div>
+    </div>
+  );
+}
+
+function CostBreakdownBar({ costAllocation }) {
+  const segments = [
+    { label: 'AFS', value: costAllocation.afsTotals.monthly, color: '#e74c3c' },
+    { label: 'RS', value: costAllocation.rsTotals.monthly, color: '#2980b9' },
+    { label: 'Unallocated', value: costAllocation.unallocTotals.monthly, color: '#bdc3c7' },
+    { label: 'Expense Claims', value: costAllocation.expenseTotals.monthly, color: '#27ae60' },
+  ].filter(s => s.value > 0);
+  const total = segments.reduce((s, x) => s + x.value, 0);
+  if (total === 0) return (
+    <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', marginBottom: 28 }}>
+      No cost data yet — add software and set departments to see the breakdown.
+    </p>
+  );
+  return (
+    <div style={{ marginBottom: 28 }}>
+      {/* Stacked horizontal bar */}
+      <div style={{ display: 'flex', height: 32, borderRadius: 8, overflow: 'hidden', marginBottom: 14, border: '1px solid var(--border-color)' }}>
+        {segments.map(s => (
+          <div
+            key={s.label}
+            style={{ width: `${(s.value / total) * 100}%`, background: s.color, transition: 'width 0.5s ease' }}
+            title={`${s.label}: ${fmtCurrency(s.value)}/mo (${Math.round(s.value / total * 100)}%)`}
+          />
+        ))}
+      </div>
+      {/* Legend */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 28px', marginBottom: 10 }}>
+        {segments.map(s => (
+          <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.86rem' }}>
+            <div style={{ width: 13, height: 13, borderRadius: 3, background: s.color, flexShrink: 0 }} />
+            <span style={{ fontWeight: 600 }}>{s.label}</span>
+            <span style={{ color: 'var(--text-secondary)' }}>{fmtCurrency(s.value)}/mo</span>
+            <span style={{ background: s.color + '22', color: s.color, fontWeight: 700, borderRadius: 4, padding: '1px 6px', fontSize: '0.78rem' }}>
+              {Math.round(s.value / total * 100)}%
+            </span>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: '0.83rem', color: 'var(--text-secondary)' }}>
+        Grand total: <strong style={{ color: 'var(--text-primary)' }}>{fmtCurrency(total)}/month</strong>
+        {' · '}
+        <strong style={{ color: 'var(--text-primary)' }}>{fmtCurrency(total * 12)}/year</strong>
+        {' · '}
+        <span>Go to <strong>Cost Allocation</strong> tab for per-product breakdown</span>
+      </div>
     </div>
   );
 }
