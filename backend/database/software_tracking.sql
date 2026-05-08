@@ -81,12 +81,20 @@ CREATE TRIGGER trg_software_assignments_updated_at
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ── Seed ────────────────────────────────────────────────────
-INSERT INTO software_licenses (name, vendor, license_type, cost_per_seat, billing_cycle, notes)
+INSERT INTO software_licenses (name, vendor, license_type, cost_per_seat, billing_cycle, total_seats, renewal_date, notes)
 VALUES
-  ('Microsoft 365 Business', 'Microsoft',  'Per User', 219.00, 'Monthly', 'M365 Business Standard'),
-  ('Adobe Acrobat Pro',       'Adobe',      'Per User', 220.00, 'Monthly', 'PDF editing and signing'),
-  ('Zoho One',                'Zoho',       'Per User', 185.00, 'Monthly', 'Zoho suite'),
-  ('Smartsheet',              'Smartsheet', 'Per User', 250.00, 'Monthly', 'Project / work management')
+  ('Microsoft 365 Business Standard',        'Microsoft', 'Per User', 209.55, 'Monthly',  97, NULL, 'Monthly billing, 365-day term. R20,326.35/month excl. VAT.'),
+  ('Microsoft 365 E3',                       'Microsoft', 'Per User', 603.29, 'Monthly',  15, NULL, 'Monthly billing, 365-day term. R9,049.35/month excl. VAT.'),
+  ('Microsoft 365 Business Premium',         'Microsoft', 'Per User', 368.68, 'Monthly',  23, NULL, 'Monthly billing, 365-day term. R8,479.64/month excl. VAT.'),
+  ('Power BI Premium Per User',              'Microsoft', 'Per User', 402.19, 'Monthly',   7, NULL, 'Monthly billing, 365-day term. R2,815.33/month excl. VAT.'),
+  ('Exchange Online Plan 1',                 'Microsoft', 'Per User',  67.03, 'Monthly',   4, NULL, 'Monthly billing, 365-day term. R268.12/month excl. VAT.'),
+  ('Power Automate Per User',                'Microsoft', 'Per User', 251.37, 'Monthly',   1, NULL, 'Monthly billing, 365-day term. R251.37/month excl. VAT.'),
+  ('Microsoft Defender for Office Plan 2',   'Microsoft', 'Per User',  83.79, 'Monthly', 130, NULL, 'Monthly billing, 365-day term. R10,892.70/month excl. VAT.'),
+  ('Power Apps Per App Plan',                'Microsoft', 'Per User',  83.79, 'Monthly',   3, NULL, 'Monthly billing, 365-day term. R251.37/month excl. VAT.'),
+  ('Adobe Acrobat Pro',       'Adobe',      'Per User', 220.00,  'Monthly', NULL, NULL, 'PDF editing and signing'),
+  ('Zoho One',                'Zoho',       'Per User', 1470.00, 'Monthly',  45, '2026-06-07', 'Flexible User Pricing Plan. 45 users @ R1,470/seat = R66,150/month (excl. tax). Subscription ID: RPUS2005345172532'),
+  ('Smartsheet',              'Smartsheet', 'Per User', 225.00,  'Monthly',  53, NULL, 'Business Plan. 54 active members against 53 licensed seats (1 over). R12,150/month.'),
+  ('Zoho People',             'Zoho',       'Per User',  49.00,  'Monthly',  121, '2026-06-03', 'HR platform – Premium Plan. 121 seats @ R49/seat = R5,929/month (excl. tax). Subscription ID: RPUS2006773417247')
 ON CONFLICT (name) DO NOTHING;
 
 -- ── RLS ─────────────────────────────────────────────────────

@@ -72,6 +72,7 @@ function SoftwareLicenses() {
 
   // Filters (catalog tab)
   const [catSearch, setCatSearch] = useState('');
+  const [deptFilter, setDeptFilter] = useState('');
 
   // Bulk assign modal
   const [showBulkModal, setShowBulkModal] = useState(false);
@@ -120,13 +121,14 @@ function SoftwareLicenses() {
   // Filter catalog
   const filteredCatalog = useMemo(() => {
     return enrichedLicenses.filter(lic => {
+      if (deptFilter && lic.department !== deptFilter) return false;
       if (catSearch) {
         const t = catSearch.toLowerCase();
         return lic.name?.toLowerCase().includes(t) || lic.vendor?.toLowerCase().includes(t);
       }
       return true;
     });
-  }, [enrichedLicenses, catSearch]);
+  }, [enrichedLicenses, catSearch, deptFilter]);
 
   // Filter assignments
   const filteredAssignments = useMemo(() => {
@@ -181,11 +183,33 @@ function SoftwareLicenses() {
     )].sort();
   }, [personnel]);
 
+  // Cost allocation by department
+  const costAllocation = useMemo(() => {
+    const active = enrichedLicenses.filter(l => l.is_active);
+    const deptItems = active.filter(l => l.department);
+    const unallocated = active.filter(l => !l.department);
+    const productNames = [...new Set(deptItems.map(l => l.name))].sort();
+    const products = productNames.map(name => {
+      const afsLic = deptItems.find(l => l.name === name && l.department === 'AFS');
+      const rsLic  = deptItems.find(l => l.name === name && l.department === 'RS');
+      return {
+        name,
+        vendor: (afsLic || rsLic)?.vendor,
+        afs: afsLic ? { seats: afsLic.total_seats || 0, monthly: monthlyCost(afsLic) } : null,
+        rs:  rsLic  ? { seats: rsLic.total_seats  || 0, monthly: monthlyCost(rsLic)  } : null,
+      };
+    });
+    const afsTotals   = { monthly: deptItems.filter(l => l.department === 'AFS').reduce((s, l) => s + monthlyCost(l), 0) };
+    const rsTotals    = { monthly: deptItems.filter(l => l.department === 'RS' ).reduce((s, l) => s + monthlyCost(l), 0) };
+    const unallocTotals = { monthly: unallocated.reduce((s, l) => s + monthlyCost(l), 0) };
+    return { products, afsTotals, rsTotals, unallocTotals, unallocated };
+  }, [enrichedLicenses]);
+
   // ── License CRUD ───────────────────────────────────────────────────────────
 
   const openAddLicense = () => {
     setEditLicense(null);
-    setLicenseForm({ name: '', vendor: '', license_type: 'Per User', cost_per_seat: '', billing_cycle: 'Monthly', total_seats: '', renewal_date: '', notes: '', is_active: true });
+    setLicenseForm({ name: '', vendor: '', license_type: 'Per User', cost_per_seat: '', billing_cycle: 'Monthly', total_seats: '', renewal_date: '', notes: '', is_active: true, department: '' });
     setShowLicenseModal(true);
   };
 
@@ -201,6 +225,7 @@ function SoftwareLicenses() {
       renewal_date: lic.renewal_date || '',
       notes: lic.notes || '',
       is_active: lic.is_active !== false,
+      department: lic.department || '',
     });
     setShowLicenseModal(true);
   };
@@ -219,6 +244,7 @@ function SoftwareLicenses() {
         renewal_date: licenseForm.renewal_date || null,
         notes: licenseForm.notes?.trim() || null,
         is_active: licenseForm.is_active !== false,
+        department: licenseForm.department || null,
       };
       if (editLicense) {
         await softwareLicensesApi.update(editLicense.id, payload);
@@ -416,6 +442,7 @@ function SoftwareLicenses() {
           { key: 'overview', label: 'Overview' },
           { key: 'catalog', label: 'Catalog' },
           { key: 'assignments', label: 'Assignments' },
+          { key: 'cost-allocation', label: 'Cost Allocation' },
         ].map(t => (
           <button
             key={t.key}
@@ -432,10 +459,19 @@ function SoftwareLicenses() {
          ══════════════════════════════════════════════════════════════════ */}
       {activeTab === 'overview' && (
         <div>
+          {/* Department filter */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Department:</span>
+            {['', 'AFS', 'RS'].map(d => (
+              <button key={d} className={`btn btn-sm ${deptFilter === d ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setDeptFilter(d)}>
+                {d || 'All'}
+              </button>
+            ))}
+          </div>
           {/* Per-software summary cards */}
           <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 12 }}>License Summary</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14, marginBottom: 28 }}>
-            {enrichedLicenses.filter(l => l.is_active).map(lic => (
+            {enrichedLicenses.filter(l => l.is_active && (!deptFilter || l.department === deptFilter)).map(lic => (
               <LicenseSummaryCard
                 key={lic.id}
                 lic={lic}
@@ -516,6 +552,7 @@ function SoftwareLicenses() {
                 <tr>
                   <th>Software</th>
                   <th>Vendor</th>
+                  <th>Dept</th>
                   <th>Type</th>
                   <th>Cost / Seat</th>
                   <th>Cycle</th>
@@ -529,7 +566,7 @@ function SoftwareLicenses() {
               </thead>
               <tbody>
                 {filteredCatalog.length === 0 && (
-                  <tr><td colSpan={11} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 32 }}>No software products found.</td></tr>
+                  <tr><td colSpan={12} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 32 }}>No software products found.</td></tr>
                 )}
                 {filteredCatalog.map(lic => {
                   const renewal = getRenewalStatus(lic.renewal_date);
@@ -537,6 +574,7 @@ function SoftwareLicenses() {
                     <tr key={lic.id}>
                       <td style={{ fontWeight: 500 }}>{lic.name}</td>
                       <td>{lic.vendor || '-'}</td>
+                      <td>{lic.department ? <span className="badge" style={{ background: lic.department === 'AFS' ? 'rgba(231,76,60,0.15)' : 'rgba(41,128,185,0.15)', color: lic.department === 'AFS' ? '#c0392b' : '#1a6fa0', fontSize: '0.7rem' }}>{lic.department}</span> : <span style={{ color: 'var(--text-secondary)' }}>-</span>}</td>
                       <td>{lic.license_type || '-'}</td>
                       <td>{lic.cost_per_seat != null ? fmtCurrency(lic.cost_per_seat) : '-'}</td>
                       <td>{lic.billing_cycle}</td>
@@ -591,7 +629,7 @@ function SoftwareLicenses() {
               {filteredCatalog.length > 0 && (
                 <tfoot>
                   <tr style={{ fontWeight: 600, borderTop: '2px solid var(--border-color)' }}>
-                    <td colSpan={6}>Total (active, assigned seats)</td>
+                    <td colSpan={7}>Total (active, assigned seats)</td>
                     <td>{fmtCurrency(filteredCatalog.filter(l => l.is_active).reduce((s, l) => s + monthlyCost(l), 0))}</td>
                     <td>{fmtCurrency(filteredCatalog.filter(l => l.is_active).reduce((s, l) => s + annualCost(l), 0))}</td>
                     <td colSpan={3} />
@@ -687,6 +725,98 @@ function SoftwareLicenses() {
       )}
 
       {/* ══════════════════════════════════════════════════════════════════
+          TAB: Cost Allocation
+         ══════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'cost-allocation' && (
+        <div>
+          <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 20 }}>
+            <StatCard label="AFS Monthly" value={fmtCurrency(costAllocation.afsTotals.monthly)} icon={<Icons.TrendingUp size={18} />} color="#e74c3c" small />
+            <StatCard label="RS Monthly" value={fmtCurrency(costAllocation.rsTotals.monthly)} icon={<Icons.TrendingUp size={18} />} color="#2980b9" small />
+            <StatCard label="Unallocated Monthly" value={fmtCurrency(costAllocation.unallocTotals.monthly)} icon={<Icons.TrendingUp size={18} />} color="#95a5a6" small />
+            <StatCard label="Grand Total Monthly" value={fmtCurrency(costAllocation.afsTotals.monthly + costAllocation.rsTotals.monthly + costAllocation.unallocTotals.monthly)} icon={<Icons.BarChart size={18} />} color="#27ae60" small />
+          </div>
+
+          <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 12 }}>Department Breakdown by Product</h3>
+          <div className="table-container" style={{ marginBottom: 28 }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Vendor</th>
+                  <th style={{ background: 'rgba(231,76,60,0.08)', color: '#c0392b' }}>AFS Seats</th>
+                  <th style={{ background: 'rgba(231,76,60,0.08)', color: '#c0392b' }}>AFS Monthly</th>
+                  <th style={{ background: 'rgba(41,128,185,0.08)', color: '#1a6fa0' }}>RS Seats</th>
+                  <th style={{ background: 'rgba(41,128,185,0.08)', color: '#1a6fa0' }}>RS Monthly</th>
+                  <th>Total Monthly</th>
+                  <th>Total Annual</th>
+                </tr>
+              </thead>
+              <tbody>
+                {costAllocation.products.length === 0 && (
+                  <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 28 }}>No department-allocated licenses yet. Edit licenses and set their Department to AFS or RS.</td></tr>
+                )}
+                {costAllocation.products.map(p => (
+                  <tr key={p.name}>
+                    <td style={{ fontWeight: 500 }}>{p.name}</td>
+                    <td>{p.vendor || '-'}</td>
+                    <td style={{ background: 'rgba(231,76,60,0.04)' }}>{p.afs ? p.afs.seats : <span style={{ color: 'var(--text-secondary)' }}>-</span>}</td>
+                    <td style={{ background: 'rgba(231,76,60,0.04)', color: p.afs ? '#c0392b' : 'var(--text-secondary)' }}>{p.afs ? fmtCurrency(p.afs.monthly) : '-'}</td>
+                    <td style={{ background: 'rgba(41,128,185,0.04)' }}>{p.rs ? p.rs.seats : <span style={{ color: 'var(--text-secondary)' }}>-</span>}</td>
+                    <td style={{ background: 'rgba(41,128,185,0.04)', color: p.rs ? '#1a6fa0' : 'var(--text-secondary)' }}>{p.rs ? fmtCurrency(p.rs.monthly) : '-'}</td>
+                    <td style={{ fontWeight: 600 }}>{fmtCurrency((p.afs?.monthly || 0) + (p.rs?.monthly || 0))}</td>
+                    <td>{fmtCurrency(((p.afs?.monthly || 0) + (p.rs?.monthly || 0)) * 12)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {costAllocation.products.length > 0 && (
+                <tfoot>
+                  <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border-color)' }}>
+                    <td colSpan={2}>Subtotal (Allocated)</td>
+                    <td style={{ background: 'rgba(231,76,60,0.04)', color: '#c0392b' }}>{costAllocation.products.reduce((s, p) => s + (p.afs?.seats || 0), 0)}</td>
+                    <td style={{ background: 'rgba(231,76,60,0.04)', color: '#c0392b' }}>{fmtCurrency(costAllocation.afsTotals.monthly)}</td>
+                    <td style={{ background: 'rgba(41,128,185,0.04)', color: '#1a6fa0' }}>{costAllocation.products.reduce((s, p) => s + (p.rs?.seats || 0), 0)}</td>
+                    <td style={{ background: 'rgba(41,128,185,0.04)', color: '#1a6fa0' }}>{fmtCurrency(costAllocation.rsTotals.monthly)}</td>
+                    <td>{fmtCurrency(costAllocation.afsTotals.monthly + costAllocation.rsTotals.monthly)}</td>
+                    <td>{fmtCurrency((costAllocation.afsTotals.monthly + costAllocation.rsTotals.monthly) * 12)}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+
+          {costAllocation.unallocated.length > 0 && (
+            <>
+              <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 6 }}>Unallocated Licenses</h3>
+              <p style={{ fontSize: '0.83rem', color: 'var(--text-secondary)', marginBottom: 12 }}>No department set. Edit these licenses and set Department to include them in cost reporting.</p>
+              <div className="table-container">
+                <table className="data-table">
+                  <thead><tr><th>Product</th><th>Vendor</th><th>Seats</th><th>Monthly</th><th>Annual</th></tr></thead>
+                  <tbody>
+                    {costAllocation.unallocated.map(lic => (
+                      <tr key={lic.id}>
+                        <td style={{ fontWeight: 500 }}>{lic.name}</td>
+                        <td>{lic.vendor || '-'}</td>
+                        <td>{lic.total_seats || '-'}</td>
+                        <td>{fmtCurrency(monthlyCost(lic))}</td>
+                        <td>{fmtCurrency(annualCost(lic))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ fontWeight: 600, borderTop: '2px solid var(--border-color)' }}>
+                      <td colSpan={3}>Total Unallocated</td>
+                      <td>{fmtCurrency(costAllocation.unallocTotals.monthly)}</td>
+                      <td>{fmtCurrency(costAllocation.unallocTotals.monthly * 12)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════
           MODAL: Add / Edit License
          ══════════════════════════════════════════════════════════════════ */}
       {showLicenseModal && (
@@ -762,6 +892,14 @@ function SoftwareLicenses() {
                     onChange={e => setLicenseForm(f => ({ ...f, renewal_date: e.target.value }))}
                   />
                 </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Department</label>
+                <select className="form-input" value={licenseForm.department || ''} onChange={e => setLicenseForm(f => ({ ...f, department: e.target.value }))}>
+                  <option value="">— None / Shared —</option>
+                  <option value="AFS">AFS</option>
+                  <option value="RS">RS</option>
+                </select>
               </div>
               <div className="form-group">
                 <label className="form-label">Notes</label>
@@ -992,6 +1130,11 @@ function LicenseSummaryCard({ lic, onAssign, onBulkAssign, onEdit, isAdmin }) {
         <div>
           <div style={{ fontWeight: 600, fontSize: '1rem', color: 'var(--text-primary)' }}>{lic.name}</div>
           {lic.vendor && <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>{lic.vendor}</div>}
+        {lic.department && (
+          <span style={{ display: 'inline-block', marginTop: 3, background: lic.department === 'AFS' ? 'rgba(231,76,60,0.12)' : 'rgba(41,128,185,0.12)', color: lic.department === 'AFS' ? '#c0392b' : '#1a6fa0', borderRadius: 4, padding: '2px 8px', fontSize: '0.72rem', fontWeight: 600 }}>
+            {lic.department}
+          </span>
+        )}
         </div>
         {isAdmin && (
           <div style={{ display: 'flex', gap: 4 }}>
