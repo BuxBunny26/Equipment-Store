@@ -42,6 +42,8 @@ function EquipmentAnalytics() {
   const [reservations, setReservations] = useState([]);
   const [movements, setMovements] = useState([]);
   const [calData, setCalData] = useState([]);
+  const [checkedOutReport, setCheckedOutReport] = useState([]);
+  const [lastRefreshed, setLastRefreshed] = useState(null);
 
   // Equipment Insights state
   const [insightEquipId, setInsightEquipId] = useState(null);
@@ -62,13 +64,14 @@ function EquipmentAnalytics() {
     try {
       setLoading(true);
       setError(null);
-      const [locRes, catRes, eqRes, resRes, movRes, calRes] = await Promise.all([
+      const [locRes, catRes, eqRes, resRes, movRes, calRes, coRes] = await Promise.all([
         reportsApi.getByLocation(),
         reportsApi.getByCategory(),
         equipmentApi.getAll({ is_consumable: 'false' }),
         reservationsApi.getAll({}),
         reportsApi.getMovementHistory({ limit: 1000 }),
         calibrationApi.getStatus(),
+        reportsApi.getCheckedOut(),
       ]);
       setLocationData(Array.isArray(locRes?.data) ? locRes.data : []);
       setCategoryData(Array.isArray(catRes?.data) ? catRes.data : []);
@@ -76,12 +79,26 @@ function EquipmentAnalytics() {
       setReservations(Array.isArray(resRes?.data) ? resRes.data : []);
       setMovements(Array.isArray(movRes?.data) ? movRes.data : []);
       setCalData(Array.isArray(calRes?.data) ? calRes.data : []);
+      setCheckedOutReport(Array.isArray(coRes?.data) ? coRes.data : []);
+      setLastRefreshed(new Date());
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
+
+  // Auto-refresh data when user returns to this tab/window
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && lastRefreshed) {
+        const msSince = Date.now() - lastRefreshed.getTime();
+        if (msSince > 5 * 60 * 1000) fetchAllData(); // re-fetch if away > 5 min
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [lastRefreshed]);
 
   // Fetch detailed data for a single equipment item
   const fetchEquipmentInsight = async (eq) => {
@@ -1339,7 +1356,13 @@ function EquipmentAnalytics() {
         </div>
 
         {/* Day detail panel */}
-        {selectedDayData && (
+        {selectedDayData && (() => {
+          // Enrich checked-out list with data from the checked-out report (calibration, expected return, holder)
+          const enriched = selectedDayData.checkedOut.map(e => {
+            const report = checkedOutReport.find(r => r.id === e.id);
+            return report ? { ...e, ...report, equipment_id: e.equipment_id } : e;
+          });
+          return (
           <div className="card" style={{ marginTop: 16 }}>
             <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 className="card-title">
@@ -1360,21 +1383,55 @@ function EquipmentAnalytics() {
               </span>
             </div>
 
-            {selectedDayData.checkedOut.length > 0 && (
+            {enriched.length > 0 && (
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontWeight: 600, marginBottom: 8, color: '#ed6c02', fontSize: '0.9rem' }}>Checked Out Equipment</div>
                 <div className="table-container">
                   <table className="equipment-table">
-                    <thead><tr><th>Equipment</th><th>Category</th><th>Location / Site</th><th>Held By</th></tr></thead>
+                    <thead>
+                      <tr>
+                        <th>Equipment</th>
+                        <th>Checked Out By</th>
+                        <th>Site / Location</th>
+                        <th>Expected Return</th>
+                        <th>Calibration</th>
+                      </tr>
+                    </thead>
                     <tbody>
-                      {selectedDayData.checkedOut.map(e => (
-                        <tr key={e.id}>
-                          <td><strong>{e.equipment_id}</strong><br /><span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{e.equipment_name}</span></td>
-                          <td>{e.category_name || '-'}</td>
-                          <td>{e.current_location || '-'}</td>
-                          <td>{e.current_holder || '-'}</td>
-                        </tr>
-                      ))}
+                      {enriched.map(e => {
+                        const calColor = { Valid: '#2e7d32', 'Due Soon': '#ed6c02', Expired: '#d32f2f', 'Not Calibrated': '#757575', 'N/A': '#757575' }[e.calibration_status] || '#757575';
+                        const isOverdue = e.is_overdue;
+                        return (
+                          <tr key={e.id}>
+                            <td>
+                              <strong>{e.equipment_id}</strong>
+                              <br />
+                              <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{e.equipment_name}</span>
+                              {isOverdue && (
+                                <span style={{ display: 'inline-block', marginLeft: 6, background: 'rgba(211,47,47,0.12)', color: '#d32f2f', borderRadius: 4, padding: '1px 6px', fontSize: '0.68rem', fontWeight: 700 }}>OVERDUE</span>
+                              )}
+                            </td>
+                            <td>
+                              {e.checked_out_to || e.current_holder || '-'}
+                              {e.days_out != null && (
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{e.days_out}d out</div>
+                              )}
+                            </td>
+                            <td>{e.current_location || '-'}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}>
+                              {e.expected_return_date
+                                ? <span style={{ color: isOverdue ? '#d32f2f' : 'inherit', fontWeight: isOverdue ? 600 : 400 }}>{formatDate(e.expected_return_date)}</span>
+                                : <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Not set</span>
+                              }
+                            </td>
+                            <td>
+                              <span style={{ color: calColor, fontWeight: 600, fontSize: '0.8rem' }}>
+                                {e.calibration_status || '-'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1406,7 +1463,8 @@ function EquipmentAnalytics() {
               <p style={{ color: 'var(--text-secondary)', marginTop: 8 }}>All equipment available — no checkouts or reservations on this day.</p>
             )}
           </div>
-        )}
+          );
+        })()}
       </div>
     );
   };
@@ -1572,8 +1630,15 @@ function EquipmentAnalytics() {
           <h1 className="page-title">Equipment Analytics</h1>
           <p className="page-subtitle">Visual overview of equipment distribution, usage, and reservations</p>
         </div>
-        <div className="btn-group-wrap">
-          <button className="btn btn-secondary" onClick={fetchAllData}>Refresh</button>
+        <div className="btn-group-wrap" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+          <button className="btn btn-secondary" onClick={fetchAllData}>
+            <Icons.Refresh size={14} /> Refresh
+          </button>
+          {lastRefreshed && (
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+              Updated {lastRefreshed.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
         </div>
       </div>
 
