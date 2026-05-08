@@ -121,6 +121,7 @@ function SoftwareLicenses() {
   // Filter catalog
   const filteredCatalog = useMemo(() => {
     return enrichedLicenses.filter(lic => {
+      if (lic.license_type === 'Expense Reimbursement') return false;
       if (deptFilter && lic.department !== deptFilter) return false;
       if (catSearch) {
         const t = catSearch.toLowerCase();
@@ -185,7 +186,8 @@ function SoftwareLicenses() {
 
   // Cost allocation by department
   const costAllocation = useMemo(() => {
-    const active = enrichedLicenses.filter(l => l.is_active);
+    const active = enrichedLicenses.filter(l => l.is_active && l.license_type !== 'Expense Reimbursement');
+    const expenseItems = enrichedLicenses.filter(l => l.is_active && l.license_type === 'Expense Reimbursement');
     const deptItems = active.filter(l => l.department);
     const unallocated = active.filter(l => !l.department);
     const productNames = [...new Set(deptItems.map(l => l.name))].sort();
@@ -202,7 +204,8 @@ function SoftwareLicenses() {
     const afsTotals   = { monthly: deptItems.filter(l => l.department === 'AFS').reduce((s, l) => s + monthlyCost(l), 0) };
     const rsTotals    = { monthly: deptItems.filter(l => l.department === 'RS' ).reduce((s, l) => s + monthlyCost(l), 0) };
     const unallocTotals = { monthly: unallocated.reduce((s, l) => s + monthlyCost(l), 0) };
-    return { products, afsTotals, rsTotals, unallocTotals, unallocated };
+    const expenseTotals = { monthly: expenseItems.reduce((s, l) => s + monthlyCost(l), 0) };
+    return { products, afsTotals, rsTotals, unallocTotals, unallocated, expenseItems, expenseTotals };
   }, [enrichedLicenses]);
 
   // ── License CRUD ───────────────────────────────────────────────────────────
@@ -471,7 +474,7 @@ function SoftwareLicenses() {
           {/* Per-software summary cards */}
           <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 12 }}>License Summary</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14, marginBottom: 28 }}>
-            {enrichedLicenses.filter(l => l.is_active && (!deptFilter || l.department === deptFilter)).map(lic => (
+            {enrichedLicenses.filter(l => l.is_active && l.license_type !== 'Expense Reimbursement' && (!deptFilter || l.department === deptFilter)).map(lic => (
               <LicenseSummaryCard
                 key={lic.id}
                 lic={lic}
@@ -733,7 +736,7 @@ function SoftwareLicenses() {
             <StatCard label="AFS Monthly" value={fmtCurrency(costAllocation.afsTotals.monthly)} icon={<Icons.TrendingUp size={18} />} color="#e74c3c" small />
             <StatCard label="RS Monthly" value={fmtCurrency(costAllocation.rsTotals.monthly)} icon={<Icons.TrendingUp size={18} />} color="#2980b9" small />
             <StatCard label="Unallocated Monthly" value={fmtCurrency(costAllocation.unallocTotals.monthly)} icon={<Icons.TrendingUp size={18} />} color="#95a5a6" small />
-            <StatCard label="Grand Total Monthly" value={fmtCurrency(costAllocation.afsTotals.monthly + costAllocation.rsTotals.monthly + costAllocation.unallocTotals.monthly)} icon={<Icons.BarChart size={18} />} color="#27ae60" small />
+            <StatCard label="Grand Total Monthly" value={fmtCurrency(costAllocation.afsTotals.monthly + costAllocation.rsTotals.monthly + costAllocation.unallocTotals.monthly + costAllocation.expenseTotals.monthly)} icon={<Icons.BarChart size={18} />} color="#27ae60" small />
           </div>
 
           <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 12 }}>Department Breakdown by Product</h3>
@@ -807,6 +810,40 @@ function SoftwareLicenses() {
                       <td colSpan={3}>Total Unallocated</td>
                       <td>{fmtCurrency(costAllocation.unallocTotals.monthly)}</td>
                       <td>{fmtCurrency(costAllocation.unallocTotals.monthly * 12)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </>
+          )}
+
+          {/* Expense-reimbursed subscriptions */}
+          {costAllocation.expenseItems.length > 0 && (
+            <>
+              <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 6, marginTop: 28 }}>Expense-Reimbursed Subscriptions</h3>
+              <p style={{ fontSize: '0.83rem', color: 'var(--text-secondary)', marginBottom: 12 }}>Software tools paid personally by staff and claimed back via Zoho Expenses. Costs are approximate monthly averages based on expense history.</p>
+              <div className="table-container">
+                <table className="data-table">
+                  <thead><tr><th>Tool</th><th>Vendor</th><th>Dept</th><th>Notes</th><th>Approx Monthly</th><th>Approx Annual</th><th></th></tr></thead>
+                  <tbody>
+                    {costAllocation.expenseItems.map(lic => (
+                      <tr key={lic.id}>
+                        <td style={{ fontWeight: 500 }}>{lic.name}</td>
+                        <td>{lic.vendor || '-'}</td>
+                        <td>{lic.department ? <span className="badge" style={{ background: lic.department === 'AFS' ? 'rgba(231,76,60,0.15)' : 'rgba(41,128,185,0.15)', color: lic.department === 'AFS' ? '#c0392b' : '#1a6fa0', fontSize: '0.7rem' }}>{lic.department}</span> : '-'}</td>
+                        <td style={{ fontSize: '0.83rem', color: 'var(--text-secondary)', maxWidth: 260 }}>{lic.notes || '-'}</td>
+                        <td>{lic.cost_per_seat ? fmtCurrency(monthlyCost(lic)) : <span style={{ color: 'var(--text-secondary)' }}>TBC</span>}</td>
+                        <td>{lic.cost_per_seat ? fmtCurrency(annualCost(lic)) : '-'}</td>
+                        <td><button className="btn btn-sm btn-secondary" onClick={() => openEditLicense(lic)} title="Edit"><Icons.Edit size={13} /></button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ fontWeight: 600, borderTop: '2px solid var(--border-color)' }}>
+                      <td colSpan={4}>Total Expense-Reimbursed</td>
+                      <td>{fmtCurrency(costAllocation.expenseTotals.monthly)}</td>
+                      <td>{fmtCurrency(costAllocation.expenseTotals.monthly * 12)}</td>
+                      <td></td>
                     </tr>
                   </tfoot>
                 </table>
