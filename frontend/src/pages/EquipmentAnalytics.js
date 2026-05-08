@@ -1400,7 +1400,9 @@ function EquipmentAnalytics() {
           // Enrich checked-out list with data from the checked-out report (calibration, expected return, holder)
           const enriched = selectedDayData.checkedOut.map(e => {
             const report = checkedOutReport.find(r => r.id === e.id);
-            return report ? { ...e, ...report, equipment_id: e.equipment_id } : e;
+            return report
+              ? { ...e, ...report, equipment_id: e.equipment_id, current_location: report.current_location || e.current_location || null }
+              : e;
           });
           return (
           <div className="card" id="cal-day-detail-panel" style={{ marginTop: 16 }}>

@@ -135,7 +135,7 @@ BEGIN
                 e.id, e.equipment_id, e.equipment_name,
                 c.name AS category, s.name AS subcategory,
                 e.serial_number, e.status,
-                l.name AS current_location,
+                COALESCE(l.name, cust.display_name) AS current_location,
                 p.full_name AS checked_out_to,
                 p.employee_id AS holder_employee_id,
                 p.email AS holder_email,
@@ -152,6 +152,7 @@ BEGIN
             JOIN categories c ON e.category_id = c.id
             JOIN subcategories s ON e.subcategory_id = s.id
             LEFT JOIN locations l ON e.current_location_id = l.id
+            LEFT JOIN customers cust ON e.current_customer_id = cust.id
             LEFT JOIN personnel p ON e.current_holder_id = p.id
             LEFT JOIN LATERAL (
                 SELECT em.expected_checkout_date, em.expected_return_date
