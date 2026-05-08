@@ -1368,7 +1368,8 @@ function LicenseSummaryCard({ lic, onAssign, onBulkAssign, onEdit, isAdmin }) {
   const renewal = getRenewalStatus(lic.renewal_date);
   const overLimit = lic.total_seats > 0 && lic.assigned_count > lic.total_seats;
   const utilPct = lic.total_seats > 0 ? Math.min(100, (lic.assigned_count / lic.total_seats) * 100) : null;
-  const barColor = overLimit ? 'var(--error-color, #e74c3c)' : utilPct > 90 ? 'var(--warning-color, #e67e22)' : 'var(--accent-color, #3498db)';
+  const fullyUsed = !overLimit && utilPct === 100;
+  const barColor = overLimit ? 'var(--error-color, #e74c3c)' : fullyUsed ? '#27ae60' : utilPct >= 90 ? 'var(--warning-color, #e67e22)' : 'var(--accent-color, #3498db)';
 
   return (
     <div style={{
@@ -1379,7 +1380,9 @@ function LicenseSummaryCard({ lic, onAssign, onBulkAssign, onEdit, isAdmin }) {
       display: 'flex',
       flexDirection: 'column',
       gap: 10,
+      justifyContent: 'space-between',
     }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <div style={{ fontWeight: 600, fontSize: '1rem', color: 'var(--text-primary)' }}>{lic.name}</div>
@@ -1433,6 +1436,7 @@ function LicenseSummaryCard({ lic, onAssign, onBulkAssign, onEdit, isAdmin }) {
           {lic.notes.length > 90 ? lic.notes.slice(0, 90) + '…' : lic.notes}
         </div>
       )}
+      </div>{/* end content wrapper */}
 
       {isAdmin && (
         <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
