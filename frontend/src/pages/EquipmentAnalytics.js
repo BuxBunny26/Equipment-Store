@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { reportsApi, reservationsApi, equipmentApi, calibrationApi, maintenanceApi } from '../services/api';
+import { reportsApi, reservationsApi, equipmentApi, calibrationApi, maintenanceApi, personnelApi } from '../services/api';
+import { supabase } from '../services/supabaseClient';
 import { Icons } from '../components/Icons';
 import { useOperator } from '../context/OperatorContext';
 
@@ -56,6 +57,14 @@ function EquipmentAnalytics() {
   const [calSelectedDay, setCalSelectedDay] = useState(null);
   const [calSiteFilter, setCalSiteFilter] = useState('all');
 
+  // Quick-book reservation modal state
+  const [quickBookDay, setQuickBookDay] = useState(null); // dateStr e.g. '2026-05-12'
+  const [quickBookForm, setQuickBookForm] = useState({ equipment_id: '', personnel_id: '', purpose: '', end_date: '' });
+  const [quickBookPersonnel, setQuickBookPersonnel] = useState([]);
+  const [quickBookLoading, setQuickBookLoading] = useState(false);
+  const [quickBookError, setQuickBookError] = useState(null);
+  const [quickBookSuccess, setQuickBookSuccess] = useState(false);
+
   useEffect(() => {
     fetchAllData();
   }, []);
@@ -88,12 +97,24 @@ function EquipmentAnalytics() {
     }
   };
 
-  // Auto-refresh data when user returns to this tab/window
+  // Supabase Realtime: push-refresh when movements or reservations change
+  const realtimeChannelRef = useRef(null);
+  useEffect(() => {
+    const channel = supabase
+      .channel('analytics-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'equipment_movements' }, () => fetchAllData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, () => fetchAllData())
+      .subscribe();
+    realtimeChannelRef.current = channel;
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  // Fallback: also refresh if returning to tab after >5 min away
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && lastRefreshed) {
         const msSince = Date.now() - lastRefreshed.getTime();
-        if (msSince > 5 * 60 * 1000) fetchAllData(); // re-fetch if away > 5 min
+        if (msSince > 5 * 60 * 1000) fetchAllData();
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -409,6 +430,13 @@ function EquipmentAnalytics() {
         return date >= out;
       });
 
+      // Calibration expiries on this exact day (for checked-out equipment only)
+      const calExpiries = calData.filter(c => {
+        if (!c.expiry_date) return false;
+        if ((c.equipment_status || c.status) !== 'Checked Out') return false;
+        return c.expiry_date === dateStr;
+      });
+
       const totalEq = calSiteFilter === 'all' ? equipment.filter(e => !e.is_consumable).length : filteredCheckouts.length + equipment.filter(e => e.status === 'Available' && !e.is_consumable).length;
       const availableCount = Math.max(0, totalEq - dayOut.length - dayRes.length);
 
@@ -417,10 +445,11 @@ function EquipmentAnalytics() {
         isPast: date < today,
         reserved: dayRes, checkedOut: dayOut,
         available: availableCount, total: totalEq,
+        calExpiries,
       });
     }
     return days;
-  }, [calViewDate, reservations, equipment, calSiteFilter]);
+  }, [calViewDate, reservations, equipment, calSiteFilter, calData]);
 
   // Unique sites from checked-out equipment for filter
   const calSiteOptions = useMemo(() => {
@@ -1218,13 +1247,14 @@ function EquipmentAnalytics() {
 
     const cellStyle = (day) => {
       if (!day) return {};
+      const hasCalExpiry = day.calExpiries && day.calExpiries.length > 0;
       const base = {
         minHeight: isMobile ? 52 : 80,
         padding: isMobile ? '4px' : '6px 8px',
         borderRadius: 8,
         cursor: 'pointer',
-        border: day.dateStr === calSelectedDay ? '2px solid var(--accent-primary)' : day.isToday ? '2px solid #2e7d32' : '1px solid var(--border-color)',
-        background: day.dateStr === calSelectedDay ? 'var(--bg-hover)' : day.isToday ? 'rgba(46,125,50,0.08)' : 'var(--bg-secondary)',
+        border: day.dateStr === calSelectedDay ? '2px solid var(--accent-primary)' : day.isToday ? '2px solid #2e7d32' : hasCalExpiry ? '1px solid #f59e0b' : '1px solid var(--border-color)',
+        background: day.dateStr === calSelectedDay ? 'var(--bg-hover)' : day.isToday ? 'rgba(46,125,50,0.08)' : hasCalExpiry ? 'rgba(245,158,11,0.08)' : 'var(--bg-secondary)',
         opacity: day.isPast ? 0.55 : 1,
         transition: 'border 0.15s, background 0.15s',
       };
@@ -1304,6 +1334,9 @@ function EquipmentAnalytics() {
             <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.8rem' }}>
               <span style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid #2e7d32', display: 'inline-block' }} /> Today
             </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.8rem' }}>
+              <span style={{ width: 12, height: 12, borderRadius: 3, background: '#f59e0b', display: 'inline-block' }} /> Cal. Expiry
+            </span>
           </div>
 
           {/* Weekday headers */}
@@ -1319,6 +1352,7 @@ function EquipmentAnalytics() {
               if (!day) return <div key={`empty-${i}`} />;
               const hasRes = day.reserved.length > 0;
               const hasOut = day.checkedOut.length > 0;
+              const hasCalExpiry = day.calExpiries && day.calExpiries.length > 0;
               const dotSize = isMobile ? 7 : 9;
               return (
                 <div key={day.dateStr} style={cellStyle(day)} onClick={() => setCalSelectedDay(day.dateStr === calSelectedDay ? null : day.dateStr)}>
@@ -1340,12 +1374,18 @@ function EquipmentAnalytics() {
                           {day.reserved.length} reserved
                         </div>
                       )}
+                      {hasCalExpiry && (
+                        <div style={{ fontSize: '0.65rem', color: '#f59e0b', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={day.calExpiries.map(c => c.equipment_name || c.equipment_code).join(', ')}>
+                          {day.calExpiries.length} cal. expir{day.calExpiries.length === 1 ? 'y' : 'ies'}
+                        </div>
+                      )}
                     </div>
                   )}
                   {isMobile && (
                     <div style={{ display: 'flex', gap: 3, marginTop: 3, flexWrap: 'wrap' }}>
                       {hasOut && <span style={{ width: dotSize, height: dotSize, borderRadius: '50%', background: '#ed6c02', display: 'inline-block' }} />}
                       {hasRes && <span style={{ width: dotSize, height: dotSize, borderRadius: '50%', background: '#1976d2', display: 'inline-block' }} />}
+                      {hasCalExpiry && <span style={{ width: dotSize, height: dotSize, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />}
                       {!hasOut && !hasRes && day.available > 0 && <span style={{ width: dotSize, height: dotSize, borderRadius: '50%', background: '#2e7d32', display: 'inline-block' }} />}
                     </div>
                   )}
@@ -1363,15 +1403,29 @@ function EquipmentAnalytics() {
             return report ? { ...e, ...report, equipment_id: e.equipment_id } : e;
           });
           return (
-          <div className="card" style={{ marginTop: 16 }}>
+          <div className="card" id="cal-day-detail-panel" style={{ marginTop: 16 }}>
             <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 className="card-title">
                 {new Date(selectedDayData.dateStr + 'T12:00:00').toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
               </h3>
-              <button className="btn btn-sm btn-secondary" onClick={() => setCalSelectedDay(null)}>✕</button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => {
+                    const orig = document.title;
+                    document.title = `Equipment Status – ${selectedDayData.dateStr}`;
+                    window.print();
+                    document.title = orig;
+                  }}
+                  title="Export / Print this day's equipment status"
+                >
+                  <Icons.Download size={14} /> Export PDF
+                </button>
+                <button className="btn btn-sm btn-secondary" onClick={() => setCalSelectedDay(null)}>✕</button>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
               <span style={{ background: 'rgba(46,125,50,0.15)', color: '#2e7d32', borderRadius: 6, padding: '4px 12px', fontWeight: 600, fontSize: '0.85rem' }}>
                 {selectedDayData.available} Available
               </span>
@@ -1381,6 +1435,24 @@ function EquipmentAnalytics() {
               <span style={{ background: 'rgba(25,118,210,0.15)', color: '#1976d2', borderRadius: 6, padding: '4px 12px', fontWeight: 600, fontSize: '0.85rem' }}>
                 {selectedDayData.reserved.length} Reserved
               </span>
+              {selectedDayData.available > 0 && (
+                <button
+                  className="btn btn-sm btn-primary"
+                  style={{ marginLeft: 'auto' }}
+                  onClick={async () => {
+                    setQuickBookError(null);
+                    setQuickBookSuccess(false);
+                    setQuickBookForm({ equipment_id: '', personnel_id: '', purpose: '', end_date: selectedDayData.dateStr });
+                    setQuickBookDay(selectedDayData.dateStr);
+                    if (quickBookPersonnel.length === 0) {
+                      const res = await personnelApi.getAll(true, '');
+                      setQuickBookPersonnel(Array.isArray(res?.data) ? res.data : []);
+                    }
+                  }}
+                >
+                  <Icons.Plus size={13} /> Book Reservation
+                </button>
+              )}
             </div>
 
             {enriched.length > 0 && (
@@ -1461,6 +1533,102 @@ function EquipmentAnalytics() {
 
             {selectedDayData.checkedOut.length === 0 && selectedDayData.reserved.length === 0 && (
               <p style={{ color: 'var(--text-secondary)', marginTop: 8 }}>All equipment available — no checkouts or reservations on this day.</p>
+            )}
+
+            {/* Calibration expiries on this day */}
+            {selectedDayData.calExpiries && selectedDayData.calExpiries.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontWeight: 600, marginBottom: 8, color: '#f59e0b', fontSize: '0.9rem' }}>
+                  Calibration Expiring Today
+                </div>
+                <div className="table-container">
+                  <table className="equipment-table">
+                    <thead><tr><th>Equipment</th><th>Serial No.</th><th>Expiry Date</th><th>Status</th></tr></thead>
+                    <tbody>
+                      {selectedDayData.calExpiries.map((c, idx) => (
+                        <tr key={c.equipment_id || idx}>
+                          <td><strong>{c.equipment_code}</strong><br /><span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{c.equipment_name}</span></td>
+                          <td style={{ fontSize: '0.82rem' }}>{c.serial_number || '—'}</td>
+                          <td style={{ fontSize: '0.82rem', color: '#f59e0b', fontWeight: 600 }}>{c.expiry_date}</td>
+                          <td><span className="badge" style={{ background: c.calibration_status === 'Expired' ? '#d32f2f' : '#f59e0b', fontSize: '0.7rem' }}>{c.calibration_status || 'Due'}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Quick-book reservation form */}
+            {quickBookDay === selectedDayData.dateStr && (
+              <div style={{ marginTop: 20, padding: 16, borderRadius: 10, border: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}>
+                <div style={{ fontWeight: 700, marginBottom: 12, color: '#1976d2', fontSize: '0.95rem' }}>New Reservation — {selectedDayData.dateStr}</div>
+                {quickBookSuccess ? (
+                  <div style={{ color: '#2e7d32', fontWeight: 600 }}>Reservation created successfully! <button className="btn btn-sm btn-secondary" style={{ marginLeft: 8 }} onClick={() => { setQuickBookDay(null); setQuickBookSuccess(false); }}>Close</button></div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+                    <div>
+                      <label className="form-label">Equipment *</label>
+                      <select className="form-control" value={quickBookForm.equipment_id}
+                        onChange={e => setQuickBookForm(f => ({ ...f, equipment_id: e.target.value }))}>
+                        <option value="">— select —</option>
+                        {equipment.filter(eq => eq.status === 'Available').map(eq => (
+                          <option key={eq.id} value={eq.id}>{eq.equipment_id} — {eq.equipment_name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label">For (Person) *</label>
+                      <select className="form-control" value={quickBookForm.personnel_id}
+                        onChange={e => setQuickBookForm(f => ({ ...f, personnel_id: e.target.value }))}>
+                        <option value="">— select —</option>
+                        {quickBookPersonnel.map(p => (
+                          <option key={p.id} value={p.id}>{p.full_name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label">End Date *</label>
+                      <input type="date" className="form-control" value={quickBookForm.end_date} min={selectedDayData.dateStr}
+                        onChange={e => setQuickBookForm(f => ({ ...f, end_date: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="form-label">Purpose</label>
+                      <input type="text" className="form-control" placeholder="e.g. Site inspection"
+                        value={quickBookForm.purpose}
+                        onChange={e => setQuickBookForm(f => ({ ...f, purpose: e.target.value }))} />
+                    </div>
+                    <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <button
+                        className="btn btn-primary"
+                        disabled={quickBookLoading || !quickBookForm.equipment_id || !quickBookForm.personnel_id || !quickBookForm.end_date}
+                        onClick={async () => {
+                          setQuickBookLoading(true);
+                          setQuickBookError(null);
+                          try {
+                            await reservationsApi.create({
+                              equipment_id: quickBookForm.equipment_id,
+                              personnel_id: quickBookForm.personnel_id,
+                              start_date: selectedDayData.dateStr,
+                              end_date: quickBookForm.end_date,
+                              purpose: quickBookForm.purpose || null,
+                            });
+                            setQuickBookSuccess(true);
+                          } catch (err) {
+                            setQuickBookError(err.message || 'Failed to create reservation');
+                          } finally {
+                            setQuickBookLoading(false);
+                          }
+                        }}
+                      >
+                        {quickBookLoading ? 'Saving...' : 'Confirm Reservation'}
+                      </button>
+                      <button className="btn btn-secondary" onClick={() => setQuickBookDay(null)}>Cancel</button>
+                      {quickBookError && <span style={{ color: '#d32f2f', fontSize: '0.82rem' }}>{quickBookError}</span>}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
           );

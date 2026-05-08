@@ -2609,3 +2609,27 @@ input[type="search"]::-webkit-search-results-decoration {
   }
 }
 
+
+/* ============================================================
+   Print / Export PDF styles
+   Only show the day detail panel (#cal-day-detail-panel).
+   Used by the "Export PDF" button in the calendar tab.
+   ============================================================ */
+@media print {
+  body * { visibility: hidden !important; }
+  #cal-day-detail-panel, #cal-day-detail-panel * { visibility: visible !important; }
+  #cal-day-detail-panel {
+    position: fixed !important;
+    inset: 0 !important;
+    margin: 0 !important;
+    padding: 24px !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+  #cal-day-detail-panel .btn { display: none !important; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #ccc; padding: 6px 10px; font-size: 0.8rem; }
+  th { background: #f5f5f5; font-weight: 700; }
+}
