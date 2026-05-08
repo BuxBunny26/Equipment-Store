@@ -1,13 +1,17 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { softwareLicensesApi, softwareAssignmentsApi, personnelApi } from '../services/api';
 import { useOperator } from '../context/OperatorContext';
 import { Icons } from '../components/Icons';
 import { buildDivisionLookup, lookupDivision } from '../utils/divisionUtils';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import { saveAs } from 'file-saver';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 const BILLING_CYCLES = ['Monthly', 'Annual', 'One-time'];
-const LICENSE_TYPES = ['Per User', 'Per Device', 'Site License', 'Concurrent'];
+const LICENSE_TYPES = ['Per User', 'Per Device', 'Site License', 'Concurrent', 'Expense Reimbursement'];
 
 function monthlyCost(lic) {
   if (!lic || !lic.cost_per_seat) return 0;
@@ -57,6 +61,10 @@ function SoftwareLicenses() {
   const [editLicense, setEditLicense] = useState(null);
   const [licenseForm, setLicenseForm] = useState({});
   const [licSaving, setLicSaving] = useState(false);
+
+  // Export dropdown
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef(null);
 
   // Assignment modal
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -384,6 +392,168 @@ function SoftwareLicenses() {
     }
   };
 
+  // ── Export ─────────────────────────────────────────────────────────────────
+
+  const fmtZAR = (v) => v != null ? `R ${Number(v).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '';
+
+  const exportExcel = () => {
+    const wb = XLSX.utils.book_new();
+
+    // Sheet 1: Catalog
+    const catalogRows = enrichedLicenses
+      .filter(l => l.license_type !== 'Expense Reimbursement')
+      .map(l => ({
+        'Software': l.name,
+        'Vendor': l.vendor || '',
+        'Department': l.department || '',
+        'License Type': l.license_type || '',
+        'Cost per Seat (ZAR)': l.cost_per_seat ?? '',
+        'Billing Cycle': l.billing_cycle || '',
+        'Total Seats': l.total_seats ?? '',
+        'Assigned Seats': l.assigned_count,
+        'Monthly Cost (ZAR)': +monthlyCost(l).toFixed(2),
+        'Annual Cost (ZAR)': +annualCost(l).toFixed(2),
+        'Renewal Date': l.renewal_date || '',
+        'Status': l.is_active ? 'Active' : 'Inactive',
+        'Notes': l.notes || '',
+      }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(catalogRows), 'Catalog');
+
+    // Sheet 2: Assignments
+    const assignRows = assignments
+      .filter(a => a.is_active)
+      .map(a => ({
+        'Employee': a.employee_name || '',
+        'Employee ID': a.employee_id || '',
+        'Division': lookupDivision(divLookup, { employee_name: a.employee_name }, 'employee_name') || '',
+        'Software': a.software_name || '',
+        'Vendor': a.vendor || '',
+        'Cost per Seat (ZAR)': a.cost_per_seat ?? '',
+        'Billing Cycle': a.billing_cycle || '',
+        'Assigned Date': a.assigned_date || '',
+        'Notes': a.notes || '',
+      }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(assignRows.length ? assignRows : [{ Note: 'No active assignments' }]), 'Assignments');
+
+    // Sheet 3: Cost Allocation
+    const costRows = [];
+    costAllocation.products.forEach(p => {
+      if (p.afs) costRows.push({ 'Product': p.name, 'Vendor': p.vendor || '', 'Department': 'AFS', 'Seats': p.afs.seats, 'Monthly (ZAR)': +p.afs.monthly.toFixed(2), 'Annual (ZAR)': +(p.afs.monthly * 12).toFixed(2), 'Category': 'Allocated' });
+      if (p.rs)  costRows.push({ 'Product': p.name, 'Vendor': p.vendor || '', 'Department': 'RS',  'Seats': p.rs.seats,  'Monthly (ZAR)': +p.rs.monthly.toFixed(2),  'Annual (ZAR)': +(p.rs.monthly * 12).toFixed(2),  'Category': 'Allocated' });
+    });
+    costAllocation.unallocated.forEach(l => costRows.push({ 'Product': l.name, 'Vendor': l.vendor || '', 'Department': '', 'Seats': l.total_seats ?? '', 'Monthly (ZAR)': +monthlyCost(l).toFixed(2), 'Annual (ZAR)': +annualCost(l).toFixed(2), 'Category': 'Unallocated' }));
+    costAllocation.expenseItems.forEach(l => costRows.push({ 'Product': l.name, 'Vendor': l.vendor || '', 'Department': l.department || '', 'Seats': '', 'Monthly (ZAR)': l.cost_per_seat ? +monthlyCost(l).toFixed(2) : 'TBC', 'Annual (ZAR)': l.cost_per_seat ? +annualCost(l).toFixed(2) : 'TBC', 'Category': 'Expense Reimbursed' }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(costRows.length ? costRows : [{ Note: 'No cost data' }]), 'Cost Allocation');
+
+    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    saveAs(new Blob([buf], { type: 'application/octet-stream' }), `Software_Licenses_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    setExportOpen(false);
+  };
+
+  const exportPDF = () => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const today = new Date().toLocaleDateString('en-ZA');
+    const grandMonthly = costAllocation.afsTotals.monthly + costAllocation.rsTotals.monthly + costAllocation.unallocTotals.monthly + costAllocation.expenseTotals.monthly;
+
+    doc.setFontSize(16); doc.setFont(undefined, 'bold');
+    doc.text('Software License Cost Report', 14, 16);
+    doc.setFontSize(9); doc.setFont(undefined, 'normal');
+    doc.text(`Generated: ${today}`, 14, 23);
+    doc.setDrawColor(200); doc.line(14, 26, 283, 26);
+
+    // Summary row
+    doc.setFontSize(9);
+    const summaryY = 32;
+    const summaryItems = [
+      ['AFS Monthly', fmtZAR(costAllocation.afsTotals.monthly)],
+      ['RS Monthly', fmtZAR(costAllocation.rsTotals.monthly)],
+      ['Unallocated', fmtZAR(costAllocation.unallocTotals.monthly)],
+      ['Expense Claims', fmtZAR(costAllocation.expenseTotals.monthly)],
+      ['GRAND TOTAL', fmtZAR(grandMonthly)],
+    ];
+    const colW = 55;
+    summaryItems.forEach(([lbl, val], i) => {
+      const x = 14 + i * colW;
+      const isLast = i === summaryItems.length - 1;
+      doc.setFillColor(isLast ? 39 : 248, isLast ? 174 : 249, isLast ? 96 : 250);
+      doc.roundedRect(x, summaryY - 5, colW - 3, 16, 2, 2, 'F');
+      doc.setFont(undefined, 'normal'); doc.setFontSize(7); doc.setTextColor(100);
+      doc.text(lbl, x + 3, summaryY + 1);
+      doc.setFont(undefined, 'bold'); doc.setFontSize(9); doc.setTextColor(isLast ? 39 : 50, isLast ? 174 : 50, isLast ? 96 : 50);
+      doc.text(val, x + 3, summaryY + 8);
+    });
+    doc.setTextColor(0);
+
+    let y = summaryY + 20;
+
+    if (costAllocation.products.length > 0) {
+      doc.setFontSize(11); doc.setFont(undefined, 'bold');
+      doc.text('Department Breakdown by Product', 14, y); y += 3;
+      doc.autoTable({
+        startY: y,
+        head: [['Product', 'Vendor', 'AFS Seats', 'AFS Monthly', 'RS Seats', 'RS Monthly', 'Total Monthly', 'Total Annual']],
+        body: costAllocation.products.map(p => [
+          p.name, p.vendor || '',
+          p.afs?.seats ?? '-', p.afs ? fmtZAR(p.afs.monthly) : '-',
+          p.rs?.seats ?? '-',  p.rs  ? fmtZAR(p.rs.monthly)  : '-',
+          fmtZAR((p.afs?.monthly || 0) + (p.rs?.monthly || 0)),
+          fmtZAR(((p.afs?.monthly || 0) + (p.rs?.monthly || 0)) * 12),
+        ]),
+        foot: [['SUBTOTAL', '', costAllocation.products.reduce((s,p)=>s+(p.afs?.seats||0),0), fmtZAR(costAllocation.afsTotals.monthly), costAllocation.products.reduce((s,p)=>s+(p.rs?.seats||0),0), fmtZAR(costAllocation.rsTotals.monthly), fmtZAR(costAllocation.afsTotals.monthly+costAllocation.rsTotals.monthly), fmtZAR((costAllocation.afsTotals.monthly+costAllocation.rsTotals.monthly)*12)]],
+        headStyles: { fillColor: [41, 128, 185], textColor: 255, fontSize: 8, fontStyle: 'bold' },
+        footStyles: { fillColor: [232, 244, 252], fontStyle: 'bold', fontSize: 8 },
+        bodyStyles: { fontSize: 8 }, alternateRowStyles: { fillColor: [248, 251, 254] },
+        margin: { left: 14, right: 14 }, showFoot: 'lastPage',
+      });
+      y = doc.lastAutoTable.finalY + 10;
+    }
+
+    if (costAllocation.unallocated.length > 0) {
+      if (y > 170) { doc.addPage(); y = 20; }
+      doc.setFontSize(11); doc.setFont(undefined, 'bold');
+      doc.text('Unallocated Licenses', 14, y); y += 3;
+      doc.autoTable({
+        startY: y,
+        head: [['Product', 'Vendor', 'Seats', 'Monthly', 'Annual']],
+        body: costAllocation.unallocated.map(l => [l.name, l.vendor || '', l.total_seats ?? '-', fmtZAR(monthlyCost(l)), fmtZAR(annualCost(l))]),
+        foot: [['TOTAL', '', '', fmtZAR(costAllocation.unallocTotals.monthly), fmtZAR(costAllocation.unallocTotals.monthly * 12)]],
+        headStyles: { fillColor: [149, 165, 166], textColor: 255, fontSize: 8, fontStyle: 'bold' },
+        footStyles: { fillColor: [245, 245, 245], fontStyle: 'bold', fontSize: 8 },
+        bodyStyles: { fontSize: 8 }, alternateRowStyles: { fillColor: [250, 250, 250] },
+        margin: { left: 14, right: 14 }, showFoot: 'lastPage',
+      });
+      y = doc.lastAutoTable.finalY + 10;
+    }
+
+    if (costAllocation.expenseItems.length > 0) {
+      if (y > 170) { doc.addPage(); y = 20; }
+      doc.setFontSize(11); doc.setFont(undefined, 'bold');
+      doc.text('Expense-Reimbursed Subscriptions', 14, y); y += 3;
+      doc.autoTable({
+        startY: y,
+        head: [['Tool', 'Vendor', 'Dept', 'Approx Monthly', 'Approx Annual', 'Notes']],
+        body: costAllocation.expenseItems.map(l => [l.name, l.vendor || '', l.department || '', l.cost_per_seat ? fmtZAR(monthlyCost(l)) : 'TBC', l.cost_per_seat ? fmtZAR(annualCost(l)) : 'TBC', (l.notes || '').slice(0, 80)]),
+        foot: [['TOTAL', '', '', fmtZAR(costAllocation.expenseTotals.monthly), fmtZAR(costAllocation.expenseTotals.monthly * 12), '']],
+        headStyles: { fillColor: [39, 174, 96], textColor: 255, fontSize: 8, fontStyle: 'bold' },
+        footStyles: { fillColor: [240, 253, 244], fontStyle: 'bold', fontSize: 8 },
+        bodyStyles: { fontSize: 8 }, alternateRowStyles: { fillColor: [247, 254, 249] },
+        columnStyles: { 5: { cellWidth: 70 } },
+        margin: { left: 14, right: 14 }, showFoot: 'lastPage',
+      });
+    }
+
+    doc.save(`Software_Cost_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+    setExportOpen(false);
+  };
+
+  // Close export dropdown when clicking outside
+  useEffect(() => {
+    if (!exportOpen) return;
+    const handler = (e) => { if (exportRef.current && !exportRef.current.contains(e.target)) setExportOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [exportOpen]);
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   if (loading) return (
@@ -416,10 +586,44 @@ function SoftwareLicenses() {
             Track software licenses, assignments and costs
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <button className="btn btn-secondary" onClick={fetchData}>
             <Icons.Refresh size={14} /> Refresh
           </button>
+          {/* Export dropdown */}
+          <div style={{ position: 'relative' }} ref={exportRef}>
+            <button className="btn btn-secondary" onClick={() => setExportOpen(o => !o)}>
+              <Icons.Download size={14} /> Export
+            </button>
+            {exportOpen && (
+              <div style={{
+                position: 'absolute', right: 0, top: '110%', zIndex: 200,
+                background: 'var(--card-bg)', border: '1px solid var(--border-color)',
+                borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+                minWidth: 220, overflow: 'hidden',
+              }}>
+                <button
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '11px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.88rem', color: 'var(--text-primary)', textAlign: 'left' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--hover-bg, rgba(0,0,0,0.04))'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                  onClick={exportExcel}
+                >
+                  <Icons.Grid size={15} style={{ color: '#27ae60' }} />
+                  <div><div style={{ fontWeight: 500 }}>Export to Excel</div><div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Catalog, Assignments, Cost Allocation</div></div>
+                </button>
+                <div style={{ height: 1, background: 'var(--border-color)' }} />
+                <button
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '11px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.88rem', color: 'var(--text-primary)', textAlign: 'left' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--hover-bg, rgba(0,0,0,0.04))'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                  onClick={exportPDF}
+                >
+                  <Icons.AlertCircle size={15} style={{ color: '#e74c3c' }} />
+                  <div><div style={{ fontWeight: 500 }}>Export Cost Report (PDF)</div><div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>AFS / RS / Unallocated breakdown</div></div>
+                </button>
+              </div>
+            )}
+          </div>
           {isAdmin && (
             <button className="btn btn-primary" onClick={openAddLicense}>
               <Icons.Plus size={14} /> Add Software
@@ -440,11 +644,18 @@ function SoftwareLicenses() {
       </div>
 
       {/* ── Tabs ────────────────────────────────────────────────────────── */}
+      {stats.expiringSoon > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(230,126,34,0.1)', border: '1px solid rgba(230,126,34,0.35)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: '0.87rem', color: 'var(--warning-color, #e67e22)' }}>
+          <Icons.Calendar size={16} />
+          <strong>{stats.expiringSoon} license{stats.expiringSoon !== 1 ? 's' : ''} renewing within 30 days</strong>
+          <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>— check the Catalog tab for details.</span>
+        </div>
+      )}
       <div className="tabs" style={{ marginBottom: 20 }}>
         {[
-          { key: 'overview', label: 'Overview' },
-          { key: 'catalog', label: 'Catalog' },
-          { key: 'assignments', label: 'Assignments' },
+          { key: 'overview', label: 'Overview', count: enrichedLicenses.filter(l => l.is_active && l.license_type !== 'Expense Reimbursement').length },
+          { key: 'catalog', label: 'Catalog', count: filteredCatalog.length },
+          { key: 'assignments', label: 'Assignments', count: assignments.filter(a => a.is_active).length },
           { key: 'cost-allocation', label: 'Cost Allocation' },
         ].map(t => (
           <button
@@ -452,7 +663,7 @@ function SoftwareLicenses() {
             className={`tab ${activeTab === t.key ? 'active' : ''}`}
             onClick={() => setActiveTab(t.key)}
           >
-            {t.label}
+            {t.label}{t.count != null && <span style={{ marginLeft: 6, background: activeTab === t.key ? 'rgba(255,255,255,0.25)' : 'var(--border-color)', borderRadius: 10, padding: '1px 7px', fontSize: '0.72rem', fontWeight: 600 }}>{t.count}</span>}
           </button>
         ))}
       </div>
@@ -544,6 +755,11 @@ function SoftwareLicenses() {
                 onChange={e => setCatSearch(e.target.value)}
               />
             </div>
+            {['', 'AFS', 'RS'].map(d => (
+              <button key={d} className={`btn btn-sm ${deptFilter === d ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setDeptFilter(d)}>
+                {d || 'All Depts'}
+              </button>
+            ))}
             <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
               {filteredCatalog.length} product{filteredCatalog.length !== 1 ? 's' : ''}
             </span>
@@ -582,8 +798,9 @@ function SoftwareLicenses() {
                       <td>{lic.cost_per_seat != null ? fmtCurrency(lic.cost_per_seat) : '-'}</td>
                       <td>{lic.billing_cycle}</td>
                       <td>
-                        <span style={{ fontWeight: 600 }}>{lic.assigned_count}</span>
+                        <span style={{ fontWeight: 600, color: lic.total_seats && lic.assigned_count > lic.total_seats ? 'var(--error-color)' : 'inherit' }}>{lic.assigned_count}</span>
                         {lic.total_seats ? <span style={{ color: 'var(--text-secondary)' }}> / {lic.total_seats}</span> : ''}
+                        {lic.total_seats && lic.assigned_count > lic.total_seats && <span style={{ marginLeft: 5, fontSize: '0.7rem', background: 'rgba(231,76,60,0.12)', color: '#c0392b', borderRadius: 3, padding: '1px 5px' }}>over</span>}
                       </td>
                       <td>{fmtCurrency(monthlyCost(lic))}</td>
                       <td>{fmtCurrency(annualCost(lic))}</td>
@@ -1152,11 +1369,14 @@ function LicenseSummaryCard({ lic, onAssign, onBulkAssign, onEdit, isAdmin }) {
   const monthly = monthlyCost(lic);
   const annual = annualCost(lic);
   const renewal = getRenewalStatus(lic.renewal_date);
+  const overLimit = lic.total_seats > 0 && lic.assigned_count > lic.total_seats;
+  const utilPct = lic.total_seats > 0 ? Math.min(100, (lic.assigned_count / lic.total_seats) * 100) : null;
+  const barColor = overLimit ? 'var(--error-color, #e74c3c)' : utilPct > 90 ? 'var(--warning-color, #e67e22)' : 'var(--accent-color, #3498db)';
 
   return (
     <div style={{
       background: 'var(--card-bg)',
-      border: '1px solid var(--border-color)',
+      border: `1px solid ${overLimit ? 'rgba(231,76,60,0.4)' : 'var(--border-color)'}`,
       borderRadius: 8,
       padding: '16px',
       display: 'flex',
@@ -1181,7 +1401,7 @@ function LicenseSummaryCard({ lic, onAssign, onBulkAssign, onEdit, isAdmin }) {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: '0.85rem' }}>
-        <KV label="Assigned" value={`${lic.assigned_count}${lic.total_seats ? ` / ${lic.total_seats}` : ''} seats`} />
+        <KV label="Assigned" value={`${lic.assigned_count}${lic.total_seats ? ` / ${lic.total_seats}` : ''} seats`} valueStyle={{ color: overLimit ? 'var(--error-color)' : 'inherit' }} />
         <KV label="Cost/Seat" value={lic.cost_per_seat != null ? fmtCurrency(lic.cost_per_seat) : '-'} />
         <KV label="Monthly" value={fmtCurrency(monthly)} strong />
         <KV label="Annual" value={fmtCurrency(annual)} />
@@ -1191,6 +1411,25 @@ function LicenseSummaryCard({ lic, onAssign, onBulkAssign, onEdit, isAdmin }) {
           />
         )}
       </div>
+
+      {utilPct !== null && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: 3 }}>
+            <span>Seat utilization</span>
+            <span style={{ color: overLimit ? 'var(--error-color)' : 'inherit', fontWeight: overLimit ? 600 : 400 }}>
+              {Math.round(utilPct)}%{overLimit ? ' — over limit' : ''}
+            </span>
+          </div>
+          <div style={{ height: 5, background: 'var(--border-color)', borderRadius: 3 }}>
+            <div style={{
+              height: '100%', borderRadius: 3,
+              width: `${utilPct}%`,
+              background: barColor,
+              transition: 'width 0.4s ease',
+            }} />
+          </div>
+        </div>
+      )}
 
       {isAdmin && (
         <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
