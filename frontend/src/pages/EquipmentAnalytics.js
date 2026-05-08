@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -335,7 +335,7 @@ function EquipmentAnalytics() {
   // -- Site / Location checkout analytics --
 
   // Which site currently has which equipment (grouped by location -> list of equipment)
-  // Only include checked-out equipment — available/in-storage items have no meaningful site
+  // Only include checked-out equipment â€” available/in-storage items have no meaningful site
   const equipmentBySite = useMemo(() => {
     const grouped = {};
     equipment.filter(e => e.status === 'Checked Out').forEach(e => {
@@ -396,67 +396,49 @@ function EquipmentAnalytics() {
   // -- Availability Calendar --
   const calendarData = useMemo(() => {
     const { year, month } = calViewDate;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().split('T')[0];
     const activeRes = reservations.filter(r => r.status !== 'cancelled' && r.status !== 'completed');
-    const activeCheckouts = equipment.filter(e => e.status === 'Checked Out');
-
-    // Apply site filter
-    const filteredCheckouts = calSiteFilter === 'all'
-      ? activeCheckouts
-      : activeCheckouts.filter(e => (e.current_location || '') === calSiteFilter);
-    const filteredReservations = calSiteFilter === 'all'
-      ? activeRes
-      : activeRes.filter(r => (r.customer_name || r.personnel_name || '') === calSiteFilter || calSiteFilter === 'all');
 
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
-    const today = new Date(); today.setHours(0, 0, 0, 0);
 
     const days = [];
-    // Pad start
     for (let i = 0; i < firstDay.getDay(); i++) days.push(null);
 
     for (let d = 1; d <= lastDay.getDate(); d++) {
       const date = new Date(year, month, d);
       const dateStr = date.toISOString().split('T')[0];
 
-      const dayRes = filteredReservations.filter(r => {
-        const s = new Date(r.start_date); s.setHours(0,0,0,0);
-        const e = new Date(r.end_date); e.setHours(23,59,59,999);
-        return date >= s && date <= e;
+      // Equipment due to RETURN on this day
+      const returning = checkedOutReport.filter(e => e.expected_return_date === dateStr);
+
+      // Equipment whose return is OVERDUE as of this day (due before, still out)
+      const overdue = dateStr >= todayStr
+        ? checkedOutReport.filter(e => e.expected_return_date && e.expected_return_date < dateStr)
+        : [];
+
+      // Reservations STARTING on this day
+      const goingOut = activeRes.filter(r => r.start_date && r.start_date.split('T')[0] === dateStr);
+
+      // Active reservations spanning this day (for detail panel)
+      const activeOnDay = activeRes.filter(r => {
+        const s = r.start_date?.split('T')[0]; const e = r.end_date?.split('T')[0];
+        return s && e && dateStr >= s && dateStr <= e;
       });
 
-      // Checked-out equipment: use last_action_timestamp to date, show as still out
-      const dayOut = filteredCheckouts.filter(e => {
-        const out = new Date(e.last_action_timestamp); out.setHours(0,0,0,0);
-        return date >= out;
-      });
-
-      // Calibration expiries on this exact day (for checked-out equipment only)
-      const calExpiries = calData.filter(c => {
-        if (!c.expiry_date) return false;
-        if ((c.equipment_status || c.status) !== 'Checked Out') return false;
-        return c.expiry_date === dateStr;
-      });
-
-      const totalEq = calSiteFilter === 'all' ? equipment.filter(e => !e.is_consumable).length : filteredCheckouts.length + equipment.filter(e => e.status === 'Available' && !e.is_consumable).length;
-      const availableCount = Math.max(0, totalEq - dayOut.length - dayRes.length);
+      // Calibration expiries on this exact day
+      const calExpiries = calData.filter(c => c.expiry_date === dateStr);
 
       days.push({
-        date: d, dateStr, isToday: date.getTime() === today.getTime(),
+        date: d, dateStr,
+        isToday: date.getTime() === today.getTime(),
         isPast: date < today,
-        reserved: dayRes, checkedOut: dayOut,
-        available: availableCount, total: totalEq,
-        calExpiries,
+        returning, overdue, goingOut, activeOnDay, calExpiries,
       });
     }
     return days;
-  }, [calViewDate, reservations, equipment, calSiteFilter, calData]);
-
-  // Unique sites from checked-out equipment for filter
-  const calSiteOptions = useMemo(() => {
-    const sites = new Set(equipment.filter(e => e.status === 'Checked Out' && e.current_location).map(e => e.current_location));
-    return ['all', ...Array.from(sites).sort()];
-  }, [equipment]);
+  }, [calViewDate, reservations, checkedOutReport, calData]);
 
   // -- Personal vs Team Usage --
   const personalVsTeam = useMemo(() => {
@@ -511,7 +493,7 @@ function EquipmentAnalytics() {
   };
 
   const truncLabel = (str) => truncate(str, isSmall ? 12 : isMobile ? 16 : 22);
-  const truncate = (str, len = 20) => str && str.length > len ? str.slice(0, len - 1) + '…' : str;
+  const truncate = (str, len = 20) => str && str.length > len ? str.slice(0, len - 1) + 'â€¦' : str;
 
   const renderCustomLegend = (props) => {
     const { payload } = props;
@@ -795,7 +777,7 @@ function EquipmentAnalytics() {
                         <span className="badge" style={{ background: o.a.status === 'approved' ? '#1976d2' : '#ed6c02', fontSize: '0.7rem' }}>{o.a.status}</span>
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>
-                        {formatDate(o.a.start_date)} — {formatDate(o.a.end_date)}
+                        {formatDate(o.a.start_date)} â€” {formatDate(o.a.end_date)}
                       </td>
                       <td>
                         <div>{o.b.personnel_name}</div>
@@ -803,7 +785,7 @@ function EquipmentAnalytics() {
                         <span className="badge" style={{ background: o.b.status === 'approved' ? '#1976d2' : '#ed6c02', fontSize: '0.7rem' }}>{o.b.status}</span>
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>
-                        {formatDate(o.b.start_date)} — {formatDate(o.b.end_date)}
+                        {formatDate(o.b.start_date)} â€” {formatDate(o.b.end_date)}
                       </td>
                       <td>
                         <span className="badge" style={{ background: '#d32f2f' }}>{overlapDays} day{overlapDays !== 1 ? 's' : ''}</span>
@@ -994,7 +976,7 @@ function EquipmentAnalytics() {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{eq.equipment_name}</div>
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
-                          {eq.equipment_id}{eq.serial_number ? ` • S/N: ${eq.serial_number}` : ''}
+                          {eq.equipment_id}{eq.serial_number ? ` â€¢ S/N: ${eq.serial_number}` : ''}
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
@@ -1030,8 +1012,8 @@ function EquipmentAnalytics() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <h2 style={{ margin: 0, fontSize: isMobile ? '1rem' : '1.25rem' }}>{eq.equipment_name}</h2>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
-              {eq.equipment_id}{eq.serial_number ? ` • S/N: ${eq.serial_number}` : ''}
-              {eq.category_name ? ` • ${eq.category_name}` : ''}
+              {eq.equipment_id}{eq.serial_number ? ` â€¢ S/N: ${eq.serial_number}` : ''}
+              {eq.category_name ? ` â€¢ ${eq.category_name}` : ''}
             </div>
           </div>
           <span className="badge" style={{ background: eq.status === 'Available' ? '#2e7d32' : eq.status === 'Checked Out' ? '#ed6c02' : eq.status === 'In Maintenance' ? '#1976d2' : '#9e9e9e', fontSize: '0.75rem' }}>{eq.status}</span>
@@ -1233,6 +1215,8 @@ function EquipmentAnalytics() {
     const { year, month } = calViewDate;
     const monthLabel = new Date(year, month, 1).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
     const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().split('T')[0];
 
     const selectedDayData = calSelectedDay ? calendarData.find(d => d && d.dateStr === calSelectedDay) : null;
 
@@ -1246,20 +1230,30 @@ function EquipmentAnalytics() {
     });
     const goToday = () => { const d = new Date(); setCalViewDate({ year: d.getFullYear(), month: d.getMonth() }); setCalSelectedDay(null); };
 
+    // This-week window: today through +6 days
+    const weekEnd = new Date(today); weekEnd.setDate(weekEnd.getDate() + 6);
+    const weekEndStr = weekEnd.toISOString().split('T')[0];
+    const returnsThisWeek = checkedOutReport.filter(e => e.expected_return_date && e.expected_return_date >= todayStr && e.expected_return_date <= weekEndStr);
+    const overdueNow = checkedOutReport.filter(e => e.expected_return_date && e.expected_return_date < todayStr);
+    const goingOutThisWeek = reservations.filter(r => r.status !== 'cancelled' && r.status !== 'completed' && r.start_date && r.start_date.split('T')[0] >= todayStr && r.start_date.split('T')[0] <= weekEndStr);
+
     const cellStyle = (day) => {
       if (!day) return {};
-      const hasCalExpiry = day.calExpiries && day.calExpiries.length > 0;
-      const base = {
-        minHeight: isMobile ? 52 : 80,
-        padding: isMobile ? '4px' : '6px 8px',
+      const hasOverdue = day.overdue?.length > 0;
+      const hasReturning = day.returning?.length > 0;
+      const hasCalExpiry = day.calExpiries?.length > 0;
+      const isSelected = day.dateStr === calSelectedDay;
+      return {
+        minHeight: isMobile ? 52 : 86,
+        padding: isMobile ? '4px' : '6px 7px',
         borderRadius: 8,
         cursor: 'pointer',
-        border: day.dateStr === calSelectedDay ? '2px solid var(--accent-primary)' : day.isToday ? '2px solid #2e7d32' : hasCalExpiry ? '1px solid #f59e0b' : '1px solid var(--border-color)',
-        background: day.dateStr === calSelectedDay ? 'var(--bg-hover)' : day.isToday ? 'rgba(46,125,50,0.08)' : hasCalExpiry ? 'rgba(245,158,11,0.08)' : 'var(--bg-secondary)',
-        opacity: day.isPast ? 0.55 : 1,
+        border: isSelected ? '2px solid var(--accent-primary)' : day.isToday ? '2px solid #2e7d32' : hasOverdue ? '1px solid rgba(211,47,47,0.5)' : hasCalExpiry ? '1px solid rgba(245,158,11,0.5)' : '1px solid var(--border-color)',
+        background: isSelected ? 'var(--bg-hover)' : day.isToday ? 'rgba(46,125,50,0.08)' : hasOverdue ? 'rgba(211,47,47,0.05)' : hasReturning ? 'rgba(46,125,50,0.05)' : 'var(--bg-secondary)',
+        opacity: day.isPast && !hasOverdue ? 0.5 : 1,
         transition: 'border 0.15s, background 0.15s',
+        position: 'relative',
       };
-      return base;
     };
 
     return (
@@ -1296,47 +1290,118 @@ function EquipmentAnalytics() {
           </div>
         </div>
 
+        {/* This Week panel */}
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card-header">
+            <h3 className="card-title">This Week at a Glance</h3>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+              {today.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })} â€“ {weekEnd.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+            {/* Overdue */}
+            <div style={{ background: overdueNow.length > 0 ? 'rgba(211,47,47,0.08)' : 'var(--bg-secondary)', borderRadius: 8, padding: '12px 14px', border: '1px solid ' + (overdueNow.length > 0 ? 'rgba(211,47,47,0.3)' : 'var(--border-color)') }}>
+              <div style={{ fontWeight: 700, color: '#d32f2f', marginBottom: 6, fontSize: '0.85rem' }}>
+                Overdue Returns ({overdueNow.length})
+              </div>
+              {overdueNow.length === 0
+                ? <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>None</div>
+                : overdueNow.slice(0, 4).map(e => (
+                  <div key={e.id} style={{ fontSize: '0.78rem', marginBottom: 3, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.equipment_id}</span>
+                    <span style={{ color: '#d32f2f', whiteSpace: 'nowrap' }}>due {e.expected_return_date}</span>
+                  </div>
+                ))
+              }
+              {overdueNow.length > 4 && <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 2 }}>+{overdueNow.length - 4} more</div>}
+            </div>
+
+            {/* Returning this week */}
+            <div style={{ background: 'rgba(46,125,50,0.06)', borderRadius: 8, padding: '12px 14px', border: '1px solid rgba(46,125,50,0.2)' }}>
+              <div style={{ fontWeight: 700, color: '#2e7d32', marginBottom: 6, fontSize: '0.85rem' }}>
+                Due Back This Week ({returnsThisWeek.length})
+              </div>
+              {returnsThisWeek.length === 0
+                ? <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>None scheduled</div>
+                : returnsThisWeek.slice(0, 4).map(e => (
+                  <div key={e.id} style={{ fontSize: '0.78rem', marginBottom: 3, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.equipment_id}</span>
+                    <span style={{ color: '#2e7d32', whiteSpace: 'nowrap' }}>{e.expected_return_date}</span>
+                  </div>
+                ))
+              }
+              {returnsThisWeek.length > 4 && <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 2 }}>+{returnsThisWeek.length - 4} more</div>}
+            </div>
+
+            {/* Going out this week */}
+            <div style={{ background: 'rgba(25,118,210,0.06)', borderRadius: 8, padding: '12px 14px', border: '1px solid rgba(25,118,210,0.2)' }}>
+              <div style={{ fontWeight: 700, color: '#1976d2', marginBottom: 6, fontSize: '0.85rem' }}>
+                Reservations Starting ({goingOutThisWeek.length})
+              </div>
+              {goingOutThisWeek.length === 0
+                ? <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>None this week</div>
+                : goingOutThisWeek.slice(0, 4).map(r => (
+                  <div key={r.id} style={{ fontSize: '0.78rem', marginBottom: 3, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.equipment_code}</span>
+                    <span style={{ color: '#1976d2', whiteSpace: 'nowrap' }}>{r.start_date?.split('T')[0]}</span>
+                  </div>
+                ))
+              }
+              {goingOutThisWeek.length > 4 && <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 2 }}>+{goingOutThisWeek.length - 4} more</div>}
+            </div>
+
+            {/* No return date set */}
+            {(() => {
+              const noDate = checkedOutReport.filter(e => !e.expected_return_date);
+              return (
+                <div style={{ background: 'var(--bg-secondary)', borderRadius: 8, padding: '12px 14px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6, fontSize: '0.85rem' }}>
+                    No Return Date Set ({noDate.length})
+                  </div>
+                  {noDate.length === 0
+                    ? <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>All equipment has a return date</div>
+                    : noDate.slice(0, 4).map(e => (
+                      <div key={e.id} style={{ fontSize: '0.78rem', marginBottom: 3 }}>
+                        <span style={{ fontWeight: 600 }}>{e.equipment_id}</span>
+                        <span style={{ color: 'var(--text-secondary)', marginLeft: 6 }}>{e.checked_out_to || 'â€”'}</span>
+                      </div>
+                    ))
+                  }
+                  {noDate.length > 4 && <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 2 }}>+{noDate.length - 4} more</div>}
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+
         {/* Calendar card */}
         <div className="card">
           {/* Calendar header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button className="btn btn-sm btn-secondary" onClick={prevMonth} style={{ padding: '4px 10px' }}>‹</button>
+              <button className="btn btn-sm btn-secondary" onClick={prevMonth} style={{ padding: '4px 10px' }}>â€¹</button>
               <span style={{ fontWeight: 700, fontSize: '1.05rem', minWidth: 160, textAlign: 'center' }}>{monthLabel}</span>
-              <button className="btn btn-sm btn-secondary" onClick={nextMonth} style={{ padding: '4px 10px' }}>›</button>
+              <button className="btn btn-sm btn-secondary" onClick={nextMonth} style={{ padding: '4px 10px' }}>â€º</button>
               <button className="btn btn-sm btn-secondary" onClick={goToday} style={{ marginLeft: 4 }}>Today</button>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Filter by site:</label>
-              <select
-                className="form-control"
-                style={{ fontSize: '0.82rem', padding: '4px 8px', minWidth: 160 }}
-                value={calSiteFilter}
-                onChange={e => { setCalSiteFilter(e.target.value); setCalSelectedDay(null); }}
-              >
-                {calSiteOptions.map(s => (
-                  <option key={s} value={s}>{s === 'all' ? 'All Sites' : s}</option>
-                ))}
-              </select>
             </div>
           </div>
 
           {/* Legend */}
           <div style={{ display: 'flex', gap: 16, marginBottom: 14, flexWrap: 'wrap' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.8rem' }}>
-              <span style={{ width: 12, height: 12, borderRadius: 3, background: '#2e7d32', display: 'inline-block' }} /> Available
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#2e7d32', display: 'inline-block' }} /> Returning
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.8rem' }}>
-              <span style={{ width: 12, height: 12, borderRadius: 3, background: '#ed6c02', display: 'inline-block' }} /> Checked Out
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#1976d2', display: 'inline-block' }} /> Res. Starts
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.8rem' }}>
-              <span style={{ width: 12, height: 12, borderRadius: 3, background: '#1976d2', display: 'inline-block' }} /> Reserved
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#d32f2f', display: 'inline-block' }} /> Overdue
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.8rem' }}>
-              <span style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid #2e7d32', display: 'inline-block' }} /> Today
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} /> Cal. Expiry
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.8rem' }}>
-              <span style={{ width: 12, height: 12, borderRadius: 3, background: '#f59e0b', display: 'inline-block' }} /> Cal. Expiry
+              <span style={{ width: 10, height: 10, borderRadius: '50%', border: '2px solid #2e7d32', display: 'inline-block' }} /> Today
             </span>
           </div>
 
@@ -1351,43 +1416,42 @@ function EquipmentAnalytics() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
             {calendarData.map((day, i) => {
               if (!day) return <div key={`empty-${i}`} />;
-              const hasRes = day.reserved.length > 0;
-              const hasOut = day.checkedOut.length > 0;
-              const hasCalExpiry = day.calExpiries && day.calExpiries.length > 0;
-              const dotSize = isMobile ? 7 : 9;
+              const dotSize = isMobile ? 7 : 8;
               return (
                 <div key={day.dateStr} style={cellStyle(day)} onClick={() => setCalSelectedDay(day.dateStr === calSelectedDay ? null : day.dateStr)}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <span style={{ fontSize: isMobile ? '0.75rem' : '0.85rem', fontWeight: day.isToday ? 700 : 500, color: day.isToday ? '#2e7d32' : 'inherit' }}>{day.date}</span>
-                    {day.available > 0 && !isMobile && (
-                      <span style={{ fontSize: '0.65rem', color: '#2e7d32', fontWeight: 600 }}>{day.available}</span>
-                    )}
                   </div>
                   {!isMobile && (
-                    <div style={{ marginTop: 4 }}>
-                      {hasOut && (
-                        <div style={{ fontSize: '0.65rem', color: '#ed6c02', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {day.checkedOut.length} out
+                    <div style={{ marginTop: 3, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      {day.returning?.length > 0 && (
+                        <div style={{ fontSize: '0.62rem', color: '#2e7d32', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          â†© {day.returning.length} return{day.returning.length > 1 ? 's' : ''}
                         </div>
                       )}
-                      {hasRes && (
-                        <div style={{ fontSize: '0.65rem', color: '#1976d2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {day.reserved.length} reserved
+                      {day.goingOut?.length > 0 && (
+                        <div style={{ fontSize: '0.62rem', color: '#1976d2', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          â†— {day.goingOut.length} res. start{day.goingOut.length > 1 ? 's' : ''}
                         </div>
                       )}
-                      {hasCalExpiry && (
-                        <div style={{ fontSize: '0.65rem', color: '#f59e0b', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={day.calExpiries.map(c => c.equipment_name || c.equipment_code).join(', ')}>
-                          {day.calExpiries.length} cal. expir{day.calExpiries.length === 1 ? 'y' : 'ies'}
+                      {day.overdue?.length > 0 && (
+                        <div style={{ fontSize: '0.62rem', color: '#d32f2f', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          âš  {day.overdue.length} overdue
+                        </div>
+                      )}
+                      {day.calExpiries?.length > 0 && (
+                        <div style={{ fontSize: '0.62rem', color: '#f59e0b', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          â—† {day.calExpiries.length} cal. exp.
                         </div>
                       )}
                     </div>
                   )}
                   {isMobile && (
-                    <div style={{ display: 'flex', gap: 3, marginTop: 3, flexWrap: 'wrap' }}>
-                      {hasOut && <span style={{ width: dotSize, height: dotSize, borderRadius: '50%', background: '#ed6c02', display: 'inline-block' }} />}
-                      {hasRes && <span style={{ width: dotSize, height: dotSize, borderRadius: '50%', background: '#1976d2', display: 'inline-block' }} />}
-                      {hasCalExpiry && <span style={{ width: dotSize, height: dotSize, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />}
-                      {!hasOut && !hasRes && day.available > 0 && <span style={{ width: dotSize, height: dotSize, borderRadius: '50%', background: '#2e7d32', display: 'inline-block' }} />}
+                    <div style={{ display: 'flex', gap: 2, marginTop: 3, flexWrap: 'wrap' }}>
+                      {day.returning?.length > 0 && <span style={{ width: dotSize, height: dotSize, borderRadius: '50%', background: '#2e7d32', display: 'inline-block' }} />}
+                      {day.goingOut?.length > 0 && <span style={{ width: dotSize, height: dotSize, borderRadius: '50%', background: '#1976d2', display: 'inline-block' }} />}
+                      {day.overdue?.length > 0 && <span style={{ width: dotSize, height: dotSize, borderRadius: '50%', background: '#d32f2f', display: 'inline-block' }} />}
+                      {day.calExpiries?.length > 0 && <span style={{ width: dotSize, height: dotSize, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />}
                     </div>
                   )}
                 </div>
@@ -1398,14 +1462,13 @@ function EquipmentAnalytics() {
 
         {/* Day detail panel */}
         {selectedDayData && (() => {
-          // Enrich checked-out list with data from the checked-out report + calibration data
-          const enriched = selectedDayData.checkedOut.map(e => {
-            const report = checkedOutReport.find(r => r.id === e.id);
+          const enrichedReturning = selectedDayData.returning.map(e => {
             const cal = calData.find(c => c.equipment_id === e.id);
-            const calibration_status = cal?.calibration_status || null;
-            return report
-              ? { ...e, ...report, equipment_id: e.equipment_id, current_location: report.current_location || e.current_location || null, calibration_status }
-              : { ...e, calibration_status };
+            return { ...e, calibration_status: cal?.calibration_status || null };
+          });
+          const enrichedOverdue = selectedDayData.overdue.map(e => {
+            const cal = calData.find(c => c.equipment_id === e.id);
+            return { ...e, calibration_status: cal?.calibration_status || null };
           });
           return (
           <div className="card" id="cal-day-detail-panel" style={{ marginTop: 16 }}>
@@ -1418,7 +1481,7 @@ function EquipmentAnalytics() {
                   className="btn btn-sm btn-secondary"
                   onClick={() => {
                     const orig = document.title;
-                    document.title = `Equipment Status – ${selectedDayData.dateStr}`;
+                    document.title = `Equipment Status â€“ ${selectedDayData.dateStr}`;
                     window.print();
                     document.title = orig;
                   }}
@@ -1426,86 +1489,72 @@ function EquipmentAnalytics() {
                 >
                   <Icons.Download size={14} /> Export PDF
                 </button>
-                <button className="btn btn-sm btn-secondary" onClick={() => setCalSelectedDay(null)}>✕</button>
+                <button className="btn btn-sm btn-secondary" onClick={() => setCalSelectedDay(null)}>âœ•</button>
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ background: 'rgba(46,125,50,0.15)', color: '#2e7d32', borderRadius: 6, padding: '4px 12px', fontWeight: 600, fontSize: '0.85rem' }}>
-                {selectedDayData.available} Available
-              </span>
-              <span style={{ background: 'rgba(237,108,2,0.15)', color: '#ed6c02', borderRadius: 6, padding: '4px 12px', fontWeight: 600, fontSize: '0.85rem' }}>
-                {selectedDayData.checkedOut.length} Checked Out
-              </span>
-              <span style={{ background: 'rgba(25,118,210,0.15)', color: '#1976d2', borderRadius: 6, padding: '4px 12px', fontWeight: 600, fontSize: '0.85rem' }}>
-                {selectedDayData.reserved.length} Reserved
-              </span>
-              {selectedDayData.available > 0 && (
-                <button
-                  className="btn btn-sm btn-primary"
-                  style={{ marginLeft: 'auto' }}
-                  onClick={async () => {
-                    setQuickBookError(null);
-                    setQuickBookSuccess(false);
-                    setQuickBookForm({ equipment_id: '', personnel_id: '', purpose: '', end_date: selectedDayData.dateStr });
-                    setQuickBookDay(selectedDayData.dateStr);
-                    if (quickBookPersonnel.length === 0) {
-                      const res = await personnelApi.getAll(true, '');
-                      setQuickBookPersonnel(Array.isArray(res?.data) ? res.data : []);
-                    }
-                  }}
-                >
-                  <Icons.Plus size={13} /> Book Reservation
-                </button>
+            {/* Summary badges + Book button */}
+            <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+              {enrichedReturning.length > 0 && (
+                <span style={{ background: 'rgba(46,125,50,0.15)', color: '#2e7d32', borderRadius: 6, padding: '4px 12px', fontWeight: 600, fontSize: '0.83rem' }}>
+                  â†© {enrichedReturning.length} Returning
+                </span>
               )}
+              {enrichedOverdue.length > 0 && (
+                <span style={{ background: 'rgba(211,47,47,0.12)', color: '#d32f2f', borderRadius: 6, padding: '4px 12px', fontWeight: 700, fontSize: '0.83rem' }}>
+                  âš  {enrichedOverdue.length} Overdue
+                </span>
+              )}
+              {selectedDayData.goingOut.length > 0 && (
+                <span style={{ background: 'rgba(25,118,210,0.12)', color: '#1976d2', borderRadius: 6, padding: '4px 12px', fontWeight: 600, fontSize: '0.83rem' }}>
+                  â†— {selectedDayData.goingOut.length} Reservation{selectedDayData.goingOut.length > 1 ? 's' : ''} Starting
+                </span>
+              )}
+              {selectedDayData.calExpiries.length > 0 && (
+                <span style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', borderRadius: 6, padding: '4px 12px', fontWeight: 600, fontSize: '0.83rem' }}>
+                  â—† {selectedDayData.calExpiries.length} Cal. Expiring
+                </span>
+              )}
+              {enrichedReturning.length === 0 && enrichedOverdue.length === 0 && selectedDayData.goingOut.length === 0 && selectedDayData.calExpiries.length === 0 && (
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.83rem' }}>No events on this day</span>
+              )}
+              <button
+                className="btn btn-sm btn-primary"
+                style={{ marginLeft: 'auto' }}
+                onClick={async () => {
+                  setQuickBookError(null);
+                  setQuickBookSuccess(false);
+                  setQuickBookForm({ equipment_id: '', personnel_id: '', purpose: '', end_date: selectedDayData.dateStr });
+                  setQuickBookDay(selectedDayData.dateStr);
+                  if (quickBookPersonnel.length === 0) {
+                    const res = await personnelApi.getAll(true, '');
+                    setQuickBookPersonnel(Array.isArray(res?.data) ? res.data : []);
+                  }
+                }}
+              >
+                <Icons.Plus size={13} /> Book Reservation
+              </button>
             </div>
 
-            {enriched.length > 0 && (
+            {/* Overdue items */}
+            {enrichedOverdue.length > 0 && (
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontWeight: 600, marginBottom: 8, color: '#ed6c02', fontSize: '0.9rem' }}>Checked Out Equipment</div>
+                <div style={{ fontWeight: 600, marginBottom: 8, color: '#d32f2f', fontSize: '0.9rem' }}>Overdue â€” Not Yet Returned</div>
                 <div className="table-container">
                   <table className="equipment-table">
-                    <thead>
-                      <tr>
-                        <th>Equipment</th>
-                        <th>Checked Out By</th>
-                        <th>Site / Location</th>
-                        <th>Expected Return</th>
-                        <th>Calibration</th>
-                      </tr>
-                    </thead>
+                    <thead><tr><th>Equipment</th><th>Held By</th><th>Site / Location</th><th>Was Due</th><th>Days Overdue</th><th>Calibration</th></tr></thead>
                     <tbody>
-                      {enriched.map(e => {
+                      {enrichedOverdue.map(e => {
                         const calColor = { Valid: '#2e7d32', 'Due Soon': '#ed6c02', Expired: '#d32f2f', 'Not Calibrated': '#757575', 'N/A': '#757575' }[e.calibration_status] || '#757575';
-                        const isOverdue = e.is_overdue;
+                        const daysOver = e.expected_return_date ? Math.floor((new Date(selectedDayData.dateStr) - new Date(e.expected_return_date)) / 86400000) : null;
                         return (
                           <tr key={e.id}>
-                            <td>
-                              <strong>{e.equipment_id}</strong>
-                              <br />
-                              <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{e.equipment_name}</span>
-                              {isOverdue && (
-                                <span style={{ display: 'inline-block', marginLeft: 6, background: 'rgba(211,47,47,0.12)', color: '#d32f2f', borderRadius: 4, padding: '1px 6px', fontSize: '0.68rem', fontWeight: 700 }}>OVERDUE</span>
-                              )}
-                            </td>
-                            <td>
-                              {e.checked_out_to || e.current_holder || '-'}
-                              {e.days_out != null && (
-                                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{e.days_out}d out</div>
-                              )}
-                            </td>
+                            <td><strong>{e.equipment_id}</strong><br /><span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{e.equipment_name}</span></td>
+                            <td>{e.checked_out_to || '-'}</td>
                             <td>{e.current_location || '-'}</td>
-                            <td style={{ whiteSpace: 'nowrap' }}>
-                              {e.expected_return_date
-                                ? <span style={{ color: isOverdue ? '#d32f2f' : 'inherit', fontWeight: isOverdue ? 600 : 400 }}>{formatDate(e.expected_return_date)}</span>
-                                : <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Not set</span>
-                              }
-                            </td>
-                            <td>
-                              <span style={{ color: calColor, fontWeight: 600, fontSize: '0.8rem' }}>
-                                {e.calibration_status || 'Not Calibrated'}
-                              </span>
-                            </td>
+                            <td style={{ color: '#d32f2f', fontWeight: 600, whiteSpace: 'nowrap' }}>{formatDate(e.expected_return_date)}</td>
+                            <td style={{ color: '#d32f2f', fontWeight: 700 }}>{daysOver != null ? `${daysOver}d` : '-'}</td>
+                            <td><span style={{ color: calColor, fontWeight: 600, fontSize: '0.8rem' }}>{e.calibration_status || 'Not Calibrated'}</span></td>
                           </tr>
                         );
                       })}
@@ -1515,19 +1564,47 @@ function EquipmentAnalytics() {
               </div>
             )}
 
-            {selectedDayData.reserved.length > 0 && (
-              <div>
-                <div style={{ fontWeight: 600, marginBottom: 8, color: '#1976d2', fontSize: '0.9rem' }}>Reservations</div>
+            {/* Returning on this day */}
+            {enrichedReturning.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontWeight: 600, marginBottom: 8, color: '#2e7d32', fontSize: '0.9rem' }}>Expected Returns</div>
                 <div className="table-container">
                   <table className="equipment-table">
-                    <thead><tr><th>Equipment</th><th>Reserved By</th><th>Period</th><th>Status</th></tr></thead>
+                    <thead><tr><th>Equipment</th><th>Held By</th><th>Site / Location</th><th>Days Out</th><th>Calibration</th></tr></thead>
                     <tbody>
-                      {selectedDayData.reserved.map(r => (
+                      {enrichedReturning.map(e => {
+                        const calColor = { Valid: '#2e7d32', 'Due Soon': '#ed6c02', Expired: '#d32f2f', 'Not Calibrated': '#757575', 'N/A': '#757575' }[e.calibration_status] || '#757575';
+                        return (
+                          <tr key={e.id}>
+                            <td><strong>{e.equipment_id}</strong><br /><span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{e.equipment_name}</span></td>
+                            <td>{e.checked_out_to || '-'}</td>
+                            <td>{e.current_location || '-'}</td>
+                            <td>{e.days_out != null ? `${e.days_out}d` : '-'}</td>
+                            <td><span style={{ color: calColor, fontWeight: 600, fontSize: '0.8rem' }}>{e.calibration_status || 'Not Calibrated'}</span></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Reservations starting */}
+            {selectedDayData.goingOut.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontWeight: 600, marginBottom: 8, color: '#1976d2', fontSize: '0.9rem' }}>Reservations Starting</div>
+                <div className="table-container">
+                  <table className="equipment-table">
+                    <thead><tr><th>Equipment</th><th>Reserved By</th><th>Until</th><th>Purpose</th><th>Status</th></tr></thead>
+                    <tbody>
+                      {selectedDayData.goingOut.map(r => (
                         <tr key={r.id}>
                           <td><strong>{r.equipment_code}</strong><br /><span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{r.equipment_name}</span></td>
-                          <td>{r.customer_name || r.personnel_name || '-'}</td>
-                          <td style={{ whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{formatDate(r.start_date)} – {formatDate(r.end_date)}</td>
-                          <td><span className="badge" style={{ background: r.status === 'approved' ? '#1976d2' : r.status === 'active' ? '#2e7d32' : '#ed6c02', fontSize: '0.7rem' }}>{r.status}</span></td>
+                          <td>{r.personnel_name || r.customer_name || '-'}</td>
+                          <td style={{ whiteSpace: 'nowrap', fontSize: '0.82rem' }}>{formatDate(r.end_date)}</td>
+                          <td style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{r.purpose || 'â€”'}</td>
+                          <td><span className="badge" style={{ background: r.status === 'approved' ? '#1976d2' : '#ed6c02', fontSize: '0.7rem' }}>{r.status}</span></td>
                         </tr>
                       ))}
                     </tbody>
@@ -1536,16 +1613,10 @@ function EquipmentAnalytics() {
               </div>
             )}
 
-            {selectedDayData.checkedOut.length === 0 && selectedDayData.reserved.length === 0 && (
-              <p style={{ color: 'var(--text-secondary)', marginTop: 8 }}>All equipment available — no checkouts or reservations on this day.</p>
-            )}
-
-            {/* Calibration expiries on this day */}
-            {selectedDayData.calExpiries && selectedDayData.calExpiries.length > 0 && (
-              <div style={{ marginTop: 16 }}>
-                <div style={{ fontWeight: 600, marginBottom: 8, color: '#f59e0b', fontSize: '0.9rem' }}>
-                  Calibration Expiring Today
-                </div>
+            {/* Calibration expiries */}
+            {selectedDayData.calExpiries.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontWeight: 600, marginBottom: 8, color: '#f59e0b', fontSize: '0.9rem' }}>Calibration Expiring</div>
                 <div className="table-container">
                   <table className="equipment-table">
                     <thead><tr><th>Equipment</th><th>Serial No.</th><th>Expiry Date</th><th>Status</th></tr></thead>
@@ -1553,8 +1624,8 @@ function EquipmentAnalytics() {
                       {selectedDayData.calExpiries.map((c, idx) => (
                         <tr key={c.equipment_id || idx}>
                           <td><strong>{c.equipment_code}</strong><br /><span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{c.equipment_name}</span></td>
-                          <td style={{ fontSize: '0.82rem' }}>{c.serial_number || '—'}</td>
-                          <td style={{ fontSize: '0.82rem', color: '#f59e0b', fontWeight: 600 }}>{c.expiry_date}</td>
+                          <td style={{ fontSize: '0.82rem' }}>{c.serial_number || 'â€”'}</td>
+                          <td style={{ fontSize: '0.82rem', color: '#f59e0b', fontWeight: 600 }}>{c.expiry_date || c.calibration_expiry_date}</td>
                           <td><span className="badge" style={{ background: c.calibration_status === 'Expired' ? '#d32f2f' : '#f59e0b', fontSize: '0.7rem' }}>{c.calibration_status || 'Due'}</span></td>
                         </tr>
                       ))}
@@ -1566,8 +1637,8 @@ function EquipmentAnalytics() {
 
             {/* Quick-book reservation form */}
             {quickBookDay === selectedDayData.dateStr && (
-              <div style={{ marginTop: 20, padding: 16, borderRadius: 10, border: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}>
-                <div style={{ fontWeight: 700, marginBottom: 12, color: '#1976d2', fontSize: '0.95rem' }}>New Reservation — {selectedDayData.dateStr}</div>
+              <div style={{ marginTop: 16, padding: 16, borderRadius: 10, border: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}>
+                <div style={{ fontWeight: 700, marginBottom: 12, color: '#1976d2', fontSize: '0.95rem' }}>New Reservation â€” {selectedDayData.dateStr}</div>
                 {quickBookSuccess ? (
                   <div style={{ color: '#2e7d32', fontWeight: 600 }}>Reservation created successfully! <button className="btn btn-sm btn-secondary" style={{ marginLeft: 8 }} onClick={() => { setQuickBookDay(null); setQuickBookSuccess(false); }}>Close</button></div>
                 ) : (
@@ -1576,9 +1647,9 @@ function EquipmentAnalytics() {
                       <label className="form-label">Equipment *</label>
                       <select className="form-control" value={quickBookForm.equipment_id}
                         onChange={e => setQuickBookForm(f => ({ ...f, equipment_id: e.target.value }))}>
-                        <option value="">— select —</option>
+                        <option value="">â€” select â€”</option>
                         {equipment.filter(eq => eq.status === 'Available').map(eq => (
-                          <option key={eq.id} value={eq.id}>{eq.equipment_id} — {eq.equipment_name}</option>
+                          <option key={eq.id} value={eq.id}>{eq.equipment_id} â€” {eq.equipment_name}</option>
                         ))}
                       </select>
                     </div>
@@ -1586,7 +1657,7 @@ function EquipmentAnalytics() {
                       <label className="form-label">For (Person) *</label>
                       <select className="form-control" value={quickBookForm.personnel_id}
                         onChange={e => setQuickBookForm(f => ({ ...f, personnel_id: e.target.value }))}>
-                        <option value="">— select —</option>
+                        <option value="">â€” select â€”</option>
                         {quickBookPersonnel.map(p => (
                           <option key={p.id} value={p.id}>{p.full_name}</option>
                         ))}
