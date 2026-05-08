@@ -82,13 +82,14 @@ function EquipmentAnalytics() {
         calibrationApi.getStatus(),
         reportsApi.getCheckedOut(),
       ]);
+      const isTestEq = (e) => e?.serial_number === 'Test123';
       setLocationData(Array.isArray(locRes?.data) ? locRes.data : []);
       setCategoryData(Array.isArray(catRes?.data) ? catRes.data : []);
-      setEquipment(Array.isArray(eqRes?.data) ? eqRes.data : []);
+      setEquipment((Array.isArray(eqRes?.data) ? eqRes.data : []).filter(e => !isTestEq(e)));
       setReservations(Array.isArray(resRes?.data) ? resRes.data : []);
-      setMovements(Array.isArray(movRes?.data) ? movRes.data : []);
-      setCalData(Array.isArray(calRes?.data) ? calRes.data : []);
-      setCheckedOutReport(Array.isArray(coRes?.data) ? coRes.data : []);
+      setMovements((Array.isArray(movRes?.data) ? movRes.data : []));
+      setCalData((Array.isArray(calRes?.data) ? calRes.data : []).filter(e => !isTestEq(e)));
+      setCheckedOutReport((Array.isArray(coRes?.data) ? coRes.data : []).filter(e => !isTestEq(e)));
       setLastRefreshed(new Date());
     } catch (err) {
       setError(err.message);
