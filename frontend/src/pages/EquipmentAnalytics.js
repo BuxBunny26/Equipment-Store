@@ -1397,12 +1397,14 @@ function EquipmentAnalytics() {
 
         {/* Day detail panel */}
         {selectedDayData && (() => {
-          // Enrich checked-out list with data from the checked-out report (calibration, expected return, holder)
+          // Enrich checked-out list with data from the checked-out report + calibration data
           const enriched = selectedDayData.checkedOut.map(e => {
             const report = checkedOutReport.find(r => r.id === e.id);
+            const cal = calData.find(c => c.equipment_id === e.id);
+            const calibration_status = cal?.calibration_status || null;
             return report
-              ? { ...e, ...report, equipment_id: e.equipment_id, current_location: report.current_location || e.current_location || null }
-              : e;
+              ? { ...e, ...report, equipment_id: e.equipment_id, current_location: report.current_location || e.current_location || null, calibration_status }
+              : { ...e, calibration_status };
           });
           return (
           <div className="card" id="cal-day-detail-panel" style={{ marginTop: 16 }}>
@@ -1500,7 +1502,7 @@ function EquipmentAnalytics() {
                             </td>
                             <td>
                               <span style={{ color: calColor, fontWeight: 600, fontSize: '0.8rem' }}>
-                                {e.calibration_status || '-'}
+                                {e.calibration_status || 'Not Calibrated'}
                               </span>
                             </td>
                           </tr>
