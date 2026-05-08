@@ -49,6 +49,11 @@ function EquipmentAnalytics() {
   const [insightData, setInsightData] = useState(null);
   const [insightLoading, setInsightLoading] = useState(false);
 
+  // Availability Calendar state
+  const [calViewDate, setCalViewDate] = useState(() => { const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() }; });
+  const [calSelectedDay, setCalSelectedDay] = useState(null);
+  const [calSiteFilter, setCalSiteFilter] = useState('all');
+
   useEffect(() => {
     fetchAllData();
   }, []);
@@ -349,27 +354,62 @@ function EquipmentAnalytics() {
 
   // (Equipment Age Profile removed - replaced by Equipment Insights)
 
-  // -- Availability Calendar: next 30 days --
-  const availabilityCalendar = useMemo(() => {
-    const now = new Date();
-    const days = [];
+  // -- Availability Calendar --
+  const calendarData = useMemo(() => {
+    const { year, month } = calViewDate;
     const activeRes = reservations.filter(r => r.status !== 'cancelled' && r.status !== 'completed');
-    for (let i = 0; i < 30; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
-      const dateStr = d.toISOString().split('T')[0];
-      const label = d.toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' });
-      const reservedCount = activeRes.filter(r => {
-        const start = new Date(r.start_date);
-        const end = new Date(r.end_date);
-        return d >= start && d <= end;
-      }).length;
-      const checkedOutCount = equipment.filter(e => e.status === 'Checked Out').length;
-      const totalCount = equipment.length;
-      const availableCount = Math.max(0, totalCount - checkedOutCount - reservedCount);
-      days.push({ date: dateStr, label, reserved: reservedCount, available: availableCount, checkedOut: checkedOutCount });
+    const activeCheckouts = equipment.filter(e => e.status === 'Checked Out');
+
+    // Apply site filter
+    const filteredCheckouts = calSiteFilter === 'all'
+      ? activeCheckouts
+      : activeCheckouts.filter(e => (e.current_location || '') === calSiteFilter);
+    const filteredReservations = calSiteFilter === 'all'
+      ? activeRes
+      : activeRes.filter(r => (r.customer_name || r.personnel_name || '') === calSiteFilter || calSiteFilter === 'all');
+
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+
+    const days = [];
+    // Pad start
+    for (let i = 0; i < firstDay.getDay(); i++) days.push(null);
+
+    for (let d = 1; d <= lastDay.getDate(); d++) {
+      const date = new Date(year, month, d);
+      const dateStr = date.toISOString().split('T')[0];
+
+      const dayRes = filteredReservations.filter(r => {
+        const s = new Date(r.start_date); s.setHours(0,0,0,0);
+        const e = new Date(r.end_date); e.setHours(23,59,59,999);
+        return date >= s && date <= e;
+      });
+
+      // Checked-out equipment: use last_action_timestamp to date, show as still out
+      const dayOut = filteredCheckouts.filter(e => {
+        const out = new Date(e.last_action_timestamp); out.setHours(0,0,0,0);
+        return date >= out;
+      });
+
+      const totalEq = calSiteFilter === 'all' ? equipment.filter(e => !e.is_consumable).length : filteredCheckouts.length + equipment.filter(e => e.status === 'Available' && !e.is_consumable).length;
+      const availableCount = Math.max(0, totalEq - dayOut.length - dayRes.length);
+
+      days.push({
+        date: d, dateStr, isToday: date.getTime() === today.getTime(),
+        isPast: date < today,
+        reserved: dayRes, checkedOut: dayOut,
+        available: availableCount, total: totalEq,
+      });
     }
     return days;
-  }, [reservations, equipment]);
+  }, [calViewDate, reservations, equipment, calSiteFilter]);
+
+  // Unique sites from checked-out equipment for filter
+  const calSiteOptions = useMemo(() => {
+    const sites = new Set(equipment.filter(e => e.status === 'Checked Out' && e.current_location).map(e => e.current_location));
+    return ['all', ...Array.from(sites).sort()];
+  }, [equipment]);
 
   // -- Personal vs Team Usage --
   const personalVsTeam = useMemo(() => {
@@ -1142,115 +1182,234 @@ function EquipmentAnalytics() {
     );
   };
 
-  const renderAvailability = () => (
-    <div>
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-icon green"><Icons.Check size={24} /></div>
-          <div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipment.filter(e => e.status === 'Available').length}</div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Available Now</div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon orange"><Icons.Package size={24} /></div>
-          <div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipment.filter(e => e.status === 'Checked Out').length}</div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Checked Out</div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon blue"><Icons.Calendar size={24} /></div>
-          <div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{reservations.filter(r => r.status !== 'cancelled' && r.status !== 'completed').length}</div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Active Reservations</div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon red"><Icons.Wrench size={24} /></div>
-          <div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipment.filter(e => e.status === 'In Maintenance').length}</div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>In Maintenance</div>
-          </div>
-        </div>
-      </div>
+  const renderAvailability = () => {
+    const { year, month } = calViewDate;
+    const monthLabel = new Date(year, month, 1).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
+    const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-      {/* 30-day availability timeline */}
-      <div className="card">
-        <div className="card-header">
-          <h3 className="card-title">30-Day Availability Forecast</h3>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Equipment availability vs reservations</span>
-        </div>
-        <ResponsiveContainer width="100%" height={isMobile ? 280 : 350}>
-          <BarChart data={availabilityCalendar} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-            <XAxis dataKey="label" tick={{ fontSize: isMobile ? 8 : 10 }} interval={isMobile ? 3 : 2} angle={-45} textAnchor="end" height={isMobile ? 50 : 60} />
-            <YAxis allowDecimals={false} width={isMobile ? 30 : 60} />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend />
-            <Bar dataKey="available" name="Available" stackId="a" fill="#2e7d32" />
-            <Bar dataKey="reserved" name="Reserved" stackId="a" fill="#1976d2" />
-            <Bar dataKey="checkedOut" name="Checked Out" stackId="a" fill="#ed6c02" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+    const selectedDayData = calSelectedDay ? calendarData.find(d => d && d.date === calSelectedDay) : null;
 
-      {/* Upcoming reservations list */}
-      <div className="card" style={{ marginTop: 20 }}>
-        <div className="card-header">
-          <h3 className="card-title">Upcoming Reservations</h3>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Next 30 days</span>
-        </div>
-        {(() => {
-          const now = new Date();
-          const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30);
-          const upcoming = reservations
-            .filter(r => r.status !== 'cancelled' && r.status !== 'completed' && new Date(r.start_date) <= cutoff)
-            .sort((a, b) => new Date(a.start_date) - new Date(b.start_date));
+    const prevMonth = () => setCalViewDate(v => {
+      const d = new Date(v.year, v.month - 1, 1);
+      return { year: d.getFullYear(), month: d.getMonth() };
+    });
+    const nextMonth = () => setCalViewDate(v => {
+      const d = new Date(v.year, v.month + 1, 1);
+      return { year: d.getFullYear(), month: d.getMonth() };
+    });
+    const goToday = () => { const d = new Date(); setCalViewDate({ year: d.getFullYear(), month: d.getMonth() }); setCalSelectedDay(null); };
 
-          if (upcoming.length === 0) {
-            return (
-              <div className="empty-state">
-                <h3>No upcoming reservations</h3>
-                <p>No equipment reserved in the next 30 days</p>
-              </div>
-            );
-          }
-          return (
-            <div className="table-container">
-              <table className="equipment-table">
-                <thead>
-                  <tr>
-                    <th>Equipment</th>
-                    <th>Reserved By</th>
-                    <th>Start</th>
-                    <th>End</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {upcoming.map((r, i) => (
-                    <tr key={i}>
-                      <td>
-                        <div style={{ fontWeight: 600 }}>{truncate(r.equipment_name, 28)}</div>
-                        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{r.equipment_code}</div>
-                      </td>
-                      <td>{r.personnel_name || '-'}</td>
-                      <td style={{ whiteSpace: 'nowrap' }}>{formatDate(r.start_date)}</td>
-                      <td style={{ whiteSpace: 'nowrap' }}>{formatDate(r.end_date)}</td>
-                      <td>
-                        <span className="badge" style={{ background: r.status === 'approved' ? '#1976d2' : r.status === 'active' ? '#2e7d32' : '#ed6c02', fontSize: '0.7rem' }}>{r.status}</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+    const cellStyle = (day) => {
+      if (!day) return {};
+      const base = {
+        minHeight: isMobile ? 52 : 80,
+        padding: isMobile ? '4px' : '6px 8px',
+        borderRadius: 8,
+        cursor: 'pointer',
+        border: day.dateStr === calSelectedDay ? '2px solid var(--accent-primary)' : day.isToday ? '2px solid #2e7d32' : '1px solid var(--border-color)',
+        background: day.dateStr === calSelectedDay ? 'var(--bg-hover)' : day.isToday ? 'rgba(46,125,50,0.08)' : 'var(--bg-secondary)',
+        opacity: day.isPast ? 0.55 : 1,
+        transition: 'border 0.15s, background 0.15s',
+      };
+      return base;
+    };
+
+    return (
+      <div>
+        {/* Stat cards */}
+        <div className="stats-grid">
+          <div className="stat-card">
+            <div className="stat-icon green"><Icons.Check size={24} /></div>
+            <div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipment.filter(e => e.status === 'Available' && !e.is_consumable).length}</div>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Available Now</div>
             </div>
-          );
-        })()}
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon orange"><Icons.Package size={24} /></div>
+            <div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipment.filter(e => e.status === 'Checked Out').length}</div>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Checked Out</div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon blue"><Icons.Calendar size={24} /></div>
+            <div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{reservations.filter(r => r.status !== 'cancelled' && r.status !== 'completed').length}</div>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Active Reservations</div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon red"><Icons.Wrench size={24} /></div>
+            <div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{equipment.filter(e => e.status === 'In Maintenance').length}</div>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>In Maintenance</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Calendar card */}
+        <div className="card">
+          {/* Calendar header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button className="btn btn-sm btn-secondary" onClick={prevMonth} style={{ padding: '4px 10px' }}>‹</button>
+              <span style={{ fontWeight: 700, fontSize: '1.05rem', minWidth: 160, textAlign: 'center' }}>{monthLabel}</span>
+              <button className="btn btn-sm btn-secondary" onClick={nextMonth} style={{ padding: '4px 10px' }}>›</button>
+              <button className="btn btn-sm btn-secondary" onClick={goToday} style={{ marginLeft: 4 }}>Today</button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Filter by site:</label>
+              <select
+                className="form-control"
+                style={{ fontSize: '0.82rem', padding: '4px 8px', minWidth: 160 }}
+                value={calSiteFilter}
+                onChange={e => { setCalSiteFilter(e.target.value); setCalSelectedDay(null); }}
+              >
+                {calSiteOptions.map(s => (
+                  <option key={s} value={s}>{s === 'all' ? 'All Sites' : s}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Legend */}
+          <div style={{ display: 'flex', gap: 16, marginBottom: 14, flexWrap: 'wrap' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.8rem' }}>
+              <span style={{ width: 12, height: 12, borderRadius: 3, background: '#2e7d32', display: 'inline-block' }} /> Available
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.8rem' }}>
+              <span style={{ width: 12, height: 12, borderRadius: 3, background: '#ed6c02', display: 'inline-block' }} /> Checked Out
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.8rem' }}>
+              <span style={{ width: 12, height: 12, borderRadius: 3, background: '#1976d2', display: 'inline-block' }} /> Reserved
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.8rem' }}>
+              <span style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid #2e7d32', display: 'inline-block' }} /> Today
+            </span>
+          </div>
+
+          {/* Weekday headers */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 4 }}>
+            {weekdays.map(w => (
+              <div key={w} style={{ textAlign: 'center', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', padding: '4px 0' }}>{w}</div>
+            ))}
+          </div>
+
+          {/* Day grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+            {calendarData.map((day, i) => {
+              if (!day) return <div key={`empty-${i}`} />;
+              const hasRes = day.reserved.length > 0;
+              const hasOut = day.checkedOut.length > 0;
+              const dotSize = isMobile ? 7 : 9;
+              return (
+                <div key={day.dateStr} style={cellStyle(day)} onClick={() => setCalSelectedDay(day.dateStr === calSelectedDay ? null : day.dateStr)}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <span style={{ fontSize: isMobile ? '0.75rem' : '0.85rem', fontWeight: day.isToday ? 700 : 500, color: day.isToday ? '#2e7d32' : 'inherit' }}>{day.date}</span>
+                    {day.available > 0 && !isMobile && (
+                      <span style={{ fontSize: '0.65rem', color: '#2e7d32', fontWeight: 600 }}>{day.available}</span>
+                    )}
+                  </div>
+                  {!isMobile && (
+                    <div style={{ marginTop: 4 }}>
+                      {hasOut && (
+                        <div style={{ fontSize: '0.65rem', color: '#ed6c02', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {day.checkedOut.length} out
+                        </div>
+                      )}
+                      {hasRes && (
+                        <div style={{ fontSize: '0.65rem', color: '#1976d2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {day.reserved.length} reserved
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {isMobile && (
+                    <div style={{ display: 'flex', gap: 3, marginTop: 3, flexWrap: 'wrap' }}>
+                      {hasOut && <span style={{ width: dotSize, height: dotSize, borderRadius: '50%', background: '#ed6c02', display: 'inline-block' }} />}
+                      {hasRes && <span style={{ width: dotSize, height: dotSize, borderRadius: '50%', background: '#1976d2', display: 'inline-block' }} />}
+                      {!hasOut && !hasRes && day.available > 0 && <span style={{ width: dotSize, height: dotSize, borderRadius: '50%', background: '#2e7d32', display: 'inline-block' }} />}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Day detail panel */}
+        {selectedDayData && (
+          <div className="card" style={{ marginTop: 16 }}>
+            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 className="card-title">
+                {new Date(selectedDayData.dateStr + 'T12:00:00').toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+              </h3>
+              <button className="btn btn-sm btn-secondary" onClick={() => setCalSelectedDay(null)}>✕</button>
+            </div>
+
+            <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+              <span style={{ background: 'rgba(46,125,50,0.15)', color: '#2e7d32', borderRadius: 6, padding: '4px 12px', fontWeight: 600, fontSize: '0.85rem' }}>
+                {selectedDayData.available} Available
+              </span>
+              <span style={{ background: 'rgba(237,108,2,0.15)', color: '#ed6c02', borderRadius: 6, padding: '4px 12px', fontWeight: 600, fontSize: '0.85rem' }}>
+                {selectedDayData.checkedOut.length} Checked Out
+              </span>
+              <span style={{ background: 'rgba(25,118,210,0.15)', color: '#1976d2', borderRadius: 6, padding: '4px 12px', fontWeight: 600, fontSize: '0.85rem' }}>
+                {selectedDayData.reserved.length} Reserved
+              </span>
+            </div>
+
+            {selectedDayData.checkedOut.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontWeight: 600, marginBottom: 8, color: '#ed6c02', fontSize: '0.9rem' }}>Checked Out Equipment</div>
+                <div className="table-container">
+                  <table className="equipment-table">
+                    <thead><tr><th>Equipment</th><th>Category</th><th>Location / Site</th><th>Held By</th></tr></thead>
+                    <tbody>
+                      {selectedDayData.checkedOut.map(e => (
+                        <tr key={e.id}>
+                          <td><strong>{e.equipment_id}</strong><br /><span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{e.equipment_name}</span></td>
+                          <td>{e.category_name || '-'}</td>
+                          <td>{e.current_location || '-'}</td>
+                          <td>{e.current_holder || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {selectedDayData.reserved.length > 0 && (
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 8, color: '#1976d2', fontSize: '0.9rem' }}>Reservations</div>
+                <div className="table-container">
+                  <table className="equipment-table">
+                    <thead><tr><th>Equipment</th><th>Reserved By</th><th>Period</th><th>Status</th></tr></thead>
+                    <tbody>
+                      {selectedDayData.reserved.map(r => (
+                        <tr key={r.id}>
+                          <td><strong>{r.equipment_code}</strong><br /><span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{r.equipment_name}</span></td>
+                          <td>{r.customer_name || r.personnel_name || '-'}</td>
+                          <td style={{ whiteSpace: 'nowrap', fontSize: '0.8rem' }}>{formatDate(r.start_date)} – {formatDate(r.end_date)}</td>
+                          <td><span className="badge" style={{ background: r.status === 'approved' ? '#1976d2' : r.status === 'active' ? '#2e7d32' : '#ed6c02', fontSize: '0.7rem' }}>{r.status}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {selectedDayData.checkedOut.length === 0 && selectedDayData.reserved.length === 0 && (
+              <p style={{ color: 'var(--text-secondary)', marginTop: 8 }}>All equipment available — no checkouts or reservations on this day.</p>
+            )}
+          </div>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderPersonalVsTeam = () => (
     <div>
