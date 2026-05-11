@@ -397,35 +397,74 @@ export const movementsApi = {
             .single()
     ),
 
-    // Fetch overdue items for a specific personnel (checked out, past expected return or > 14 days old)
-    getOverdueForPersonnel: (personnelId) => wrap(
-        supabase.from('equipment_movements')
+    // Fetch overdue items for a specific personnel (currently checked out to them, past expected return or > 14 days old)
+    getOverdueForPersonnel: async (personnelId) => {
+        // Step 1: All OUT movements for this person
+        const { data: outData, error: outError } = await supabase
+            .from('equipment_movements')
             .select(`
-                id, created_at, expected_return_date, notes,
+                id, created_at, expected_return_date, notes, equipment_id,
                 equipment:equipment_id(id, equipment_id, equipment_name, categories(name)),
                 locations(name), customers(display_name)
             `)
             .eq('personnel_id', personnelId)
             .eq('action', 'OUT')
-            .order('created_at', { ascending: false })
-    ).then(res => {
+            .order('created_at', { ascending: false });
+        if (outError) throw new Error(outError.message);
+        if (!outData || outData.length === 0) return { data: [] };
+
+        // Step 2: Deduplicate — keep only the most recent OUT per equipment
+        const seenEquipment = new Set();
+        const latestOutPerEquipment = outData.filter(m => {
+            if (seenEquipment.has(m.equipment_id)) return false;
+            seenEquipment.add(m.equipment_id);
+            return true;
+        });
+
+        const equipmentIds = latestOutPerEquipment.map(m => m.equipment_id);
+
+        // Step 3: Find the most recent IN movement for each of those equipment items
+        const { data: inData } = await supabase
+            .from('equipment_movements')
+            .select('equipment_id, created_at')
+            .in('equipment_id', equipmentIds)
+            .eq('action', 'IN')
+            .order('created_at', { ascending: false });
+
+        // Build map: equipment_id -> latest IN timestamp
+        const latestInMap = {};
+        for (const m of (inData || [])) {
+            if (!latestInMap[m.equipment_id]) latestInMap[m.equipment_id] = m.created_at;
+        }
+
+        // Step 4: Only keep equipment where no IN came after this OUT (still checked out)
+        const stillOut = latestOutPerEquipment.filter(outM => {
+            const latestIn = latestInMap[outM.equipment_id];
+            if (!latestIn) return true; // never returned
+            return new Date(latestIn) < new Date(outM.created_at); // returned before this checkout
+        });
+
+        // Step 5: Apply overdue filter
         const today = new Date(); today.setHours(0, 0, 0, 0);
         const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 14);
-        const data = (res.data || []).filter(m => {
+        const overdueData = stillOut.filter(m => {
             if (m.expected_return_date) return new Date(m.expected_return_date) < today;
             return new Date(m.created_at) < cutoff;
         });
-        return { data: data.map(m => ({
-            ...m,
-            equipment_pk: m.equipment?.id,
-            equipment_code: m.equipment?.equipment_id,
-            equipment_name: m.equipment?.equipment_name,
-            category: m.equipment?.categories?.name,
-            location: m.locations?.name || m.customers?.display_name || null,
-            days_out: Math.floor((Date.now() - new Date(m.created_at)) / 86400000),
-            equipment: undefined, locations: undefined, customers: undefined,
-        })) };
-    }),
+
+        return {
+            data: overdueData.map(m => ({
+                ...m,
+                equipment_pk: m.equipment?.id,
+                equipment_code: m.equipment?.equipment_id,
+                equipment_name: m.equipment?.equipment_name,
+                category: m.equipment?.categories?.name,
+                location: m.locations?.name || m.customers?.display_name || null,
+                days_out: Math.floor((Date.now() - new Date(m.created_at)) / 86400000),
+                equipment: undefined, locations: undefined, customers: undefined,
+            }))
+        };
+    },
 };
 
 // Reports
