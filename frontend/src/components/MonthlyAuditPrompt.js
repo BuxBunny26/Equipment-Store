@@ -35,7 +35,7 @@ function MonthlyAuditPrompt() {
         setError(err.message);
         setLoading(false);
       });
-  }, [visible, operator?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [visible, operator?.id]); // eslint-disable-line
 
   if (!visible) return null;
 
