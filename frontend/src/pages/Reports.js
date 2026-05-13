@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { reportsApi, personnelApi, vehicleFinesApi, vehicleServicesApi } from '../services/api';
+import { reportsApi, personnelApi, vehicleFinesApi, vehicleServicesApi, monthlyAuditApi } from '../services/api';
 import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
 import ExportMenu from '../components/ExportMenu';
 import { Icons } from '../components/Icons';
 import { buildDivisionLookup, lookupDivision } from '../utils/divisionUtils';
+import { useOperator } from '../context/OperatorContext';
 
 function Reports() {
   const [activeTab, setActiveTab] = useState('overdue');
@@ -12,6 +13,9 @@ function Reports() {
   const [data, setData] = useState([]);
   const [stats, setStats] = useState(null);
   const [extraData, setExtraData] = useState({ personnel: [], fines: [], services: [] });
+  const [auditMonth, setAuditMonth] = useState(new Date().toISOString().slice(0, 7));
+  const { operatorRole } = useOperator();
+  const isAdmin = operatorRole === 'admin' || operatorRole === 'manager';
 
   useEffect(() => {
     fetchData();
@@ -94,6 +98,10 @@ function Reports() {
           response = await reportsApi.getCalibrationDueReport();
           setData(Array.isArray(response?.data) ? response.data : []);
           break;
+        case 'monthly-audit':
+          response = await monthlyAuditApi.getAuditReport(auditMonth);
+          setData(Array.isArray(response?.data) ? response.data : []);
+          break;
         default:
           setData([]);
       }
@@ -159,6 +167,8 @@ function Reports() {
         return <LaptopReport data={data} personnel={extraData.personnel} />;
       case 'calibration-due':
         return <CalibrationDueReport data={data} />;
+      case 'monthly-audit':
+        return <MonthlyAuditReport data={data} month={auditMonth} onMonthChange={m => { setAuditMonth(m); }} fetchData={fetchData} />;
       default:
         return null;
     }
@@ -255,6 +265,15 @@ function Reports() {
         >
           Calibration Due
         </button>
+        {isAdmin && (
+          <button
+            className={`tab ${activeTab === 'monthly-audit' ? 'active' : ''}`}
+            onClick={() => setActiveTab('monthly-audit')}
+            style={{ borderLeft: '2px solid var(--border-color)', marginLeft: 4, paddingLeft: 12 }}
+          >
+            Monthly Audit
+          </button>
+        )}
       </div>
 
       {/* Report Content */}
@@ -1542,6 +1561,172 @@ function CalibrationDueReport({ data }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// Monthly Audit Report Component (admin/manager only)
+function MonthlyAuditReport({ data, month, onMonthChange, fetchData }) {
+  const responded = data.filter(p => p.responded);
+  const notResponded = data.filter(p => !p.responded);
+  const responseRate = data.length > 0 ? Math.round((responded.length / data.length) * 100) : 0;
+
+  const monthLabel = month
+    ? new Date(month + '-01').toLocaleString('en-ZA', { month: 'long', year: 'numeric' })
+    : '';
+
+  return (
+    <div>
+      {/* Month selector + summary */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Month:</label>
+          <input
+            type="month"
+            value={month}
+            onChange={e => onMonthChange(e.target.value)}
+            style={{
+              padding: '6px 10px', borderRadius: 6,
+              border: '1px solid var(--border-color)',
+              background: 'var(--bg-primary)', color: 'var(--text-primary)',
+              fontSize: '0.85rem',
+            }}
+          />
+          <button className="btn btn-sm btn-secondary" onClick={fetchData} style={{ fontSize: '0.8rem' }}>
+            Load
+          </button>
+        </div>
+
+        {data.length > 0 && (
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{
+              padding: '4px 12px', borderRadius: 20, fontSize: '0.8rem', fontWeight: 600,
+              background: 'rgba(39,174,96,0.12)', color: '#27ae60',
+            }}>
+              {responded.length} responded
+            </span>
+            <span style={{
+              padding: '4px 12px', borderRadius: 20, fontSize: '0.8rem', fontWeight: 600,
+              background: 'rgba(231,76,60,0.10)', color: '#e74c3c',
+            }}>
+              {notResponded.length} not responded
+            </span>
+            <span style={{
+              padding: '4px 12px', borderRadius: 20, fontSize: '0.8rem', fontWeight: 600,
+              background: 'var(--bg-secondary)', color: 'var(--text-secondary)',
+            }}>
+              {responseRate}% response rate
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Progress bar */}
+      {data.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
+            Response progress — {monthLabel}
+          </div>
+          <div style={{ height: 10, background: 'var(--bg-secondary)', borderRadius: 6, overflow: 'hidden' }}>
+            <div style={{
+              width: `${responseRate}%`, height: '100%',
+              background: responseRate === 100 ? '#27ae60' : 'var(--primary-color)',
+              borderRadius: 6, transition: 'width 0.4s ease',
+            }} />
+          </div>
+        </div>
+      )}
+
+      {/* Not Responded section */}
+      {notResponded.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <h4 style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 10px', color: 'var(--error-color)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15">
+              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            Awaiting Response ({notResponded.length})
+          </h4>
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Employee ID</th>
+                  <th>Department</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {notResponded.map(p => (
+                  <tr key={p.id}>
+                    <td><strong>{p.full_name}</strong></td>
+                    <td style={{ fontSize: '0.85rem' }}>{p.employee_id || '-'}</td>
+                    <td style={{ fontSize: '0.85rem' }}>{p.department || '-'}</td>
+                    <td>
+                      <span className="badge badge-overdue" style={{ fontSize: '0.75rem' }}>Not responded</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Responded section */}
+      {responded.length > 0 && (
+        <div>
+          <h4 style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 10px', color: '#27ae60', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="15" height="15">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            Responded ({responded.length})
+          </h4>
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Employee ID</th>
+                  <th>Department</th>
+                  <th>Confirmed with them</th>
+                  <th>Returned</th>
+                  <th>No checkouts</th>
+                  <th>Responded at</th>
+                </tr>
+              </thead>
+              <tbody>
+                {responded.map(p => (
+                  <tr key={p.id}>
+                    <td><strong>{p.full_name}</strong></td>
+                    <td style={{ fontSize: '0.85rem' }}>{p.employee_id || '-'}</td>
+                    <td style={{ fontSize: '0.85rem' }}>{p.department || '-'}</td>
+                    <td style={{ textAlign: 'center' }}>{p.audit.items_confirmed > 0 ? p.audit.items_confirmed : '-'}</td>
+                    <td style={{ textAlign: 'center' }}>{p.audit.items_returned > 0 ? p.audit.items_returned : '-'}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      {p.audit.had_no_checkouts ? (
+                        <span style={{ color: '#27ae60', fontWeight: 600, fontSize: '0.85rem' }}>Yes</span>
+                      ) : '-'}
+                    </td>
+                    <td style={{ fontSize: '0.8rem' }}>
+                      {p.audit.acknowledged_at
+                        ? new Date(p.audit.acknowledged_at).toLocaleString('en-ZA', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                        : '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {data.length === 0 && (
+        <div className="empty-state">
+          <h3>No Data</h3>
+          <p>Select a month and click Load to view the audit report.</p>
+        </div>
+      )}
     </div>
   );
 }

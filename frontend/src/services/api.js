@@ -467,6 +467,108 @@ export const movementsApi = {
     },
 };
 
+// Monthly Audit API
+export const monthlyAuditApi = {
+    // Returns ALL equipment currently checked out to a person (no overdue filter)
+    getCheckedOutForPersonnel: async (personnelId) => {
+        const { data: outData, error: outError } = await supabase
+            .from('equipment_movements')
+            .select(`
+                id, created_at, expected_return_date, notes, equipment_id,
+                equipment:equipment_id(id, equipment_id, equipment_name, categories(name)),
+                locations(name), customers(display_name)
+            `)
+            .eq('personnel_id', personnelId)
+            .eq('action', 'OUT')
+            .order('created_at', { ascending: false });
+        if (outError) throw new Error(outError.message);
+        if (!outData || outData.length === 0) return { data: [] };
+
+        // Keep only the most recent OUT per equipment
+        const seenEquipment = new Set();
+        const latestOutPerEquipment = outData.filter(m => {
+            if (seenEquipment.has(m.equipment_id)) return false;
+            seenEquipment.add(m.equipment_id);
+            return true;
+        });
+        const equipmentIds = latestOutPerEquipment.map(m => m.equipment_id);
+
+        // Find the most recent IN movement for each equipment
+        const { data: inData } = await supabase
+            .from('equipment_movements')
+            .select('equipment_id, created_at')
+            .in('equipment_id', equipmentIds)
+            .eq('action', 'IN')
+            .order('created_at', { ascending: false });
+
+        const latestInMap = {};
+        for (const m of (inData || [])) {
+            if (!latestInMap[m.equipment_id]) latestInMap[m.equipment_id] = m.created_at;
+        }
+
+        // Only keep equipment that hasn't been returned since this checkout
+        const stillOut = latestOutPerEquipment.filter(outM => {
+            const latestIn = latestInMap[outM.equipment_id];
+            if (!latestIn) return true;
+            return new Date(latestIn) < new Date(outM.created_at);
+        });
+
+        return {
+            data: stillOut.map(m => ({
+                ...m,
+                equipment_pk: m.equipment?.id,
+                equipment_code: m.equipment?.equipment_id,
+                equipment_name: m.equipment?.equipment_name,
+                category: m.equipment?.categories?.name,
+                location: m.locations?.name || m.customers?.display_name || null,
+                days_out: Math.floor((Date.now() - new Date(m.created_at)) / 86400000),
+                equipment: undefined, locations: undefined, customers: undefined,
+            }))
+        };
+    },
+
+    // Save or update audit response for a person+month (upsert)
+    submitAudit: (data) => wrap(
+        supabase.from('monthly_audit_log').upsert({
+            personnel_id: data.personnel_id,
+            audit_month: data.audit_month,
+            acknowledged_at: new Date().toISOString(),
+            items_confirmed: data.items_confirmed || 0,
+            items_returned: data.items_returned || 0,
+            had_no_checkouts: data.had_no_checkouts || false,
+        }, { onConflict: 'personnel_id,audit_month' }).select().single()
+    ),
+
+    // Admin report: all active personnel joined with their audit status for a given month
+    getAuditReport: async (month) => {
+        const { data: pData, error: pErr } = await supabase
+            .from('personnel')
+            .select('id, full_name, employee_id, department')
+            .eq('is_active', true)
+            .order('full_name');
+        if (pErr) throw new Error(pErr.message);
+
+        const { data: aData, error: aErr } = await supabase
+            .from('monthly_audit_log')
+            .select('*')
+            .eq('audit_month', month);
+        if (aErr) throw new Error(aErr.message);
+
+        const auditMap = {};
+        for (const a of (aData || [])) {
+            auditMap[a.personnel_id] = a;
+        }
+
+        return {
+            data: (pData || []).map(p => ({
+                ...p,
+                audit: auditMap[p.id] || null,
+                responded: !!auditMap[p.id],
+            }))
+        };
+    },
+};
+
 // Reports
 export const reportsApi = {
     getDashboard: () => wrapRpc(supabase.rpc('get_dashboard', { p_overdue_days: 14 })),

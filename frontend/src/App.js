@@ -11,6 +11,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import OperatorSelector from './components/OperatorSelector';
 import OperatorModal from './components/OperatorModal';
 import OverdueReturnPrompt from './components/OverdueReturnPrompt';
+import MonthlyAuditPrompt from './components/MonthlyAuditPrompt';
 
 // Pages
 import Dashboard from './pages/Dashboard';
@@ -217,6 +218,9 @@ function AppContent() {
 
       {/* Overdue Equipment Prompt — shown on login if operator has overdue items */}
       <OverdueReturnPrompt />
+
+      {/* Monthly Audit Prompt — shown once per month to confirm active checkouts */}
+      <MonthlyAuditPrompt />
 
       {/* Mobile Header */}
       <header className="mobile-header">

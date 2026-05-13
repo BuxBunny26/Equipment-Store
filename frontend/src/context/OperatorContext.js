@@ -8,6 +8,7 @@ const STORAGE_KEY = 'equipment_store_operator';
 const ACTIVITY_KEY = 'equipment_store_last_activity';
 const ROLE_KEY = 'equipment_store_operator_role';
 const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+const AUDIT_KEY_PREFIX = 'audit_month_';
 
 export function OperatorProvider({ children }) {
   const [operator, setOperator] = useState(null);
@@ -15,6 +16,7 @@ export function OperatorProvider({ children }) {
   const [personnel, setPersonnel] = useState([]);
   const [loading, setLoading] = useState(true);
   const [overdueItems, setOverdueItems] = useState([]);
+  const [auditNeeded, setAuditNeeded] = useState(false);
 
   // Load personnel list on mount
   useEffect(() => {
@@ -45,6 +47,10 @@ export function OperatorProvider({ children }) {
             fetchAndCacheRole(parsed.id);
           }
           localStorage.setItem(ACTIVITY_KEY, Date.now().toString());
+          // Check if monthly audit is due
+          const lastAuditMonth = localStorage.getItem(`${AUDIT_KEY_PREFIX}${parsed.id}`);
+          const currentMonth = new Date().toISOString().slice(0, 7);
+          if (lastAuditMonth !== currentMonth) setAuditNeeded(true);
         }
       } catch (e) {
         localStorage.removeItem(STORAGE_KEY);
@@ -122,6 +128,10 @@ export function OperatorProvider({ children }) {
         console.error('Failed to fetch overdue items:', err);
         setOverdueItems([]);
       }
+      // Check if monthly audit is due
+      const lastAuditMonth = localStorage.getItem(`${AUDIT_KEY_PREFIX}${person.id}`);
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      if (lastAuditMonth !== currentMonth) setAuditNeeded(true);
     } else {
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(ACTIVITY_KEY);
@@ -139,7 +149,10 @@ export function OperatorProvider({ children }) {
     localStorage.removeItem(ACTIVITY_KEY);
     localStorage.removeItem(ROLE_KEY);
     setOverdueItems([]);
+    setAuditNeeded(false);
   };
+
+  const dismissAudit = () => setAuditNeeded(false);
 
   const clearOverdueItems = () => setOverdueItems([]);
 
@@ -154,6 +167,8 @@ export function OperatorProvider({ children }) {
     overdueItems,
     clearOverdueItems,
     setOverdueItems,
+    auditNeeded,
+    dismissAudit,
   };
 
   return (
