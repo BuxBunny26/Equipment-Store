@@ -34,7 +34,7 @@ function Equipment() {
 
   useEffect(() => {
     fetchEquipment();
-  }, [filters.status, filters.category_id, filters.is_consumable, filters.calibration_status]);
+  }, [filters.status, filters.category_id, filters.is_consumable, filters.calibration_status, filters.channels]); // eslint-disable-line
 
   const fetchCategories = async () => {
     try {
