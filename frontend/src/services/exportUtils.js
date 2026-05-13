@@ -128,6 +128,7 @@ export const EXPORT_COLUMNS = {
         { label: 'Holder', accessor: 'current_holder' },
         { label: 'Manufacturer', accessor: 'manufacturer' },
         { label: 'Model', accessor: 'model' },
+        { label: 'Channels', accessor: r => r.custom_fields?.channels || '' },
     ],
 
     checkedOut: [
