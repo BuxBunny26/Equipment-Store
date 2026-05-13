@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { equipmentApi, calibrationApi } from '../services/api';
 import EquipmentImageGallery from '../components/EquipmentImageGallery';
+import { getCustomFieldRule, getCustomFieldValue } from '../utils/customFields';
 
 function EquipmentDetail() {
   const { id } = useParams();
@@ -12,6 +13,9 @@ function EquipmentDetail() {
   const [history, setHistory] = useState([]);
   const [calibrationHistory, setCalibrationHistory] = useState([]);
   const [activeTab, setActiveTab] = useState('details');
+  const [editingChannel, setEditingChannel] = useState(false);
+  const [channelValue, setChannelValue] = useState('');
+  const [savingChannel, setSavingChannel] = useState(false);
 
   useEffect(() => {
     fetchEquipment();
@@ -29,6 +33,23 @@ function EquipmentDetail() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveChannel = async (rule) => {
+    setSavingChannel(true);
+    try {
+      const existing = typeof equipment.custom_fields === 'string'
+        ? JSON.parse(equipment.custom_fields || '{}')
+        : (equipment.custom_fields || {});
+      const updated = { ...existing, [rule.field]: channelValue };
+      await equipmentApi.update(equipment.id, { custom_fields: updated });
+      setEquipment(prev => ({ ...prev, custom_fields: updated }));
+      setEditingChannel(false);
+    } catch (err) {
+      console.error('Failed to save channel:', err);
+    } finally {
+      setSavingChannel(false);
     }
   };
 
@@ -303,6 +324,69 @@ function EquipmentDetail() {
                   <dt style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Serial Number</dt>
                   <dd style={{ fontWeight: 500 }}>{equipment.serial_number || '-'}</dd>
                 </div>
+                {/* Custom fields — e.g. AMS2140 channel count */}
+                {(() => {
+                  const rule = getCustomFieldRule(equipment.equipment_name);
+                  if (!rule) return null;
+                  const currentVal = getCustomFieldValue(equipment.custom_fields, rule.field);
+                  return (
+                    <div>
+                      <dt style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{rule.label}</dt>
+                      <dd style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        {editingChannel ? (
+                          <>
+                            <select
+                              value={channelValue}
+                              onChange={e => setChannelValue(e.target.value)}
+                              style={{
+                                padding: '4px 8px', borderRadius: 6,
+                                border: '1px solid var(--border-color)',
+                                background: 'var(--bg-primary)', color: 'var(--text-primary)',
+                                fontSize: '0.85rem',
+                              }}
+                            >
+                              <option value="">Select...</option>
+                              {rule.options.map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                            <button
+                              className="btn btn-sm btn-primary"
+                              onClick={() => handleSaveChannel(rule)}
+                              disabled={!channelValue || savingChannel}
+                              style={{ fontSize: '0.78rem' }}
+                            >
+                              {savingChannel ? 'Saving...' : 'Save'}
+                            </button>
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              onClick={() => setEditingChannel(false)}
+                              style={{ fontSize: '0.78rem' }}
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span style={{ fontWeight: 500 }}>{currentVal || '-'}</span>
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              onClick={() => { setChannelValue(currentVal || ''); setEditingChannel(true); }}
+                              style={{ fontSize: '0.75rem', padding: '2px 8px' }}
+                              title={`Edit ${rule.label}`}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12" style={{ display: 'inline', marginRight: 3 }}>
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                              </svg>
+                              Edit
+                            </button>
+                          </>
+                        )}
+                      </dd>
+                    </div>
+                  );
+                })()}
                 <div>
                   <dt style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Quantity Tracked</dt>
                   <dd>{equipment.is_quantity_tracked ? 'Yes' : 'No'}</dd>

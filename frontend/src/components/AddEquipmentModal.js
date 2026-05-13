@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { equipmentApi, categoriesApi, locationsApi, subcategoriesApi } from '../services/api';
 import { Icons } from './Icons';
+import { getCustomFieldRule } from '../utils/customFields';
 
 function AddEquipmentModal({ onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
@@ -11,6 +12,7 @@ function AddEquipmentModal({ onClose, onSuccess }) {
   const [locations, setLocations] = useState([]);
   const [duplicateMatch, setDuplicateMatch] = useState(null);
   const [checkingSerial, setCheckingSerial] = useState(false);
+  const [customFieldValues, setCustomFieldValues] = useState({});
   const [formData, setFormData] = useState({
     equipment_id: '',
     equipment_name: '',
@@ -101,6 +103,10 @@ function AddEquipmentModal({ onClose, onSuccess }) {
       if (!submitData.category_id) submitData.category_id = null;
       if (!submitData.subcategory_id) submitData.subcategory_id = null;
       if (!submitData.current_location_id) submitData.current_location_id = null;
+      // Include custom fields if any were set
+      if (Object.keys(customFieldValues).length > 0) {
+        submitData.custom_fields = customFieldValues;
+      }
       await equipmentApi.create(submitData);
       onSuccess();
     } catch (err) {
@@ -356,6 +362,27 @@ function AddEquipmentModal({ onClose, onSuccess }) {
                 ))}
               </select>
             </div>
+
+            {/* Custom fields — e.g. AMS2140 channel count */}
+            {(() => {
+              const rule = getCustomFieldRule(formData.equipment_name);
+              if (!rule) return null;
+              return (
+                <div className="form-group">
+                  <label className="form-label">{rule.label}</label>
+                  <select
+                    className="form-select"
+                    value={customFieldValues[rule.field] || ''}
+                    onChange={e => setCustomFieldValues(prev => ({ ...prev, [rule.field]: e.target.value }))}
+                  >
+                    <option value="">Select {rule.label.toLowerCase()}...</option>
+                    {rule.options.map(opt => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })()}
 
             <div className="form-group">
               <label className="form-label">Notes</label>

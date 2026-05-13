@@ -6,6 +6,7 @@ import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
 import ExportMenu from '../components/ExportMenu';
 import { Icons } from '../components/Icons';
 import AddEquipmentModal from '../components/AddEquipmentModal';
+import { getCustomFieldRule, getCustomFieldValue } from '../utils/customFields';
 
 function Equipment() {
   const [loading, setLoading] = useState(true);
@@ -317,7 +318,27 @@ function Equipment() {
                         {item.equipment_id}
                       </Link>
                     </td>
-                    <td>{item.equipment_name}</td>
+                    <td>
+                      {item.equipment_name}
+                      {(() => {
+                        const rule = getCustomFieldRule(item.equipment_name);
+                        if (!rule) return null;
+                        const val = getCustomFieldValue(item.custom_fields, rule.field);
+                        if (!val) return null;
+                        // e.g. "2 Channel" -> "2 Ch"
+                        const short = val.replace('Channel', 'Ch').replace('channel', 'Ch');
+                        return (
+                          <span style={{
+                            marginLeft: 7, fontSize: '0.72rem', fontWeight: 600,
+                            padding: '1px 6px', borderRadius: 10,
+                            background: 'rgba(37,99,235,0.1)', color: '#2563eb',
+                            verticalAlign: 'middle', whiteSpace: 'nowrap',
+                          }}>
+                            {short}
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td>
                       <span style={{ fontSize: '0.8rem' }}>
                         {item.category_name}

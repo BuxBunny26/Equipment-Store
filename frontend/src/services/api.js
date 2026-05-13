@@ -128,7 +128,7 @@ export const equipmentApi = {
                 current_holder_id, personnel(full_name, employee_id),
                 current_customer_id, customers(display_name),
                 last_action, last_action_timestamp,
-                notes, created_at, updated_at, manufacturer, model
+                notes, created_at, updated_at, manufacturer, model, custom_fields
             `)
             .order('equipment_name');
         if (status) query = query.eq('status', status);
