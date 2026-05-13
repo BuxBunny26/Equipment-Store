@@ -19,6 +19,7 @@ function Equipment() {
     category_id: '',
     is_consumable: 'false',
     calibration_status: '',
+    channels: '',
   });
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -78,6 +79,14 @@ function Equipment() {
         } else {
           items = items.filter(e => e.calibration_status === filters.calibration_status);
         }
+      }
+
+      // Apply channels filter client-side
+      if (filters.channels) {
+        items = items.filter(e => {
+          const val = e.custom_fields?.channels || null;
+          return val === filters.channels;
+        });
       }
 
       setEquipment(items);
@@ -262,10 +271,21 @@ function Equipment() {
               <option value="Not Calibrated">Not Calibrated</option>
             </select>
 
+            <select
+              className="form-select"
+              value={filters.channels}
+              onChange={(e) => setFilters({ ...filters, channels: e.target.value })}
+            >
+              <option value="">All Channels</option>
+              <option value="1 Channel">1 Channel</option>
+              <option value="2 Channel">2 Channel</option>
+              <option value="4 Channel">4 Channel</option>
+            </select>
+
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => setFilters({ search: '', status: '', category_id: '', is_consumable: 'false', calibration_status: '' })}
+              onClick={() => setFilters({ search: '', status: '', category_id: '', is_consumable: 'false', calibration_status: '', channels: '' })}
             >
               Clear Filters
             </button>
