@@ -833,11 +833,11 @@ function LaptopAssignments() {
                       {item.device_condition ? (
                         <span style={{
                           fontSize: '0.8rem', padding: '2px 8px', borderRadius: '10px',
-                          background: item.device_condition === 'Excellent' ? 'rgba(39,174,96,0.15)' :
+                          background: item.device_condition === 'Excellent' ? 'rgba(41,128,185,0.15)' :
                                      item.device_condition === 'Good' ? 'rgba(39,174,96,0.12)' :
                                      item.device_condition === 'Fair' ? 'rgba(243,156,18,0.12)' :
                                      item.device_condition === 'Poor' ? 'rgba(230,126,34,0.12)' : 'rgba(231,76,60,0.12)',
-                          color: item.device_condition === 'Excellent' ? '#1e8449' :
+                          color: item.device_condition === 'Excellent' ? '#2980b9' :
                                  item.device_condition === 'Good' ? '#27ae60' :
                                  item.device_condition === 'Fair' ? '#f39c12' :
                                  item.device_condition === 'Poor' ? '#e67e22' : '#e74c3c',
