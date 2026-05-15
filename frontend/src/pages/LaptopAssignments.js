@@ -1921,6 +1921,19 @@ function ImportModal({ onClose, onSuccess, onRefresh }) {
     return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
   };
 
+  const normalizeLaptopStatus = (s) => {
+    if (!s) return 'Active';
+    const v = s.toLowerCase().trim();
+    if (['active', 'checked out', 'assigned', 'issued'].includes(v)) return 'Active';
+    if (['returned', 'unassigned'].includes(v)) return 'Returned';
+    if (['repairs', 'in repairs', 'repair', 'in repair'].includes(v)) return 'In Repairs';
+    if (v === 'damaged') return 'Damaged';
+    if (v === 'stolen') return 'Stolen';
+    if (v === 'lost') return 'Lost';
+    if (['decommissioned', 'retired', 'disposed'].includes(v)) return 'Decommissioned';
+    return 'Active';
+  };
+
   const handleImport = async () => {
     setImporting(true);
     const total = parsedRows.length;
@@ -1939,7 +1952,7 @@ function ImportModal({ onClose, onSuccess, onRefresh }) {
           serial_number: row.serial_number || '',
           asset_tag: row.asset_tag || '',
           date_assigned: parseDate(row.date_assigned) || new Date().toISOString().split('T')[0],
-          laptop_status: row.laptop_status || 'Active',
+          laptop_status: normalizeLaptopStatus(row.laptop_status),
           setup_laptop: row.setup_laptop === 'true' || row.setup_laptop === 'Yes',
           setup_m365: row.setup_m365 === 'true' || row.setup_m365 === 'Yes',
           setup_adobe: row.setup_adobe === 'true' || row.setup_adobe === 'Yes',
