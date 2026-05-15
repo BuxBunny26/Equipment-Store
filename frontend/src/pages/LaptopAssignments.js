@@ -1592,6 +1592,7 @@ function LaptopModal({ item, personnel, allAssignments, operatorRole, onClose, o
                 <label className="form-label">Device Condition</label>
                 <select name="device_condition" value={form.device_condition} onChange={handleChange} className="form-input">
                   <option value="">-- Select --</option>
+                  <option value="Excellent">Excellent</option>
                   <option value="Good">Good</option>
                   <option value="Fair">Fair</option>
                   <option value="Poor">Poor</option>
