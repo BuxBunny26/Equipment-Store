@@ -979,6 +979,7 @@ function LaptopAssignments() {
         <ImportModal
           onClose={() => setShowImportModal(false)}
           onSuccess={() => { setShowImportModal(false); fetchData(); }}
+          onRefresh={() => fetchData()}
         />
       )}
     </div>
@@ -1842,7 +1843,7 @@ function BulkStatusModal({ selectedIds, assignments, onClose, onSuccess }) {
 }
 
 // ── Import Modal ──
-function ImportModal({ onClose, onSuccess }) {
+function ImportModal({ onClose, onSuccess, onRefresh }) {
   const [parsedRows, setParsedRows] = useState([]);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0, errors: [] });
@@ -1967,6 +1968,7 @@ function ImportModal({ onClose, onSuccess }) {
       onSuccess();
     } else {
       setImporting(false);
+      if (done > errors.length && onRefresh) onRefresh();
     }
   };
 
@@ -1978,7 +1980,7 @@ function ImportModal({ onClose, onSuccess }) {
           <button className="btn btn-sm btn-secondary" onClick={onClose}><Icons.Close size={16} /></button>
         </div>
         <div className="modal-body">
-          <div style={{ marginBottom: '12px', padding: '10px', background: 'rgba(52,152,219,0.08)', borderRadius: '8px', fontSize: '0.83rem' }}>
+          <div style={{ marginBottom: '12px', padding: '10px', background: 'rgba(52,152,219,0.15)', borderRadius: '8px', fontSize: '0.83rem', border: '1px solid rgba(52,152,219,0.3)' }}>
             <strong>XLSX Format:</strong> File must include headers. Required columns: <code>employee_name</code>, <code>laptop_brand</code>, <code>laptop_model</code>, <code>serial_number</code>.
             <br />Optional: employee_id, employee_email, asset_tag, date_assigned, laptop_status, device_cost, warranty_end_date, contract_start_date, contract_end_date, device_condition, accessories, setup_account, laptop_pin, mfa_phone, notes, setup_laptop, setup_m365, setup_adobe, setup_zoho, setup_smartsheet, setup_distribution_lists
             <div style={{ marginTop: '8px' }}>

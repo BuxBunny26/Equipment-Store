@@ -976,7 +976,7 @@ function EquipmentAnalytics() {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{eq.equipment_name}</div>
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
-                          {eq.equipment_id}{eq.serial_number ? ` â€¢ S/N: ${eq.serial_number}` : ''}
+                          {eq.equipment_id}{eq.serial_number ? ` • S/N: ${eq.serial_number}` : ''}
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
@@ -1012,8 +1012,8 @@ function EquipmentAnalytics() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <h2 style={{ margin: 0, fontSize: isMobile ? '1rem' : '1.25rem' }}>{eq.equipment_name}</h2>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
-              {eq.equipment_id}{eq.serial_number ? ` â€¢ S/N: ${eq.serial_number}` : ''}
-              {eq.category_name ? ` â€¢ ${eq.category_name}` : ''}
+              {eq.equipment_id}{eq.serial_number ? ` • S/N: ${eq.serial_number}` : ''}
+              {eq.category_name ? ` • ${eq.category_name}` : ''}
             </div>
           </div>
           <span className="badge" style={{ background: eq.status === 'Available' ? '#2e7d32' : eq.status === 'Checked Out' ? '#ed6c02' : eq.status === 'In Maintenance' ? '#1976d2' : '#9e9e9e', fontSize: '0.75rem' }}>{eq.status}</span>

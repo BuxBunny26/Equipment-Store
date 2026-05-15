@@ -88,6 +88,19 @@ export function OperatorProvider({ children }) {
     try {
       const response = await personnelApi.getAll(true);
       setPersonnel(response.data);
+      // Refresh cached operator with latest data from Supabase
+      const savedOperator = localStorage.getItem(STORAGE_KEY);
+      if (savedOperator) {
+        try {
+          const parsed = JSON.parse(savedOperator);
+          const fresh = response.data.find(p => p.id === parsed.id);
+          if (fresh) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
+            setOperator(fresh);
+            setOperatorName(fresh.full_name || 'System');
+          }
+        } catch (e) { /* ignore */ }
+      }
     } catch (error) {
       console.error('Failed to load personnel:', error);
     } finally {

@@ -91,7 +91,7 @@ VALUES
   ('Power Automate Per User',                'Microsoft', 'Per User', 251.37, 'Monthly',   1, NULL, 'Monthly billing, 365-day term. R251.37/month excl. VAT.'),
   ('Microsoft Defender for Office Plan 2',   'Microsoft', 'Per User',  83.79, 'Monthly', 130, NULL, 'Monthly billing, 365-day term. R10,892.70/month excl. VAT.'),
   ('Power Apps Per App Plan',                'Microsoft', 'Per User',  83.79, 'Monthly',   3, NULL, 'Monthly billing, 365-day term. R251.37/month excl. VAT.'),
-  ('Adobe Acrobat Pro',       'Adobe',      'Per User', 220.00,  'Monthly', NULL, NULL, 'PDF editing and signing'),
+  ('Adobe Acrobat Pro',       'Adobe',      'Per User', NULL,    'Monthly', NULL, NULL, 'TBC – Annemie manages account access and billing. Cost and seat count to be confirmed.'),
   ('Zoho One',                'Zoho',       'Per User', 1470.00, 'Monthly',  45, '2026-06-07', 'Flexible User Pricing Plan. 45 users @ R1,470/seat = R66,150/month (excl. tax). Subscription ID: RPUS2005345172532'),
   ('Smartsheet',              'Smartsheet', 'Per User', 225.00,  'Monthly',  53, NULL, 'Business Plan. 54 active members against 53 licensed seats (1 over). R12,150/month.'),
   ('Zoho People',             'Zoho',       'Per User',  49.00,  'Monthly',  121, '2026-06-03', 'HR platform – Premium Plan. 121 seats @ R49/seat = R5,929/month (excl. tax). Subscription ID: RPUS2006773417247')

@@ -1256,6 +1256,7 @@ function CellphoneAssignments() {
         <ImportModal
           onClose={() => setShowImportModal(false)}
           onSuccess={() => { setShowImportModal(false); fetchData(); }}
+          onRefresh={() => fetchData()}
         />
       )}
     </div>
@@ -2312,7 +2313,7 @@ function BulkStatusModal({ selectedIds, assignments, onClose, onSuccess }) {
 }
 
 // ── Import Modal ──
-function ImportModal({ onClose, onSuccess }) {
+function ImportModal({ onClose, onSuccess, onRefresh }) {
   const [parsedRows, setParsedRows] = useState([]);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0, errors: [] });
@@ -2428,6 +2429,7 @@ function ImportModal({ onClose, onSuccess }) {
       onSuccess();
     } else {
       setImporting(false);
+      if (done > errors.length && onRefresh) onRefresh();
     }
   };
 
