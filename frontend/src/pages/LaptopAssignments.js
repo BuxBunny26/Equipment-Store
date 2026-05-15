@@ -36,6 +36,10 @@ function LaptopAssignments() {
   const [showBrandChart, setShowBrandChart] = useState(false);
   const [showCostSummary, setShowCostSummary] = useState(false);
   const [addPersonnelItem, setAddPersonnelItem] = useState(null);
+  const [ignoredUnlinked, setIgnoredUnlinked] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('laptopIgnoredUnlinked') || '[]')); }
+    catch { return new Set(); }
+  });
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [hiddenColumns, setHiddenColumns] = useState(new Set());
@@ -132,6 +136,24 @@ function LaptopAssignments() {
   const divLookup = buildDivisionLookup(personnel);
   const getDivision = (item) => lookupDivision(divLookup, item, 'employee_name');
 
+  const ignoreUnlinked = (name) => {
+    setIgnoredUnlinked(prev => {
+      const next = new Set(prev);
+      next.add(name);
+      localStorage.setItem('laptopIgnoredUnlinked', JSON.stringify([...next]));
+      return next;
+    });
+  };
+
+  const ignoreAllUnlinked = (names) => {
+    setIgnoredUnlinked(prev => {
+      const next = new Set(prev);
+      names.forEach(n => next.add(n));
+      localStorage.setItem('laptopIgnoredUnlinked', JSON.stringify([...next]));
+      return next;
+    });
+  };
+
   // Detect laptop assignment records not linked to any personnel entry
   const unlinkedEmployees = useMemo(() => {
     const seen = new Set();
@@ -146,8 +168,9 @@ function LaptopAssignments() {
         seen.add(a.employee_name);
         return true;
       })
-      .map(a => ({ employee_name: a.employee_name, employee_id: a.employee_id || '', employee_email: a.employee_email || '' }));
-  }, [assignments, personnel]);
+      .map(a => ({ employee_name: a.employee_name, employee_id: a.employee_id || '', employee_email: a.employee_email || '' }))
+      .filter(a => !ignoredUnlinked.has(a.employee_name));
+  }, [assignments, personnel, ignoredUnlinked]);
 
   // Unique divisions and brands for filters
   const personnelDivisions = personnel.map(p => p.division).filter(Boolean);
@@ -430,7 +453,8 @@ function LaptopAssignments() {
         <div style={{ background: 'rgba(243,156,18,0.12)', border: '1px solid #f39c12', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
             <Icons.Warning size={16} style={{ color: '#f39c12', flexShrink: 0 }} />
-            <strong style={{ fontSize: '0.9rem' }}>{unlinkedEmployees.length} employee{unlinkedEmployees.length !== 1 ? 's have' : ' has'} laptop records but {unlinkedEmployees.length !== 1 ? 'are' : 'is'} not in the Personnel list</strong>
+            <strong style={{ fontSize: '0.9rem', flex: 1 }}>{unlinkedEmployees.length} employee{unlinkedEmployees.length !== 1 ? 's have' : ' has'} laptop records but {unlinkedEmployees.length !== 1 ? 'are' : 'is'} not in the Personnel list</strong>
+            <button className="btn btn-sm btn-secondary" style={{ fontSize: '0.75rem', padding: '2px 10px' }} onClick={() => ignoreAllUnlinked(unlinkedEmployees.map(e => e.employee_name))}>Dismiss All</button>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
             {unlinkedEmployees.map(emp => (
@@ -442,6 +466,14 @@ function LaptopAssignments() {
                   onClick={() => setAddPersonnelItem(emp)}
                 >
                   + Add to Personnel
+                </button>
+                <button
+                  className="btn btn-sm btn-secondary"
+                  style={{ padding: '2px 8px', fontSize: '0.75rem' }}
+                  title="Ignore this warning"
+                  onClick={() => ignoreUnlinked(emp.employee_name)}
+                >
+                  Ignore
                 </button>
               </div>
             ))}
