@@ -41,7 +41,7 @@ function LaptopAssignments() {
     catch { return new Set(); }
   });
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(() => parseInt(localStorage.getItem('laptopPageSize') || '25'));
   const [hiddenColumns, setHiddenColumns] = useState(new Set());
   const [showColumnToggle, setShowColumnToggle] = useState(false);
 
@@ -712,7 +712,7 @@ function LaptopAssignments() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Per page:</label>
-          <select className="form-input" value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }} style={{ width: '70px', padding: '4px 6px', fontSize: '0.85rem' }}>
+          <select className="form-input" value={pageSize} onChange={e => { const v = Number(e.target.value); setPageSize(v); setCurrentPage(1); localStorage.setItem('laptopPageSize', v); }} style={{ width: '70px', padding: '4px 6px', fontSize: '0.85rem' }}>
             <option value={10}>10</option>
             <option value={25}>25</option>
             <option value={50}>50</option>
@@ -833,10 +833,12 @@ function LaptopAssignments() {
                       {item.device_condition ? (
                         <span style={{
                           fontSize: '0.8rem', padding: '2px 8px', borderRadius: '10px',
-                          background: item.device_condition === 'Good' ? 'rgba(39,174,96,0.12)' :
+                          background: item.device_condition === 'Excellent' ? 'rgba(39,174,96,0.15)' :
+                                     item.device_condition === 'Good' ? 'rgba(39,174,96,0.12)' :
                                      item.device_condition === 'Fair' ? 'rgba(243,156,18,0.12)' :
                                      item.device_condition === 'Poor' ? 'rgba(230,126,34,0.12)' : 'rgba(231,76,60,0.12)',
-                          color: item.device_condition === 'Good' ? '#27ae60' :
+                          color: item.device_condition === 'Excellent' ? '#1e8449' :
+                                 item.device_condition === 'Good' ? '#27ae60' :
                                  item.device_condition === 'Fair' ? '#f39c12' :
                                  item.device_condition === 'Poor' ? '#e67e22' : '#e74c3c',
                           fontWeight: 600,
