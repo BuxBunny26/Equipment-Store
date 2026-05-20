@@ -632,46 +632,35 @@ function CheckOut() {
             <div className="form-group">
               <label className="form-label">Destination Type *</label>
               <div className="radio-group">
-                <label>
-                  <input
-                    type="radio"
-                    name="destination_type"
-                    value="internal"
-                    checked={formData.destination_type === 'internal'}
-                    onChange={(e) => { setSelectedEquipmentIds([]); setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '', receiving_personnel_id: '' })); }}
-                  />
-                  <span>Internal Location (Branch)</span>
-                </label>
-                <label>
-                  <input
-                    type="radio"
-                    name="destination_type"
-                    value="customer"
-                    checked={formData.destination_type === 'customer'}
-                    onChange={(e) => { setSelectedEquipmentIds([]); setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '', receiving_personnel_id: '' })); }}
-                  />
-                  <span>Customer Site</span>
-                </label>
-                <label>
-                  <input
-                    type="radio"
-                    name="destination_type"
-                    value="calibration"
-                    checked={formData.destination_type === 'calibration'}
-                    onChange={(e) => { setSelectedEquipmentIds([]); setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '', receiving_personnel_id: '' })); }}
-                  />
-                  <span>Calibration</span>
-                </label>
-                <label>
-                  <input
-                    type="radio"
-                    name="destination_type"
-                    value="transfer"
-                    checked={formData.destination_type === 'transfer'}
-                    onChange={(e) => { setSelectedEquipmentIds([]); setFormData(prev => ({ ...prev, destination_type: e.target.value, customer_id: '', location_id: '', calibration_provider: '', from_site_id: '', to_site_id: '', receiving_personnel_id: '' })); }}
-                  />
-                  <span>Transfer (Site-to-Site)</span>
-                </label>
+                {[
+                  { value: 'internal', label: 'Internal Location (Branch)' },
+                  { value: 'customer', label: 'Customer Site' },
+                  { value: 'calibration', label: 'Calibration' },
+                  { value: 'transfer', label: 'Transfer (Site-to-Site)' },
+                ].map(opt => (
+                  <label key={opt.value}>
+                    <input
+                      type="radio"
+                      name="destination_type"
+                      value={opt.value}
+                      checked={formData.destination_type === opt.value}
+                      onChange={(e) => {
+                        const newType = e.target.value;
+                        setFormData(prev => ({
+                          ...prev,
+                          destination_type: newType,
+                          customer_id: '',
+                          location_id: '',
+                          calibration_provider: '',
+                          from_site_id: '',
+                          to_site_id: '',
+                          receiving_personnel_id: '',
+                        }));
+                      }}
+                    />
+                    <span>{opt.label}</span>
+                  </label>
+                ))}
               </div>
             </div>
 
