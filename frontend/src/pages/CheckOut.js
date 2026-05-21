@@ -1193,7 +1193,7 @@ function CheckOut() {
                   selectedEquipmentIds.length === 0 ||
                   !formData.personnel_id ||
                   (formData.destination_type === 'internal' ? !formData.location_id :
-                    formData.destination_type === 'customer' ? !formData.customer_id :
+                    formData.destination_type === 'customer' ? selectedCustomerIds.length === 0 :
                     formData.destination_type === 'calibration' ? !formData.calibration_provider :
                     formData.destination_type === 'transfer' ? !formData.to_site_id : false) ||
                   submitting ||
