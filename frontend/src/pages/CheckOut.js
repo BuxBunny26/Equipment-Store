@@ -174,10 +174,31 @@ function CheckOut() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (selectedEquipmentIds.length === 0) {
+      setError('Please select at least one piece of equipment.');
+      return;
+    }
+    if (!formData.personnel_id) {
+      setError('Please select the person issuing the equipment.');
+      return;
+    }
+    if (formData.destination_type === 'internal' && !formData.location_id) {
+      setError('Please select a destination location.');
+      return;
+    }
     if (formData.destination_type === 'customer' && selectedCustomerIds.length === 0) {
       setError('Please select at least one customer site.');
       return;
     }
+    if (formData.destination_type === 'calibration' && !formData.calibration_provider) {
+      setError('Please enter a calibration provider.');
+      return;
+    }
+    if (formData.destination_type === 'transfer' && !formData.to_site_id) {
+      setError('Please select a destination site for the transfer.');
+      return;
+    }
+    setError(null);
     setPendingSubmit(() => () => {
       setSubmitting(true);
       setError(null);

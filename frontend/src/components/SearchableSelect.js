@@ -130,26 +130,13 @@ function SearchableSelect({
         )}
       </div>
 
-      {/* Hidden input so native form `required` validation triggers */}
+      {/* Hidden input so the value can be referenced by name (validation is handled in the parent form) */}
       {name && (
         <input
-          type="text"
+          type="hidden"
           name={name}
           value={value || ''}
-          required={required}
           readOnly
-          tabIndex={-1}
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            opacity: 0,
-            height: 0,
-            width: 0,
-            padding: 0,
-            border: 0,
-            pointerEvents: 'none',
-          }}
-          onChange={() => {}}
         />
       )}
 
