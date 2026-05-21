@@ -164,6 +164,7 @@ function AddEquipmentModal({ onClose, onSuccess }) {
 
       // If a holder is set alongside a site, record an OUT movement so the
       // equipment shows as Checked Out and appears on Recent Movements.
+      let movementWarning = null;
       if (
         createdEquipment?.id &&
         submitData.current_holder_id &&
@@ -185,9 +186,18 @@ function AddEquipmentModal({ onClose, onSuccess }) {
             created_by: operator?.full_name || 'System',
           });
         } catch (movErr) {
-          // Don't fail the whole create if the movement record can't be written.
+          // Don't fail the whole create if the movement record can't be written;
+          // surface a warning so the operator knows to add it manually.
           console.error('Failed to record initial OUT movement:', movErr);
+          movementWarning = `Equipment saved, but the initial check-out movement could not be recorded: ${movErr.message}`;
         }
+      }
+
+      if (movementWarning) {
+        // Keep the modal open so the user can read the warning.
+        setError(movementWarning);
+        setLoading(false);
+        return;
       }
 
       onSuccess();
