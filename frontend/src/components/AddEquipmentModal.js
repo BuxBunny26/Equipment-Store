@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { equipmentApi, categoriesApi, locationsApi, subcategoriesApi, customersApi } from '../services/api';
+import { equipmentApi, categoriesApi, locationsApi, subcategoriesApi, customersApi, personnelApi } from '../services/api';
 import { Icons } from './Icons';
+import SearchableSelect from './SearchableSelect';
 import { getCustomFieldRule } from '../utils/customFields';
 import { uniqueCountries, customerMatchesCountry, regionLabel } from '../utils/provinces';
 
@@ -12,6 +13,7 @@ function AddEquipmentModal({ onClose, onSuccess }) {
   const [subcategories, setSubcategories] = useState([]);
   const [locations, setLocations] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [personnel, setPersonnel] = useState([]);
   const [duplicateMatch, setDuplicateMatch] = useState(null);
   const [checkingSerial, setCheckingSerial] = useState(false);
   const [customFieldValues, setCustomFieldValues] = useState({});
@@ -39,20 +41,23 @@ function AddEquipmentModal({ onClose, onSuccess }) {
     reorder_level: 0,
     current_location_id: '',
     current_customer_id: '',
+    current_holder_id: '',
     notes: '',
   });
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [catRes, locRes, custRes] = await Promise.all([
+        const [catRes, locRes, custRes, perRes] = await Promise.all([
           categoriesApi.getAll(),
           locationsApi.getAll(true),
           customersApi.getAll(),
+          personnelApi.getAll(true),
         ]);
         setCategories(catRes.data);
         setLocations(locRes.data);
         setCustomers(custRes.data || []);
+        setPersonnel(perRes.data || []);
       } catch (err) {
         console.error('Error fetching form data:', err);
       }
@@ -141,6 +146,8 @@ function AddEquipmentModal({ onClose, onSuccess }) {
       // Convert empty strings to null for FK fields
       if (!submitData.category_id) submitData.category_id = null;
       if (!submitData.subcategory_id) submitData.subcategory_id = null;
+      if (!submitData.current_holder_id) submitData.current_holder_id = null;
+      else submitData.current_holder_id = parseInt(submitData.current_holder_id);
       // Append roving sites to notes for traceability
       if (rovingNames.length > 0) {
         const rovingLine = `Roving Sites: ${rovingNames.join(', ')}`;
@@ -626,6 +633,26 @@ function AddEquipmentModal({ onClose, onSuccess }) {
               </div>
               <span className="form-help" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                 Pick one or more sites where this equipment lives. The first one is the primary; click “Set primary” on another to switch. Extras are recorded as roving sites in the equipment notes.
+              </span>
+            </div>
+
+            {/* Optional current holder */}
+            <div className="form-group">
+              <label className="form-label">Current Holder (optional)</label>
+              <SearchableSelect
+                value={formData.current_holder_id}
+                onChange={(id) => setFormData(prev => ({ ...prev, current_holder_id: id }))}
+                options={personnel.map(p => ({
+                  id: p.id,
+                  label: p.full_name,
+                  sublabel: p.employee_id || '',
+                  searchText: `${p.full_name} ${p.employee_id || ''} ${p.email || ''}`,
+                }))}
+                placeholder="Search personnel by name or employee ID..."
+                allowClear
+              />
+              <span className="form-help" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                Leave blank if the equipment isn’t currently assigned to a person.
               </span>
             </div>
 
