@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { equipmentApi, categoriesApi, locationsApi, subcategoriesApi } from '../services/api';
+import { equipmentApi, categoriesApi, locationsApi, subcategoriesApi, customersApi } from '../services/api';
 import { Icons } from './Icons';
 import { getCustomFieldRule } from '../utils/customFields';
+import { uniqueCountries, customerMatchesCountry, regionLabel } from '../utils/provinces';
 
 function AddEquipmentModal({ onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
@@ -10,9 +11,14 @@ function AddEquipmentModal({ onClose, onSuccess }) {
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
   const [locations, setLocations] = useState([]);
+  const [customers, setCustomers] = useState([]);
   const [duplicateMatch, setDuplicateMatch] = useState(null);
   const [checkingSerial, setCheckingSerial] = useState(false);
   const [customFieldValues, setCustomFieldValues] = useState({});
+  // Unified site picker state (mirrors the destination picker on Check Out)
+  const [siteType, setSiteType] = useState('internal'); // 'internal' | 'customer'
+  const [siteCountryFilter, setSiteCountryFilter] = useState('South Africa');
+  const [siteSearchTerm, setSiteSearchTerm] = useState('');
   const [formData, setFormData] = useState({
     equipment_id: '',
     equipment_name: '',
@@ -28,18 +34,21 @@ function AddEquipmentModal({ onClose, onSuccess }) {
     unit: 'ea',
     reorder_level: 0,
     current_location_id: '',
+    current_customer_id: '',
     notes: '',
   });
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [catRes, locRes] = await Promise.all([
+        const [catRes, locRes, custRes] = await Promise.all([
           categoriesApi.getAll(),
           locationsApi.getAll(true),
+          customersApi.getAll(),
         ]);
         setCategories(catRes.data);
         setLocations(locRes.data);
+        setCustomers(custRes.data || []);
       } catch (err) {
         console.error('Error fetching form data:', err);
       }
@@ -97,12 +106,19 @@ function AddEquipmentModal({ onClose, onSuccess }) {
     setLoading(true);
     setError(null);
 
+    // Require at least one site selection
+    if (!formData.current_location_id && !formData.current_customer_id) {
+      setError('Please select a current location or customer site.');
+      setLoading(false);
+      return;
+    }
     try {
       const submitData = { ...formData };
       // Convert empty strings to null for FK fields
       if (!submitData.category_id) submitData.category_id = null;
       if (!submitData.subcategory_id) submitData.subcategory_id = null;
       if (!submitData.current_location_id) submitData.current_location_id = null;
+      if (!submitData.current_customer_id) submitData.current_customer_id = null;
       // Include custom fields if any were set
       if (Object.keys(customFieldValues).length > 0) {
         submitData.custom_fields = customFieldValues;
@@ -347,20 +363,161 @@ function AddEquipmentModal({ onClose, onSuccess }) {
 
             <div className="form-group">
               <label className="form-label">Current Location *</label>
-              <select
-                name="current_location_id"
-                className="form-select"
-                value={formData.current_location_id}
-                onChange={handleChange}
-                required
-              >
-                <option value="">Select location...</option>
-                {locations.map((loc) => (
-                  <option key={loc.id} value={loc.id}>
-                    {loc.name}
-                  </option>
-                ))}
-              </select>
+
+              {/* Site type toggle */}
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '8px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="site_type"
+                    value="internal"
+                    checked={siteType === 'internal'}
+                    onChange={() => {
+                      setSiteType('internal');
+                      setFormData(prev => ({ ...prev, current_customer_id: '' }));
+                      setSiteSearchTerm('');
+                    }}
+                  />
+                  Internal Location (Branch)
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="site_type"
+                    value="customer"
+                    checked={siteType === 'customer'}
+                    onChange={() => {
+                      setSiteType('customer');
+                      setFormData(prev => ({ ...prev, current_location_id: '' }));
+                      setSiteSearchTerm('');
+                    }}
+                  />
+                  Customer Site
+                </label>
+              </div>
+
+              {/* Country filter — only meaningful for customer sites */}
+              {siteType === 'customer' && (
+                <div style={{ marginBottom: '8px' }}>
+                  <label className="form-label" style={{ fontSize: '0.8rem' }}>Country</label>
+                  <select
+                    className="form-select"
+                    value={siteCountryFilter}
+                    onChange={(e) => setSiteCountryFilter(e.target.value)}
+                  >
+                    <option value="">All Countries</option>
+                    {uniqueCountries(customers).map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Search input */}
+              <input
+                type="text"
+                className="form-input"
+                placeholder={
+                  siteType === 'internal'
+                    ? 'Search branch by name...'
+                    : 'Search customer site by name, city, or number...'
+                }
+                value={siteSearchTerm}
+                onChange={(e) => setSiteSearchTerm(e.target.value)}
+                style={{ marginBottom: '8px' }}
+              />
+
+              {/* Searchable list with single-select */}
+              <div style={{
+                maxHeight: '220px',
+                overflowY: 'auto',
+                border: '1px solid var(--border-color)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '4px 8px',
+              }}>
+                {siteType === 'internal' ? (() => {
+                  const q = siteSearchTerm.trim().toLowerCase();
+                  const filtered = locations.filter(loc =>
+                    !q || (loc.name || '').toLowerCase().includes(q)
+                                || (loc.description || '').toLowerCase().includes(q)
+                  );
+                  if (filtered.length === 0) {
+                    return <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '12px' }}>No branches match your search</p>;
+                  }
+                  return filtered.map(loc => (
+                    <label
+                      key={loc.id}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '8px',
+                        padding: '6px 4px', cursor: 'pointer',
+                        borderBottom: '1px solid var(--border-color)',
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="current_location_id"
+                        checked={formData.current_location_id === loc.id.toString() || formData.current_location_id === loc.id}
+                        onChange={() => setFormData(prev => ({
+                          ...prev,
+                          current_location_id: loc.id.toString(),
+                          current_customer_id: '',
+                        }))}
+                      />
+                      <span style={{ fontSize: '0.875rem', flex: 1 }}>
+                        {loc.name}
+                        {loc.description ? (
+                          <span style={{ color: 'var(--text-secondary)' }}> — {loc.description}</span>
+                        ) : null}
+                      </span>
+                    </label>
+                  ));
+                })() : (() => {
+                  const q = siteSearchTerm.trim().toLowerCase();
+                  const filtered = customers
+                    .filter(c => customerMatchesCountry(c, siteCountryFilter))
+                    .filter(c => {
+                      if (!q) return true;
+                      return (
+                        (c.display_name || '').toLowerCase().includes(q) ||
+                        (c.billing_city || '').toLowerCase().includes(q) ||
+                        (c.billing_state || '').toLowerCase().includes(q) ||
+                        (c.customer_number || '').toLowerCase().includes(q)
+                      );
+                    });
+                  if (filtered.length === 0) {
+                    return <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '12px' }}>No customer sites match your search</p>;
+                  }
+                  return filtered.map(cust => (
+                    <label
+                      key={cust.id}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '8px',
+                        padding: '6px 4px', cursor: 'pointer',
+                        borderBottom: '1px solid var(--border-color)',
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="current_customer_id"
+                        checked={formData.current_customer_id === cust.id.toString() || formData.current_customer_id === cust.id}
+                        onChange={() => setFormData(prev => ({
+                          ...prev,
+                          current_customer_id: cust.id.toString(),
+                          current_location_id: '',
+                        }))}
+                      />
+                      <span style={{ fontSize: '0.875rem', flex: 1 }}>
+                        {cust.display_name}
+                        {cust.billing_city ? ` (${cust.billing_city})` : ''}
+                        {regionLabel(cust) ? ` - ${regionLabel(cust)}` : ''}
+                      </span>
+                    </label>
+                  ));
+                })()}
+              </div>
+              <span className="form-help" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                Pick the branch or customer site where this equipment currently lives.
+              </span>
             </div>
 
             {/* Custom fields — e.g. AMS2140 channel count */}
