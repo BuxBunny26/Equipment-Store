@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { equipmentApi, categoriesApi, locationsApi, subcategoriesApi, customersApi, personnelApi } from '../services/api';
+import { equipmentApi, categoriesApi, locationsApi, subcategoriesApi, customersApi, personnelApi, movementsApi } from '../services/api';
 import { Icons } from './Icons';
 import SearchableSelect from './SearchableSelect';
 import { getCustomFieldRule } from '../utils/customFields';
 import { uniqueCountries, customerMatchesCountry, regionLabel } from '../utils/provinces';
+import { useOperator } from '../context/OperatorContext';
 
 function AddEquipmentModal({ onClose, onSuccess }) {
+  const { operator } = useOperator();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [categories, setCategories] = useState([]);
@@ -157,7 +159,37 @@ function AddEquipmentModal({ onClose, onSuccess }) {
       if (Object.keys(customFieldValues).length > 0) {
         submitData.custom_fields = customFieldValues;
       }
-      await equipmentApi.create(submitData);
+      const createdRes = await equipmentApi.create(submitData);
+      const createdEquipment = createdRes?.data;
+
+      // If a holder is set alongside a site, record an OUT movement so the
+      // equipment shows as Checked Out and appears on Recent Movements.
+      if (
+        createdEquipment?.id &&
+        submitData.current_holder_id &&
+        (primaryLocationId || primaryCustomerId)
+      ) {
+        try {
+          const rovingLine = rovingNames.length > 0
+            ? `Roving Sites: ${rovingNames.join(', ')}`
+            : null;
+          await movementsApi.create({
+            equipment_id: createdEquipment.id,
+            action: 'OUT',
+            quantity: 1,
+            location_id: primaryLocationId,
+            customer_id: primaryCustomerId,
+            personnel_id: submitData.current_holder_id,
+            notes: ['Initial assignment on equipment creation', rovingLine, submitData.notes]
+              .filter(Boolean).join(' | '),
+            created_by: operator?.full_name || 'System',
+          });
+        } catch (movErr) {
+          // Don't fail the whole create if the movement record can't be written.
+          console.error('Failed to record initial OUT movement:', movErr);
+        }
+      }
+
       onSuccess();
     } catch (err) {
       setError(err.message);
