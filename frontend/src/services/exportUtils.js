@@ -135,6 +135,7 @@ export const EXPORT_COLUMNS = {
         { label: 'Equipment ID', accessor: 'equipment_id' },
         { label: 'Name', accessor: 'equipment_name' },
         { label: 'Category', accessor: 'category' },
+        { label: 'Channels', accessor: r => r.custom_fields?.channels || '' },
         { label: 'Serial Number', accessor: 'serial_number' },
         { label: 'Checked Out To', accessor: 'checked_out_to' },
         { label: 'Employee ID', accessor: 'holder_employee_id' },

@@ -4,6 +4,7 @@ import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
 import ExportMenu from '../components/ExportMenu';
 import { Icons } from '../components/Icons';
 import { buildDivisionLookup, lookupDivision } from '../utils/divisionUtils';
+import { getCustomFieldRule } from '../utils/customFields';
 import { useOperator } from '../context/OperatorContext';
 
 function Reports() {
@@ -372,6 +373,7 @@ function CheckedOutReport({ data, formatDate }) {
             <th>Equipment ID</th>
             <th>Name</th>
             <th>Category</th>
+            <th>Channels</th>
             <th>Serial Number</th>
             <th>Checked Out To</th>
             <th>Location</th>
@@ -382,11 +384,15 @@ function CheckedOutReport({ data, formatDate }) {
           </tr>
         </thead>
         <tbody>
-          {data.map((item) => (
+          {data.map((item) => {
+            const rule = getCustomFieldRule(item.equipment_name);
+            const channelVal = rule && item.custom_fields ? (item.custom_fields[rule.field] || null) : null;
+            return (
             <tr key={item.id}>
               <td><strong>{item.equipment_id}</strong></td>
               <td>{item.equipment_name}</td>
               <td style={{ fontSize: '0.8rem' }}>{item.category}</td>
+              <td style={{ fontSize: '0.8rem' }}>{channelVal || '-'}</td>
               <td>{item.serial_number || '-'}</td>
               <td>{item.checked_out_to}</td>
               <td>{item.current_location}</td>
@@ -405,7 +411,8 @@ function CheckedOutReport({ data, formatDate }) {
                 )}
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>
