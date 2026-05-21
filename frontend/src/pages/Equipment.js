@@ -237,7 +237,7 @@ function Equipment() {
             style={{ display: 'none' }}
           />
           <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-            + Add Equipment
+            <Icons.Plus size={16} /> Add Equipment
           </button>
         </div>
       </div>

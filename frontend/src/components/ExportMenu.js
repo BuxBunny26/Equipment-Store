@@ -66,7 +66,7 @@ export default function ExportMenu({ onExport, onPrint, formats = ['csv', 'excel
         disabled={disabled}
         type="button"
       >
-        <Icons.Download size={14} /> {label} <Icons.ChevronDown size={12} />
+        <Icons.Download size={16} /> {label} <Icons.ChevronDown size={14} />
       </button>
       {open && (
         <div className="export-menu-dropdown">
