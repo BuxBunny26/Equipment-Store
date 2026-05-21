@@ -8,6 +8,8 @@ import AddEquipmentModal from '../components/AddEquipmentModal';
 import SearchableSelect from '../components/SearchableSelect';
 import { Icons } from '../components/Icons';
 import { uniqueProvinces, uniqueCountries, customerMatchesProvince, customerMatchesCountry, regionLabel } from '../utils/provinces';
+import { getCustomFieldRule, getCustomFieldValue } from '../utils/customFields';
+import { supabase } from '../services/supabaseClient';
 
 function CheckOut() {
     const [showConfirm, setShowConfirm] = useState(false);
@@ -149,6 +151,21 @@ function CheckOut() {
     });
   };
 
+  // Fetch custom_fields for the given equipment items and merge into state.
+  // The reports RPCs don't include custom_fields, so we pull them separately.
+  const enrichWithCustomFields = async (items) => {
+    const ids = [...new Set((items || []).map(i => i.id).filter(Boolean))];
+    if (ids.length === 0) return;
+    const { data, error: cfErr } = await supabase
+      .from('equipment')
+      .select('id, custom_fields')
+      .in('id', ids);
+    if (cfErr || !data) return;
+    const map = new Map(data.map(d => [d.id, d.custom_fields]));
+    setAvailableEquipment(prev => prev.map(eq => map.has(eq.id) ? { ...eq, custom_fields: map.get(eq.id) } : eq));
+    setCheckedOutEquipment(prev => prev.map(eq => map.has(eq.id) ? { ...eq, custom_fields: map.get(eq.id) } : eq));
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -163,6 +180,7 @@ function CheckOut() {
 
       setAvailableEquipment(equipmentRes.data);
       setCheckedOutEquipment(checkedOutRes.data || []);
+      enrichWithCustomFields([...(equipmentRes.data || []), ...(checkedOutRes.data || [])]);
       const today = new Date().toISOString().split('T')[0];
       setActiveReservations((reservationsRes.data || []).filter(r =>
         ['pending', 'approved', 'active'].includes(r.status?.toLowerCase()) &&
@@ -393,6 +411,7 @@ function CheckOut() {
       ]);
       setAvailableEquipment(equipmentRes.data);
       setCheckedOutEquipment(checkedOutRes.data || []);
+      enrichWithCustomFields([...(equipmentRes.data || []), ...(checkedOutRes.data || [])]);
       const today = new Date().toISOString().split('T')[0];
       setActiveReservations((reservationsRes.data || []).filter(r =>
         ['pending', 'approved', 'active'].includes(r.status?.toLowerCase()) &&
@@ -577,6 +596,17 @@ function CheckOut() {
                             S/N: {eq.serial_number}
                           </p>
                         )}
+                        {(() => {
+                          const rule = getCustomFieldRule(eq.equipment_name);
+                          if (!rule) return null;
+                          const val = getCustomFieldValue(eq.custom_fields, rule.field);
+                          if (!val) return null;
+                          return (
+                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                              {rule.label}: {val}
+                            </p>
+                          );
+                        })()}
                         {eq.current_location && (
                           <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                             📍 {eq.current_location}
