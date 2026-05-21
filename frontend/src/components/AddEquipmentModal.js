@@ -437,10 +437,14 @@ function AddEquipmentModal({ onClose, onSuccess }) {
               }}>
                 {siteType === 'internal' ? (() => {
                   const q = siteSearchTerm.trim().toLowerCase();
-                  const filtered = locations.filter(loc =>
-                    !q || (loc.name || '').toLowerCase().includes(q)
-                                || (loc.description || '').toLowerCase().includes(q)
-                  );
+                  // Internal branches are WearCheck-owned locations only.
+                  // Anything else lives under "Customer Site".
+                  const filtered = locations
+                    .filter(loc => (loc.name || '').toLowerCase().includes('wearcheck'))
+                    .filter(loc =>
+                      !q || (loc.name || '').toLowerCase().includes(q)
+                                  || (loc.description || '').toLowerCase().includes(q)
+                    );
                   if (filtered.length === 0) {
                     return <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '12px' }}>No branches match your search</p>;
                   }
