@@ -600,10 +600,9 @@ function CheckOut() {
                           const rule = getCustomFieldRule(eq.equipment_name);
                           if (!rule) return null;
                           const val = getCustomFieldValue(eq.custom_fields, rule.field);
-                          if (!val) return null;
                           return (
                             <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                              {rule.label}: {val}
+                              {rule.label}: {val || <em style={{ color: 'var(--warning-color, #d97706)' }}>Unknown</em>}
                             </p>
                           );
                         })()}
