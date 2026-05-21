@@ -7,6 +7,7 @@ import PhotoCapture from '../components/PhotoCapture';
 import AddEquipmentModal from '../components/AddEquipmentModal';
 import SearchableSelect from '../components/SearchableSelect';
 import { Icons } from '../components/Icons';
+import { normalizeProvince, uniqueProvinces, customerMatchesProvince } from '../utils/provinces';
 
 function CheckOut() {
     const [showConfirm, setShowConfirm] = useState(false);
@@ -755,7 +756,7 @@ function CheckOut() {
                     onChange={(e) => setCustomerProvinceFilter(e.target.value)}
                   >
                     <option value="">All Provinces</option>
-                    {[...new Set(customers.map(c => c.billing_state).filter(Boolean))].sort().map(prov => (
+                    {uniqueProvinces(customers).map(prov => (
                       <option key={prov} value={prov}>{prov}</option>
                     ))}
                   </select>
@@ -764,7 +765,7 @@ function CheckOut() {
                   <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span>Customer Sites * {selectedCustomerIds.length > 0 && <span style={{ fontWeight: 'normal', color: 'var(--text-secondary)' }}>({selectedCustomerIds.length} selected)</span>}</span>
                     {customerProvinceFilter && (() => {
-                      const provinceCustomers = customers.filter(c => c.billing_state === customerProvinceFilter);
+                      const provinceCustomers = customers.filter(c => customerMatchesProvince(c, customerProvinceFilter));
                       const provinceIds = provinceCustomers.map(c => c.id.toString());
                       const allSelected = provinceIds.length > 0 && provinceIds.every(id => selectedCustomerIds.includes(id));
                       return (
@@ -800,7 +801,7 @@ function CheckOut() {
                     padding: '8px',
                   }}>
                     {customers
-                      .filter(c => !customerProvinceFilter || c.billing_state === customerProvinceFilter)
+                      .filter(c => customerMatchesProvince(c, customerProvinceFilter))
                       .filter(c => {
                         const q = customerSearchTerm.trim().toLowerCase();
                         if (!q) return true;
@@ -841,7 +842,9 @@ function CheckOut() {
                             <span style={{ fontSize: '0.875rem', flex: 1 }}>
                               {cust.display_name}
                               {cust.billing_city ? ` (${cust.billing_city})` : ''}
-                              {cust.billing_state ? ` - ${cust.billing_state}` : ''}
+                              {normalizeProvince(cust.billing_state, cust.billing_country)
+                                ? ` - ${normalizeProvince(cust.billing_state, cust.billing_country)}`
+                                : ''}
                             </span>
                             {isPrimary && (
                               <span className="badge badge-available" style={{ fontSize: '0.65rem' }}>PRIMARY</span>
@@ -849,7 +852,7 @@ function CheckOut() {
                           </label>
                         );
                       })}
-                    {customers.filter(c => !customerProvinceFilter || c.billing_state === customerProvinceFilter).filter(c => {
+                    {customers.filter(c => customerMatchesProvince(c, customerProvinceFilter)).filter(c => {
                       const q = customerSearchTerm.trim().toLowerCase();
                       if (!q) return true;
                       return (
@@ -908,8 +911,8 @@ function CheckOut() {
                     options={customers.map((cust) => ({
                       id: cust.id,
                       label: cust.display_name,
-                      sublabel: [cust.billing_city, cust.billing_state].filter(Boolean).join(' - '),
-                      searchText: `${cust.display_name} ${cust.billing_city || ''} ${cust.billing_state || ''}`,
+                      sublabel: [cust.billing_city, normalizeProvince(cust.billing_state, cust.billing_country)].filter(Boolean).join(' - '),
+                      searchText: `${cust.display_name} ${cust.billing_city || ''} ${normalizeProvince(cust.billing_state, cust.billing_country) || ''}`,
                     }))}
                   />
                 </div>
