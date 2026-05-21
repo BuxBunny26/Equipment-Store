@@ -5,6 +5,7 @@ import { useOperator } from '../context/OperatorContext';
 import OperatorWarning from '../components/OperatorWarning';
 import PhotoCapture from '../components/PhotoCapture';
 import AddEquipmentModal from '../components/AddEquipmentModal';
+import SearchableSelect from '../components/SearchableSelect';
 import { Icons } from '../components/Icons';
 
 function CheckOut() {
@@ -57,6 +58,10 @@ function CheckOut() {
     expected_checkout_date: new Date().toISOString().split('T')[0],
     expected_return_date: '',
   });
+  // Province filter and multi-select customer sites
+  const [customerProvinceFilter, setCustomerProvinceFilter] = useState('');
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState([]);
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
     // Helper: Should show reason field?
     const shouldShowReason = () => {
       if (!formData.condition) return false;
@@ -169,6 +174,10 @@ function CheckOut() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (formData.destination_type === 'customer' && selectedCustomerIds.length === 0) {
+      setError('Please select at least one customer site.');
+      return;
+    }
     setPendingSubmit(() => () => {
       setSubmitting(true);
       setError(null);
@@ -193,6 +202,24 @@ function CheckOut() {
         ? personnel.find(p => p.id === parseInt(formData.receiving_personnel_id))
         : null;
 
+      // If a receiving employee is chosen, they become the holder of the equipment.
+      // The original issuer (formData.personnel_id) is recorded in notes for traceability.
+      const issuingPerson = formData.personnel_id
+        ? personnel.find(p => p.id === parseInt(formData.personnel_id))
+        : null;
+      const holderPersonnelId = receivingPerson ? receivingPerson.id : parseInt(formData.personnel_id);
+
+      // For customer destination, support multi-site (primary + roving extras)
+      const primaryCustomerId = formData.destination_type === 'customer'
+        ? (selectedCustomerIds[0] ? parseInt(selectedCustomerIds[0]) : (formData.customer_id ? parseInt(formData.customer_id) : null))
+        : null;
+      const primaryCustomer = primaryCustomerId
+        ? customers.find(c => c.id === primaryCustomerId)
+        : selectedCustomer;
+      const rovingCustomers = formData.destination_type === 'customer'
+        ? selectedCustomerIds.slice(1).map(id => customers.find(c => c.id === parseInt(id))).filter(Boolean)
+        : [];
+
       const sourceEquipment = formData.destination_type === 'transfer' ? checkedOutEquipment : availableEquipment;
       const selectedItems = sourceEquipment.filter(eq => 
         selectedEquipmentIds.includes(eq.id.toString())
@@ -209,18 +236,20 @@ function CheckOut() {
             action: 'OUT',
             quantity: equipment.is_quantity_tracked ? (parseInt(formData.quantity) || 1) : 1,
             location_id: formData.destination_type === 'internal' ? parseInt(formData.location_id) : null,
-            customer_id: formData.destination_type === 'customer' ? parseInt(formData.customer_id)
+            customer_id: formData.destination_type === 'customer' ? primaryCustomerId
               : formData.destination_type === 'transfer' ? parseInt(formData.to_site_id)
               : null,
-            personnel_id: parseInt(formData.personnel_id),
+            personnel_id: holderPersonnelId,
             is_transfer: formData.destination_type === 'transfer',
             expected_checkout_date: formData.expected_checkout_date || null,
             expected_return_date: formData.expected_return_date || null,
             notes: sanitize([
               formData.condition ? `Condition: ${formData.condition}` : null,
               formData.reason ? `Reason: ${formData.reason}` : null,
-              selectedCustomer ? `Customer Site: ${selectedCustomer.display_name}` : null,
-              receivingPerson ? `Receiving: ${receivingPerson.full_name}` : null,
+              primaryCustomer ? `Customer Site: ${primaryCustomer.display_name}` : null,
+              rovingCustomers.length > 0 ? `Roving Sites: ${rovingCustomers.map(c => c.display_name).join(', ')}` : null,
+              receivingPerson ? `Holder: ${receivingPerson.full_name}` : null,
+              issuingPerson ? `Issued by: ${issuingPerson.full_name || `${issuingPerson.first_name} ${issuingPerson.last_name}`}` : null,
               sanitize(formData.notes) || null,
             ].filter(Boolean).join(' | ')),
             reason: sanitize(formData.reason),
@@ -241,8 +270,8 @@ function CheckOut() {
             );
 
             for (const res of matchingReservations) {
-              if (res.personnel_id === parseInt(formData.personnel_id)) {
-                // Same person — reservation fulfilled by checkout
+              if (res.personnel_id === holderPersonnelId || res.personnel_id === parseInt(formData.personnel_id)) {
+                // Same person (holder or issuer) — reservation fulfilled by checkout
                 await reservationsApi.updateStatus(res.id, 'completed');
               } else {
                 // Different person checked it out — cancel the reservation
@@ -264,7 +293,10 @@ function CheckOut() {
           const destLoc = locations.find(l => l.id === parseInt(formData.location_id));
           actionText = `Successfully transferred ${itemText} to ${destLoc?.name || 'internal location'}`;
         } else if (formData.destination_type === 'customer') {
-          actionText = `Successfully checked out ${itemText}${selectedCustomer ? ` to ${selectedCustomer.display_name}` : ''}`;
+          const siteText = primaryCustomer
+            ? ` to ${primaryCustomer.display_name}${rovingCustomers.length > 0 ? ` (+${rovingCustomers.length} roving site${rovingCustomers.length === 1 ? '' : 's'})` : ''}`
+            : '';
+          actionText = `Successfully checked out ${itemText}${siteText}`;
         } else if (formData.destination_type === 'calibration') {
           actionText = `Successfully sent ${itemText} for calibration${formData.calibration_provider ? ` (${formData.calibration_provider})` : ''}`;
         } else if (formData.destination_type === 'transfer') {
@@ -283,6 +315,9 @@ function CheckOut() {
 
       // Reset form
       setSelectedEquipmentIds([]);
+      setSelectedCustomerIds([]);
+      setCustomerProvinceFilter('');
+      setCustomerSearchTerm('');
       setFormData({
         destination_type: 'internal',
         location_id: '',
@@ -613,20 +648,22 @@ function CheckOut() {
 
             <div className="form-group">
               <label className="form-label">Issue To (Personnel) *</label>
-              <select
+              <SearchableSelect
                 name="personnel_id"
-                className="form-select"
-                value={formData.personnel_id}
-                onChange={handleChange}
                 required
-              >
-                <option value="">Select person...</option>
-                {personnel.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.employee_id} - {p.first_name === p.last_name ? p.first_name : `${p.first_name} ${p.last_name}`}
-                  </option>
-                ))}
-              </select>
+                value={formData.personnel_id}
+                onChange={(val) => setFormData((prev) => ({ ...prev, personnel_id: val }))}
+                placeholder="Search by name or employee ID..."
+                options={personnel.map((p) => {
+                  const fullName = p.first_name === p.last_name ? p.first_name : `${p.first_name} ${p.last_name}`;
+                  return {
+                    id: p.id,
+                    label: fullName,
+                    sublabel: p.employee_id || '',
+                    searchText: `${fullName} ${p.employee_id || ''} ${p.email || ''}`,
+                  };
+                })}
+              />
             </div>
 
             <div className="form-group">
@@ -656,6 +693,9 @@ function CheckOut() {
                           to_site_id: '',
                           receiving_personnel_id: '',
                         }));
+                        setSelectedCustomerIds([]);
+                        setCustomerProvinceFilter('');
+                        setCustomerSearchTerm('');
                       }}
                     />
                     <span>{opt.label}</span>
@@ -685,23 +725,127 @@ function CheckOut() {
                 </select>
               </div>
             ) : formData.destination_type === 'customer' ? (
-              <div className="form-group">
-                <label className="form-label">Customer Site *</label>
-                <select
-                  name="customer_id"
-                  className="form-select"
-                  value={formData.customer_id}
-                  onChange={handleChange}
-                  required
-                >
-                  <option value="">Select customer site...</option>
-                  {customers.map((cust) => (
-                    <option key={cust.id} value={cust.id}>
-                      {cust.display_name} {cust.billing_city ? `(${cust.billing_city})` : ''} {cust.billing_state ? `- ${cust.billing_state}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <>
+                <div className="form-group">
+                  <label className="form-label">Filter by Province</label>
+                  <select
+                    className="form-select"
+                    value={customerProvinceFilter}
+                    onChange={(e) => setCustomerProvinceFilter(e.target.value)}
+                  >
+                    <option value="">All Provinces</option>
+                    {[...new Set(customers.map(c => c.billing_state).filter(Boolean))].sort().map(prov => (
+                      <option key={prov} value={prov}>{prov}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Customer Sites * {selectedCustomerIds.length > 0 && <span style={{ fontWeight: 'normal', color: 'var(--text-secondary)' }}>({selectedCustomerIds.length} selected)</span>}</span>
+                    {customerProvinceFilter && (() => {
+                      const provinceCustomers = customers.filter(c => c.billing_state === customerProvinceFilter);
+                      const provinceIds = provinceCustomers.map(c => c.id.toString());
+                      const allSelected = provinceIds.length > 0 && provinceIds.every(id => selectedCustomerIds.includes(id));
+                      return (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-secondary"
+                          onClick={() => {
+                            if (allSelected) {
+                              setSelectedCustomerIds(prev => prev.filter(id => !provinceIds.includes(id)));
+                            } else {
+                              setSelectedCustomerIds(prev => [...new Set([...prev, ...provinceIds])]);
+                            }
+                          }}
+                        >
+                          {allSelected ? 'Deselect all' : `Select all ${customerProvinceFilter}`}
+                        </button>
+                      );
+                    })()}
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Search sites by name, city, or province..."
+                    value={customerSearchTerm}
+                    onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                    style={{ marginBottom: '8px' }}
+                  />
+                  <div style={{
+                    maxHeight: '240px',
+                    overflowY: 'auto',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '8px',
+                  }}>
+                    {customers
+                      .filter(c => !customerProvinceFilter || c.billing_state === customerProvinceFilter)
+                      .filter(c => {
+                        const q = customerSearchTerm.trim().toLowerCase();
+                        if (!q) return true;
+                        return (
+                          (c.display_name || '').toLowerCase().includes(q) ||
+                          (c.billing_city || '').toLowerCase().includes(q) ||
+                          (c.billing_state || '').toLowerCase().includes(q) ||
+                          (c.customer_number || '').toLowerCase().includes(q)
+                        );
+                      })
+                      .map((cust) => {
+                        const idStr = cust.id.toString();
+                        const isSelected = selectedCustomerIds.includes(idStr);
+                        const isPrimary = isSelected && selectedCustomerIds[0] === idStr;
+                        return (
+                          <label
+                            key={cust.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              padding: '6px 4px',
+                              cursor: 'pointer',
+                              borderBottom: '1px solid var(--border-color)',
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                setSelectedCustomerIds(prev =>
+                                  prev.includes(idStr)
+                                    ? prev.filter(id => id !== idStr)
+                                    : [...prev, idStr]
+                                );
+                              }}
+                            />
+                            <span style={{ fontSize: '0.875rem', flex: 1 }}>
+                              {cust.display_name}
+                              {cust.billing_city ? ` (${cust.billing_city})` : ''}
+                              {cust.billing_state ? ` - ${cust.billing_state}` : ''}
+                            </span>
+                            {isPrimary && (
+                              <span className="badge badge-available" style={{ fontSize: '0.65rem' }}>PRIMARY</span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    {customers.filter(c => !customerProvinceFilter || c.billing_state === customerProvinceFilter).filter(c => {
+                      const q = customerSearchTerm.trim().toLowerCase();
+                      if (!q) return true;
+                      return (
+                        (c.display_name || '').toLowerCase().includes(q) ||
+                        (c.billing_city || '').toLowerCase().includes(q) ||
+                        (c.billing_state || '').toLowerCase().includes(q) ||
+                        (c.customer_number || '').toLowerCase().includes(q)
+                      );
+                    }).length === 0 && (
+                      <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '12px' }}>No customer sites match your search</p>
+                    )}
+                  </div>
+                  <span className="form-help" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Select one or more sites. The first selected is the primary destination; additional sites are recorded as roving destinations (useful when equipment moves between sites in a region).
+                  </span>
+                </div>
+              </>
             ) : formData.destination_type === 'calibration' ? (
               <div className="form-group">
                 <label className="form-label">Calibration Provider *</label>
@@ -734,44 +878,42 @@ function CheckOut() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">To Site *</label>
-                  <select
+                  <SearchableSelect
                     name="to_site_id"
-                    className="form-select"
-                    value={formData.to_site_id || ''}
-                    onChange={handleChange}
                     required
-                  >
-                    <option value="">Select destination site...</option>
-                    {customers.map((cust) => (
-                      <option key={cust.id} value={cust.id}>
-                        {cust.display_name} {cust.billing_city ? `(${cust.billing_city})` : ''} {cust.billing_state ? `- ${cust.billing_state}` : ''}
-                      </option>
-                    ))}
-                  </select>
+                    value={formData.to_site_id || ''}
+                    onChange={(val) => setFormData((prev) => ({ ...prev, to_site_id: val }))}
+                    placeholder="Search destination site..."
+                    options={customers.map((cust) => ({
+                      id: cust.id,
+                      label: cust.display_name,
+                      sublabel: [cust.billing_city, cust.billing_state].filter(Boolean).join(' - '),
+                      searchText: `${cust.display_name} ${cust.billing_city || ''} ${cust.billing_state || ''}`,
+                    }))}
+                  />
                 </div>
               </>
             ) : null}
 
             {(formData.destination_type === 'customer' || formData.destination_type === 'transfer') && (
               <div className="form-group">
-                <label className="form-label">Receiving Employee</label>
-                <select
+                <label className="form-label">Receiving Employee (becomes holder)</label>
+                <SearchableSelect
                   name="receiving_personnel_id"
-                  className="form-select"
                   value={formData.receiving_personnel_id}
-                  onChange={handleChange}
-                >
-                  <option value="">Select receiving employee...</option>
-                  {personnel
-                    .filter(p => p.id.toString() !== formData.personnel_id)
-                    .map((person) => (
-                      <option key={person.id} value={person.id}>
-                        {person.full_name} {person.employee_id ? `(${person.employee_id})` : ''}
-                      </option>
-                    ))}
-                </select>
+                  onChange={(val) => setFormData((prev) => ({ ...prev, receiving_personnel_id: val }))}
+                  placeholder="Search by name or employee ID..."
+                  options={personnel
+                    .filter((p) => p.id.toString() !== formData.personnel_id)
+                    .map((person) => ({
+                      id: person.id,
+                      label: person.full_name || `${person.first_name} ${person.last_name}`,
+                      sublabel: person.employee_id || '',
+                      searchText: `${person.full_name || ''} ${person.first_name || ''} ${person.last_name || ''} ${person.employee_id || ''}`,
+                    }))}
+                />
                 <span className="form-help" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  The employee who will be taking over the equipment at the destination site
+                  The employee taking over the equipment at the destination. If set, they become the recorded holder; the issuer above is noted for traceability.
                 </span>
               </div>
             )}
