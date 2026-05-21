@@ -19,6 +19,10 @@ function AddEquipmentModal({ onClose, onSuccess }) {
   const [siteType, setSiteType] = useState('internal'); // 'internal' | 'customer'
   const [siteCountryFilter, setSiteCountryFilter] = useState('South Africa');
   const [siteSearchTerm, setSiteSearchTerm] = useState('');
+  // Multi-site selection: first id in each array is the primary site.
+  // Extras are recorded in notes as roving sites.
+  const [selectedLocationIds, setSelectedLocationIds] = useState([]);
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState([]);
   const [formData, setFormData] = useState({
     equipment_id: '',
     equipment_name: '',
@@ -106,19 +110,42 @@ function AddEquipmentModal({ onClose, onSuccess }) {
     setLoading(true);
     setError(null);
 
-    // Require at least one site selection
-    if (!formData.current_location_id && !formData.current_customer_id) {
+    // Resolve primary + roving sites from the multi-select arrays.
+    const primaryLocationId = siteType === 'internal' && selectedLocationIds[0]
+      ? parseInt(selectedLocationIds[0]) : null;
+    const primaryCustomerId = siteType === 'customer' && selectedCustomerIds[0]
+      ? parseInt(selectedCustomerIds[0]) : null;
+
+    if (!primaryLocationId && !primaryCustomerId) {
       setError('Please select a current location or customer site.');
       setLoading(false);
       return;
     }
+
+    const extraLocationNames = siteType === 'internal'
+      ? selectedLocationIds.slice(1)
+          .map(id => locations.find(l => l.id.toString() === id.toString())?.name)
+          .filter(Boolean)
+      : [];
+    const extraCustomerNames = siteType === 'customer'
+      ? selectedCustomerIds.slice(1)
+          .map(id => customers.find(c => c.id.toString() === id.toString())?.display_name)
+          .filter(Boolean)
+      : [];
+    const rovingNames = [...extraLocationNames, ...extraCustomerNames];
+
     try {
       const submitData = { ...formData };
+      submitData.current_location_id = primaryLocationId;
+      submitData.current_customer_id = primaryCustomerId;
       // Convert empty strings to null for FK fields
       if (!submitData.category_id) submitData.category_id = null;
       if (!submitData.subcategory_id) submitData.subcategory_id = null;
-      if (!submitData.current_location_id) submitData.current_location_id = null;
-      if (!submitData.current_customer_id) submitData.current_customer_id = null;
+      // Append roving sites to notes for traceability
+      if (rovingNames.length > 0) {
+        const rovingLine = `Roving Sites: ${rovingNames.join(', ')}`;
+        submitData.notes = [submitData.notes, rovingLine].filter(Boolean).join(' | ');
+      }
       // Include custom fields if any were set
       if (Object.keys(customFieldValues).length > 0) {
         submitData.custom_fields = customFieldValues;
@@ -130,6 +157,34 @@ function AddEquipmentModal({ onClose, onSuccess }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Toggle helpers for multi-site selection
+  const toggleLocation = (id) => {
+    const s = id.toString();
+    setSelectedLocationIds(prev =>
+      prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
+    );
+  };
+  const toggleCustomer = (id) => {
+    const s = id.toString();
+    setSelectedCustomerIds(prev =>
+      prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]
+    );
+  };
+  const setPrimaryLocation = (id) => {
+    const s = id.toString();
+    setSelectedLocationIds(prev => {
+      const without = prev.filter(x => x !== s);
+      return [s, ...without];
+    });
+  };
+  const setPrimaryCustomer = (id) => {
+    const s = id.toString();
+    setSelectedCustomerIds(prev => {
+      const without = prev.filter(x => x !== s);
+      return [s, ...without];
+    });
   };
 
   const handleChange = (e) => {
@@ -374,7 +429,7 @@ function AddEquipmentModal({ onClose, onSuccess }) {
                     checked={siteType === 'internal'}
                     onChange={() => {
                       setSiteType('internal');
-                      setFormData(prev => ({ ...prev, current_customer_id: '' }));
+                      setSelectedCustomerIds([]);
                       setSiteSearchTerm('');
                     }}
                   />
@@ -388,7 +443,7 @@ function AddEquipmentModal({ onClose, onSuccess }) {
                     checked={siteType === 'customer'}
                     onChange={() => {
                       setSiteType('customer');
-                      setFormData(prev => ({ ...prev, current_location_id: '' }));
+                      setSelectedLocationIds([]);
                       setSiteSearchTerm('');
                     }}
                   />
@@ -448,33 +503,58 @@ function AddEquipmentModal({ onClose, onSuccess }) {
                   if (filtered.length === 0) {
                     return <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '12px' }}>No branches match your search</p>;
                   }
-                  return filtered.map(loc => (
-                    <label
-                      key={loc.id}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '8px',
-                        padding: '6px 4px', cursor: 'pointer',
-                        borderBottom: '1px solid var(--border-color)',
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        name="current_location_id"
-                        checked={formData.current_location_id === loc.id.toString() || formData.current_location_id === loc.id}
-                        onChange={() => setFormData(prev => ({
-                          ...prev,
-                          current_location_id: loc.id.toString(),
-                          current_customer_id: '',
-                        }))}
-                      />
-                      <span style={{ fontSize: '0.875rem', flex: 1 }}>
-                        {loc.name}
-                        {loc.description ? (
-                          <span style={{ color: 'var(--text-secondary)' }}> — {loc.description}</span>
-                        ) : null}
-                      </span>
-                    </label>
-                  ));
+                  return filtered.map(loc => {
+                    const idStr = loc.id.toString();
+                    const isSelected = selectedLocationIds.includes(idStr);
+                    const isPrimary = isSelected && selectedLocationIds[0] === idStr;
+                    return (
+                      <label
+                        key={loc.id}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '8px',
+                          padding: '6px 4px', cursor: 'pointer',
+                          borderBottom: '1px solid var(--border-color)',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleLocation(loc.id)}
+                        />
+                        <span style={{ fontSize: '0.875rem', flex: 1 }}>
+                          {loc.name}
+                          {loc.description ? (
+                            <span style={{ color: 'var(--text-secondary)' }}> — {loc.description}</span>
+                          ) : null}
+                        </span>
+                        {isSelected && (
+                          isPrimary ? (
+                            <span style={{
+                              fontSize: '0.75rem', fontWeight: 600,
+                              color: 'var(--primary-color, #1976d2)',
+                              padding: '2px 6px',
+                              border: '1px solid var(--primary-color, #1976d2)',
+                              borderRadius: '4px',
+                            }}>★ Primary</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.preventDefault(); setPrimaryLocation(loc.id); }}
+                              style={{
+                                fontSize: '0.75rem',
+                                background: 'transparent',
+                                border: '1px solid var(--border-color)',
+                                borderRadius: '4px',
+                                padding: '2px 6px',
+                                cursor: 'pointer',
+                                color: 'var(--text-secondary)',
+                              }}
+                            >Set primary</button>
+                          )
+                        )}
+                      </label>
+                    );
+                  });
                 })() : (() => {
                   const q = siteSearchTerm.trim().toLowerCase();
                   const filtered = customers
@@ -491,36 +571,61 @@ function AddEquipmentModal({ onClose, onSuccess }) {
                   if (filtered.length === 0) {
                     return <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '12px' }}>No customer sites match your search</p>;
                   }
-                  return filtered.map(cust => (
-                    <label
-                      key={cust.id}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '8px',
-                        padding: '6px 4px', cursor: 'pointer',
-                        borderBottom: '1px solid var(--border-color)',
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        name="current_customer_id"
-                        checked={formData.current_customer_id === cust.id.toString() || formData.current_customer_id === cust.id}
-                        onChange={() => setFormData(prev => ({
-                          ...prev,
-                          current_customer_id: cust.id.toString(),
-                          current_location_id: '',
-                        }))}
-                      />
-                      <span style={{ fontSize: '0.875rem', flex: 1 }}>
-                        {cust.display_name}
-                        {cust.billing_city ? ` (${cust.billing_city})` : ''}
-                        {regionLabel(cust) ? ` - ${regionLabel(cust)}` : ''}
-                      </span>
-                    </label>
-                  ));
+                  return filtered.map(cust => {
+                    const idStr = cust.id.toString();
+                    const isSelected = selectedCustomerIds.includes(idStr);
+                    const isPrimary = isSelected && selectedCustomerIds[0] === idStr;
+                    return (
+                      <label
+                        key={cust.id}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '8px',
+                          padding: '6px 4px', cursor: 'pointer',
+                          borderBottom: '1px solid var(--border-color)',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleCustomer(cust.id)}
+                        />
+                        <span style={{ fontSize: '0.875rem', flex: 1 }}>
+                          {cust.display_name}
+                          {cust.billing_city ? ` (${cust.billing_city})` : ''}
+                          {regionLabel(cust) ? ` - ${regionLabel(cust)}` : ''}
+                        </span>
+                        {isSelected && (
+                          isPrimary ? (
+                            <span style={{
+                              fontSize: '0.75rem', fontWeight: 600,
+                              color: 'var(--primary-color, #1976d2)',
+                              padding: '2px 6px',
+                              border: '1px solid var(--primary-color, #1976d2)',
+                              borderRadius: '4px',
+                            }}>★ Primary</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.preventDefault(); setPrimaryCustomer(cust.id); }}
+                              style={{
+                                fontSize: '0.75rem',
+                                background: 'transparent',
+                                border: '1px solid var(--border-color)',
+                                borderRadius: '4px',
+                                padding: '2px 6px',
+                                cursor: 'pointer',
+                                color: 'var(--text-secondary)',
+                              }}
+                            >Set primary</button>
+                          )
+                        )}
+                      </label>
+                    );
+                  });
                 })()}
               </div>
               <span className="form-help" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                Pick the branch or customer site where this equipment currently lives.
+                Pick one or more sites where this equipment lives. The first one is the primary; click “Set primary” on another to switch. Extras are recorded as roving sites in the equipment notes.
               </span>
             </div>
 
