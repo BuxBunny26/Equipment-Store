@@ -7,7 +7,7 @@ import PhotoCapture from '../components/PhotoCapture';
 import AddEquipmentModal from '../components/AddEquipmentModal';
 import SearchableSelect from '../components/SearchableSelect';
 import { Icons } from '../components/Icons';
-import { normalizeProvince, uniqueProvinces, customerMatchesProvince } from '../utils/provinces';
+import { uniqueProvinces, uniqueCountries, customerMatchesProvince, customerMatchesCountry, regionLabel } from '../utils/provinces';
 
 function CheckOut() {
     const [showConfirm, setShowConfirm] = useState(false);
@@ -61,6 +61,7 @@ function CheckOut() {
   });
   // Province filter and multi-select customer sites
   const [customerProvinceFilter, setCustomerProvinceFilter] = useState('');
+  const [customerCountryFilter, setCustomerCountryFilter] = useState('South Africa');
   const [selectedCustomerIds, setSelectedCustomerIds] = useState([]);
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
     // Helper: Should show reason field?
@@ -339,6 +340,7 @@ function CheckOut() {
       setSelectedEquipmentIds([]);
       setSelectedCustomerIds([]);
       setCustomerProvinceFilter('');
+      setCustomerCountryFilter('South Africa');
       setCustomerSearchTerm('');
       setFormData({
         destination_type: 'internal',
@@ -717,6 +719,7 @@ function CheckOut() {
                         }));
                         setSelectedCustomerIds([]);
                         setCustomerProvinceFilter('');
+                        setCustomerCountryFilter('South Africa');
                         setCustomerSearchTerm('');
                       }}
                     />
@@ -748,39 +751,64 @@ function CheckOut() {
               </div>
             ) : formData.destination_type === 'customer' ? (
               <>
-                <div className="form-group">
-                  <label className="form-label">Filter by Province</label>
-                  <select
-                    className="form-select"
-                    value={customerProvinceFilter}
-                    onChange={(e) => setCustomerProvinceFilter(e.target.value)}
-                  >
-                    <option value="">All Provinces</option>
-                    {uniqueProvinces(customers).map(prov => (
-                      <option key={prov} value={prov}>{prov}</option>
-                    ))}
-                  </select>
+                <div className="form-group" style={{ display: 'flex', gap: '12px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label className="form-label">Country</label>
+                    <select
+                      className="form-select"
+                      value={customerCountryFilter}
+                      onChange={(e) => {
+                        setCustomerCountryFilter(e.target.value);
+                        // Province only applies to South Africa
+                        if (e.target.value !== 'South Africa') setCustomerProvinceFilter('');
+                      }}
+                    >
+                      <option value="">All Countries</option>
+                      {uniqueCountries(customers).map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {customerCountryFilter === 'South Africa' && (
+                    <div style={{ flex: 1 }}>
+                      <label className="form-label">Province</label>
+                      <select
+                        className="form-select"
+                        value={customerProvinceFilter}
+                        onChange={(e) => setCustomerProvinceFilter(e.target.value)}
+                      >
+                        <option value="">All Provinces</option>
+                        {uniqueProvinces(customers).map(prov => (
+                          <option key={prov} value={prov}>{prov}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
                 <div className="form-group">
                   <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span>Customer Sites * {selectedCustomerIds.length > 0 && <span style={{ fontWeight: 'normal', color: 'var(--text-secondary)' }}>({selectedCustomerIds.length} selected)</span>}</span>
-                    {customerProvinceFilter && (() => {
-                      const provinceCustomers = customers.filter(c => customerMatchesProvince(c, customerProvinceFilter));
-                      const provinceIds = provinceCustomers.map(c => c.id.toString());
-                      const allSelected = provinceIds.length > 0 && provinceIds.every(id => selectedCustomerIds.includes(id));
+                    {(customerProvinceFilter || customerCountryFilter) && (() => {
+                      const filterLabel = customerProvinceFilter || customerCountryFilter;
+                      const matching = customers.filter(c =>
+                        customerMatchesCountry(c, customerCountryFilter) &&
+                        customerMatchesProvince(c, customerProvinceFilter)
+                      );
+                      const matchingIds = matching.map(c => c.id.toString());
+                      const allSelected = matchingIds.length > 0 && matchingIds.every(id => selectedCustomerIds.includes(id));
                       return (
                         <button
                           type="button"
                           className="btn btn-sm btn-secondary"
                           onClick={() => {
                             if (allSelected) {
-                              setSelectedCustomerIds(prev => prev.filter(id => !provinceIds.includes(id)));
+                              setSelectedCustomerIds(prev => prev.filter(id => !matchingIds.includes(id)));
                             } else {
-                              setSelectedCustomerIds(prev => [...new Set([...prev, ...provinceIds])]);
+                              setSelectedCustomerIds(prev => [...new Set([...prev, ...matchingIds])]);
                             }
                           }}
                         >
-                          {allSelected ? 'Deselect all' : `Select all ${customerProvinceFilter}`}
+                          {allSelected ? 'Deselect all' : `Select all ${filterLabel}`}
                         </button>
                       );
                     })()}
@@ -801,6 +829,7 @@ function CheckOut() {
                     padding: '8px',
                   }}>
                     {customers
+                      .filter(c => customerMatchesCountry(c, customerCountryFilter))
                       .filter(c => customerMatchesProvince(c, customerProvinceFilter))
                       .filter(c => {
                         const q = customerSearchTerm.trim().toLowerCase();
@@ -842,9 +871,7 @@ function CheckOut() {
                             <span style={{ fontSize: '0.875rem', flex: 1 }}>
                               {cust.display_name}
                               {cust.billing_city ? ` (${cust.billing_city})` : ''}
-                              {normalizeProvince(cust.billing_state, cust.billing_country)
-                                ? ` - ${normalizeProvince(cust.billing_state, cust.billing_country)}`
-                                : ''}
+                              {regionLabel(cust) ? ` - ${regionLabel(cust)}` : ''}
                             </span>
                             {isPrimary && (
                               <span className="badge badge-available" style={{ fontSize: '0.65rem' }}>PRIMARY</span>
@@ -852,16 +879,19 @@ function CheckOut() {
                           </label>
                         );
                       })}
-                    {customers.filter(c => customerMatchesProvince(c, customerProvinceFilter)).filter(c => {
-                      const q = customerSearchTerm.trim().toLowerCase();
-                      if (!q) return true;
-                      return (
-                        (c.display_name || '').toLowerCase().includes(q) ||
-                        (c.billing_city || '').toLowerCase().includes(q) ||
-                        (c.billing_state || '').toLowerCase().includes(q) ||
-                        (c.customer_number || '').toLowerCase().includes(q)
-                      );
-                    }).length === 0 && (
+                    {customers
+                      .filter(c => customerMatchesCountry(c, customerCountryFilter))
+                      .filter(c => customerMatchesProvince(c, customerProvinceFilter))
+                      .filter(c => {
+                        const q = customerSearchTerm.trim().toLowerCase();
+                        if (!q) return true;
+                        return (
+                          (c.display_name || '').toLowerCase().includes(q) ||
+                          (c.billing_city || '').toLowerCase().includes(q) ||
+                          (c.billing_state || '').toLowerCase().includes(q) ||
+                          (c.customer_number || '').toLowerCase().includes(q)
+                        );
+                      }).length === 0 && (
                       <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '12px' }}>No customer sites match your search</p>
                     )}
                   </div>
@@ -911,8 +941,8 @@ function CheckOut() {
                     options={customers.map((cust) => ({
                       id: cust.id,
                       label: cust.display_name,
-                      sublabel: [cust.billing_city, normalizeProvince(cust.billing_state, cust.billing_country)].filter(Boolean).join(' - '),
-                      searchText: `${cust.display_name} ${cust.billing_city || ''} ${normalizeProvince(cust.billing_state, cust.billing_country) || ''}`,
+                      sublabel: [cust.billing_city, regionLabel(cust)].filter(Boolean).join(' - '),
+                      searchText: `${cust.display_name} ${cust.billing_city || ''} ${regionLabel(cust) || ''}`,
                     }))}
                   />
                 </div>
