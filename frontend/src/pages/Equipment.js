@@ -34,7 +34,7 @@ function Equipment() {
 
   useEffect(() => {
     fetchEquipment();
-  }, [filters.status, filters.category_id, filters.is_consumable, filters.calibration_status, filters.channels]); // eslint-disable-line
+  }, [filters.status, filters.category_id, filters.is_consumable, filters.calibration_status, filters.channels, filters.search]); // eslint-disable-line
 
   const fetchCategories = async () => {
     try {
@@ -52,7 +52,9 @@ function Equipment() {
       if (filters.status) params.status = filters.status;
       if (filters.category_id) params.category_id = filters.category_id;
       if (filters.is_consumable !== '') params.is_consumable = filters.is_consumable;
-      if (filters.search) params.search = filters.search;
+      // Note: search is applied client-side below so it can also match
+      // current_location, current_holder, manufacturer and model — fields the
+      // server-side .or() filter can't reach (joined columns / not indexed).
 
       const [eqRes, calRes] = await Promise.all([
         equipmentApi.getAll(params),
@@ -69,6 +71,27 @@ function Equipment() {
         ...e,
         calibration_status: calMap[e.id] || 'N/A',
       }));
+
+      // Apply search filter client-side across multiple fields including location/holder
+      if (filters.search) {
+        const q = filters.search.trim().toLowerCase();
+        items = items.filter(e => {
+          const fields = [
+            e.equipment_id,
+            e.equipment_name,
+            e.serial_number,
+            e.description,
+            e.manufacturer,
+            e.model,
+            e.current_location,
+            e.current_holder,
+            e.holder_employee_id,
+            e.category_name,
+            e.subcategory_name,
+          ];
+          return fields.some(f => f && f.toString().toLowerCase().includes(q));
+        });
+      }
 
       // Apply calibration filter client-side
       if (filters.calibration_status) {
@@ -226,7 +249,7 @@ function Equipment() {
             <input
               type="text"
               className="form-input search-input"
-              placeholder="Search by ID, name, or serial number..."
+              placeholder="Search by ID, name, serial, location, holder..."
               value={filters.search}
               onChange={(e) => setFilters({ ...filters, search: e.target.value })}
             />
