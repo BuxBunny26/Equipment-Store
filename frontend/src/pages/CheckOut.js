@@ -64,6 +64,11 @@ function CheckOut() {
   const [customerCountryFilter, setCustomerCountryFilter] = useState('South Africa');
   const [selectedCustomerIds, setSelectedCustomerIds] = useState([]);
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
+  // Multi-select for transfer destination sites (mirrors customer multi-site UX)
+  const [transferProvinceFilter, setTransferProvinceFilter] = useState('');
+  const [transferCountryFilter, setTransferCountryFilter] = useState('South Africa');
+  const [selectedTransferSiteIds, setSelectedTransferSiteIds] = useState([]);
+  const [transferSearchTerm, setTransferSearchTerm] = useState('');
     // Helper: Should show reason field?
     const shouldShowReason = () => {
       if (!formData.condition) return false;
@@ -196,8 +201,8 @@ function CheckOut() {
       setError('Please enter a calibration provider.');
       return;
     }
-    if (formData.destination_type === 'transfer' && !formData.to_site_id) {
-      setError('Please select a destination site for the transfer.');
+    if (formData.destination_type === 'transfer' && selectedTransferSiteIds.length === 0) {
+      setError('Please select at least one destination site for the transfer.');
       return;
     }
     setError(null);
@@ -243,6 +248,17 @@ function CheckOut() {
         ? selectedCustomerIds.slice(1).map(id => customers.find(c => c.id === parseInt(id))).filter(Boolean)
         : [];
 
+      // For transfer destination, support multi-site (primary + roving extras)
+      const primaryTransferSiteId = formData.destination_type === 'transfer'
+        ? (selectedTransferSiteIds[0] ? parseInt(selectedTransferSiteIds[0]) : (formData.to_site_id ? parseInt(formData.to_site_id) : null))
+        : null;
+      const primaryTransferSite = primaryTransferSiteId
+        ? customers.find(c => c.id === primaryTransferSiteId)
+        : null;
+      const rovingTransferSites = formData.destination_type === 'transfer'
+        ? selectedTransferSiteIds.slice(1).map(id => customers.find(c => c.id === parseInt(id))).filter(Boolean)
+        : [];
+
       const sourceEquipment = formData.destination_type === 'transfer' ? checkedOutEquipment : availableEquipment;
       const selectedItems = sourceEquipment.filter(eq => 
         selectedEquipmentIds.includes(eq.id.toString())
@@ -260,7 +276,7 @@ function CheckOut() {
             quantity: equipment.is_quantity_tracked ? (parseInt(formData.quantity) || 1) : 1,
             location_id: formData.destination_type === 'internal' ? parseInt(formData.location_id) : null,
             customer_id: formData.destination_type === 'customer' ? primaryCustomerId
-              : formData.destination_type === 'transfer' ? parseInt(formData.to_site_id)
+              : formData.destination_type === 'transfer' ? primaryTransferSiteId
               : null,
             personnel_id: holderPersonnelId,
             is_transfer: formData.destination_type === 'transfer',
@@ -271,6 +287,8 @@ function CheckOut() {
               formData.reason ? `Reason: ${formData.reason}` : null,
               primaryCustomer ? `Customer Site: ${primaryCustomer.display_name}` : null,
               rovingCustomers.length > 0 ? `Roving Sites: ${rovingCustomers.map(c => c.display_name).join(', ')}` : null,
+              primaryTransferSite ? `Transfer To: ${primaryTransferSite.display_name}` : null,
+              rovingTransferSites.length > 0 ? `Roving Sites: ${rovingTransferSites.map(c => c.display_name).join(', ')}` : null,
               receivingPerson ? `Holder: ${receivingPerson.full_name}` : null,
               issuingPerson ? `Issued by: ${issuingPerson.full_name || `${issuingPerson.first_name} ${issuingPerson.last_name}`}` : null,
               sanitize(formData.notes) || null,
@@ -324,8 +342,10 @@ function CheckOut() {
           actionText = `Successfully sent ${itemText} for calibration${formData.calibration_provider ? ` (${formData.calibration_provider})` : ''}`;
         } else if (formData.destination_type === 'transfer') {
           const fromSites = [...new Set(selectedItems.map(eq => eq.current_location).filter(Boolean))];
-          const toSite = customers.find(c => c.id === parseInt(formData.to_site_id));
-          actionText = `Successfully transferred ${itemText}${fromSites.length > 0 ? ` from ${fromSites.join(', ')}` : ''}${toSite ? ` to ${toSite.display_name}` : ''}`;
+          const toText = primaryTransferSite
+            ? ` to ${primaryTransferSite.display_name}${rovingTransferSites.length > 0 ? ` (+${rovingTransferSites.length} roving site${rovingTransferSites.length === 1 ? '' : 's'})` : ''}`
+            : '';
+          actionText = `Successfully transferred ${itemText}${fromSites.length > 0 ? ` from ${fromSites.join(', ')}` : ''}${toText}`;
         } else {
           actionText = `Successfully checked out ${itemText}`;
         }
@@ -342,6 +362,10 @@ function CheckOut() {
       setCustomerProvinceFilter('');
       setCustomerCountryFilter('South Africa');
       setCustomerSearchTerm('');
+      setSelectedTransferSiteIds([]);
+      setTransferProvinceFilter('');
+      setTransferCountryFilter('South Africa');
+      setTransferSearchTerm('');
       setFormData({
         destination_type: 'internal',
         location_id: '',
@@ -930,21 +954,152 @@ function CheckOut() {
                       : <span style={{ color: 'var(--text-secondary)' }}>Select equipment to see current location</span>}
                   </div>
                 </div>
+                <div className="form-group" style={{ display: 'flex', gap: '12px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label className="form-label">Country</label>
+                    <select
+                      className="form-select"
+                      value={transferCountryFilter}
+                      onChange={(e) => {
+                        setTransferCountryFilter(e.target.value);
+                        if (e.target.value !== 'South Africa') setTransferProvinceFilter('');
+                      }}
+                    >
+                      <option value="">All Countries</option>
+                      {uniqueCountries(customers).map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {transferCountryFilter === 'South Africa' && (
+                    <div style={{ flex: 1 }}>
+                      <label className="form-label">Province</label>
+                      <select
+                        className="form-select"
+                        value={transferProvinceFilter}
+                        onChange={(e) => setTransferProvinceFilter(e.target.value)}
+                      >
+                        <option value="">All Provinces</option>
+                        {uniqueProvinces(customers).map(prov => (
+                          <option key={prov} value={prov}>{prov}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
                 <div className="form-group">
-                  <label className="form-label">To Site *</label>
-                  <SearchableSelect
-                    name="to_site_id"
-                    required
-                    value={formData.to_site_id || ''}
-                    onChange={(val) => setFormData((prev) => ({ ...prev, to_site_id: val }))}
-                    placeholder="Search destination site..."
-                    options={customers.map((cust) => ({
-                      id: cust.id,
-                      label: cust.display_name,
-                      sublabel: [cust.billing_city, regionLabel(cust)].filter(Boolean).join(' - '),
-                      searchText: `${cust.display_name} ${cust.billing_city || ''} ${regionLabel(cust) || ''}`,
-                    }))}
+                  <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>To Sites * {selectedTransferSiteIds.length > 0 && <span style={{ fontWeight: 'normal', color: 'var(--text-secondary)' }}>({selectedTransferSiteIds.length} selected)</span>}</span>
+                    {(transferProvinceFilter || transferCountryFilter) && (() => {
+                      const filterLabel = transferProvinceFilter || transferCountryFilter;
+                      const matching = customers.filter(c =>
+                        customerMatchesCountry(c, transferCountryFilter) &&
+                        customerMatchesProvince(c, transferProvinceFilter)
+                      );
+                      const matchingIds = matching.map(c => c.id.toString());
+                      const allSelected = matchingIds.length > 0 && matchingIds.every(id => selectedTransferSiteIds.includes(id));
+                      return (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-secondary"
+                          onClick={() => {
+                            if (allSelected) {
+                              setSelectedTransferSiteIds(prev => prev.filter(id => !matchingIds.includes(id)));
+                            } else {
+                              setSelectedTransferSiteIds(prev => [...new Set([...prev, ...matchingIds])]);
+                            }
+                          }}
+                        >
+                          {allSelected ? 'Deselect all' : `Select all ${filterLabel}`}
+                        </button>
+                      );
+                    })()}
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Search sites by name, city, or province..."
+                    value={transferSearchTerm}
+                    onChange={(e) => setTransferSearchTerm(e.target.value)}
+                    style={{ marginBottom: '8px' }}
                   />
+                  <div style={{
+                    maxHeight: '240px',
+                    overflowY: 'auto',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '8px',
+                  }}>
+                    {customers
+                      .filter(c => customerMatchesCountry(c, transferCountryFilter))
+                      .filter(c => customerMatchesProvince(c, transferProvinceFilter))
+                      .filter(c => {
+                        const q = transferSearchTerm.trim().toLowerCase();
+                        if (!q) return true;
+                        return (
+                          (c.display_name || '').toLowerCase().includes(q) ||
+                          (c.billing_city || '').toLowerCase().includes(q) ||
+                          (c.billing_state || '').toLowerCase().includes(q) ||
+                          (c.customer_number || '').toLowerCase().includes(q)
+                        );
+                      })
+                      .map((cust) => {
+                        const idStr = cust.id.toString();
+                        const isSelected = selectedTransferSiteIds.includes(idStr);
+                        const isPrimary = isSelected && selectedTransferSiteIds[0] === idStr;
+                        return (
+                          <label
+                            key={cust.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              padding: '6px 4px',
+                              cursor: 'pointer',
+                              borderBottom: '1px solid var(--border-color)',
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                setSelectedTransferSiteIds(prev =>
+                                  prev.includes(idStr)
+                                    ? prev.filter(id => id !== idStr)
+                                    : [...prev, idStr]
+                                );
+                              }}
+                            />
+                            <span style={{ fontSize: '0.875rem', flex: 1 }}>
+                              {cust.display_name}
+                              {cust.billing_city ? ` (${cust.billing_city})` : ''}
+                              {regionLabel(cust) ? ` - ${regionLabel(cust)}` : ''}
+                            </span>
+                            {isPrimary && (
+                              <span className="badge badge-available" style={{ fontSize: '0.65rem' }}>PRIMARY</span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    {customers
+                      .filter(c => customerMatchesCountry(c, transferCountryFilter))
+                      .filter(c => customerMatchesProvince(c, transferProvinceFilter))
+                      .filter(c => {
+                        const q = transferSearchTerm.trim().toLowerCase();
+                        if (!q) return true;
+                        return (
+                          (c.display_name || '').toLowerCase().includes(q) ||
+                          (c.billing_city || '').toLowerCase().includes(q) ||
+                          (c.billing_state || '').toLowerCase().includes(q) ||
+                          (c.customer_number || '').toLowerCase().includes(q)
+                        );
+                      }).length === 0 && (
+                      <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '12px' }}>No sites match your search</p>
+                    )}
+                  </div>
+                  <span className="form-help" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Select one or more destination sites. The first selected is the primary destination; additional sites are recorded as roving destinations.
+                  </span>
                 </div>
               </>
             ) : null}
@@ -1195,7 +1350,7 @@ function CheckOut() {
                   (formData.destination_type === 'internal' ? !formData.location_id :
                     formData.destination_type === 'customer' ? selectedCustomerIds.length === 0 :
                     formData.destination_type === 'calibration' ? !formData.calibration_provider :
-                    formData.destination_type === 'transfer' ? !formData.to_site_id : false) ||
+                    formData.destination_type === 'transfer' ? selectedTransferSiteIds.length === 0 : false) ||
                   submitting ||
                   (shouldShowReason() && !formData.reason) ||
                   ((formData.destination_type === 'internal' || formData.destination_type === 'customer') && !formData.expected_return_date) ||
