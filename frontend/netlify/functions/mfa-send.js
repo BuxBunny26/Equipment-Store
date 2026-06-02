@@ -1,4 +1,3 @@
-const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -74,19 +73,6 @@ exports.handler = async (event) => {
     return { statusCode: 500, body: JSON.stringify({ error: 'Failed to generate verification code' }) };
   }
 
-  // Send email via Office 365 SMTP
-  const transporter = nodemailer.createTransport({
-    host: 'smtp.office365.com',
-    port: 587,
-    secure: false,
-    requireTLS: true,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-    tls: { rejectUnauthorized: false },
-  });
-
   const emailHtml = `
     <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#f8f9fa;border-radius:8px;">
       <div style="text-align:center;margin-bottom:24px;">
@@ -105,19 +91,28 @@ exports.handler = async (event) => {
     </div>
   `;
 
-  try {
-    await transporter.sendMail({
-      from: `"WCK Equipment Store" <${process.env.SMTP_USER}>`,
-      to: email,
+  // Send via Resend API
+  const resendRes = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: 'WCK Equipment Store <onboarding@resend.dev>',
+      to: [email],
       subject: 'Your Equipment Store Login Code',
       html: emailHtml,
-    });
-  } catch (emailError) {
-    console.error('Email send error:', emailError.message, emailError.code, emailError.response);
+    }),
+  });
+
+  if (!resendRes.ok) {
+    const resendError = await resendRes.json().catch(() => ({}));
+    console.error('Resend error:', resendError);
     await supabase.from('mfa_tokens').delete().eq('personnel_id', personnel_id);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: `Failed to send verification email: ${emailError.message}` }),
+      body: JSON.stringify({ error: `Failed to send verification email: ${resendError.message || resendRes.status}` }),
     };
   }
 
