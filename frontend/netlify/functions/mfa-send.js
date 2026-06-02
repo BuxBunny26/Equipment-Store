@@ -99,7 +99,7 @@ exports.handler = async (event) => {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'WCK Equipment Store <noreply@wearcheckrs.com>',
+      from: 'WCK Equipment Store <noreply@wearcheckarc.com>',
       to: [email],
       subject: 'Your Equipment Store Login Code',
       html: emailHtml,
