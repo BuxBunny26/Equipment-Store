@@ -79,11 +79,12 @@ exports.handler = async (event) => {
     host: 'smtp.office365.com',
     port: 587,
     secure: false,
+    requireTLS: true,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
-    tls: { ciphers: 'SSLv3' },
+    tls: { rejectUnauthorized: false },
   });
 
   const emailHtml = `
@@ -112,11 +113,11 @@ exports.handler = async (event) => {
       html: emailHtml,
     });
   } catch (emailError) {
-    console.error('Email send error:', emailError.message);
+    console.error('Email send error:', emailError.message, emailError.code, emailError.response);
     await supabase.from('mfa_tokens').delete().eq('personnel_id', personnel_id);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: 'Failed to send verification email. Please ensure your email address is correct.' }),
+      body: JSON.stringify({ error: `Failed to send verification email: ${emailError.message}` }),
     };
   }
 
