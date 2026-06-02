@@ -1311,6 +1311,20 @@ input[type="search"]::-webkit-search-results-decoration {
   margin-bottom: 16px;
 }
 
+/* 6-digit MFA code — slightly narrower than 4-digit PIN */
+.operator-mfa-inputs {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.operator-mfa-inputs .operator-pin-digit {
+  width: 46px;
+  height: 56px;
+  font-size: 1.3rem;
+}
+
 .operator-pin-digit {
   width: 56px;
   height: 64px;

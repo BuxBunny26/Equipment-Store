@@ -10,6 +10,11 @@
   # Publish directory (relative to base)
   publish = "build"
 
+[functions]
+  # Relative to base ("frontend/"), so resolves to frontend/netlify/functions
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
 # Prevent index.html from being cached so users always get the latest build
 [[headers]]
   for = "/index.html"

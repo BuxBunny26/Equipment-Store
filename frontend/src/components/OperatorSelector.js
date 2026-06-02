@@ -1,5 +1,6 @@
 ﻿import React, { useState, useRef, useEffect } from 'react';
 import { useOperator } from '../context/OperatorContext';
+import { mfaApi } from '../services/api';
 
 // Derive the 4-digit PIN from an employee ID (same logic as OperatorModal)
 function derivePin(employeeId) {
@@ -14,9 +15,16 @@ function OperatorSelector() {
   const [pendingPerson, setPendingPerson] = useState(null);
   const [pin, setPin] = useState(['', '', '', '']);
   const [pinError, setPinError] = useState('');
+  const [mfaScreen, setMfaScreen] = useState(false);
+  const [mfaCode, setMfaCode] = useState(['', '', '', '', '', '']);
+  const [mfaError, setMfaError] = useState('');
+  const [mfaLoading, setMfaLoading] = useState(false);
+  const [maskedEmail, setMaskedEmail] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
   const dropdownRef = useRef(null);
   const searchInputRef = useRef(null);
   const pinRefs = [useRef(null), useRef(null), useRef(null), useRef(null)];
+  const mfaRefs = [useRef(null), useRef(null), useRef(null), useRef(null), useRef(null), useRef(null)];
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -71,10 +79,7 @@ function OperatorSelector() {
       const enteredPin = newPin.join('');
       const correctPin = derivePin(pendingPerson.employee_id);
       if (enteredPin === correctPin) {
-        selectOperator(pendingPerson);
-        setPendingPerson(null);
-        setIsOpen(false);
-        setSearchTerm('');
+        sendMfaCode(pendingPerson);
       } else {
         setPinError('Incorrect PIN');
         setPin(['', '', '', '']);
@@ -92,10 +97,7 @@ function OperatorSelector() {
       if (enteredPin.length === 4) {
         const correctPin = derivePin(pendingPerson.employee_id);
         if (enteredPin === correctPin) {
-          selectOperator(pendingPerson);
-          setPendingPerson(null);
-          setIsOpen(false);
-          setSearchTerm('');
+          sendMfaCode(pendingPerson);
         } else {
           setPinError('Incorrect PIN');
           setPin(['', '', '', '']);
@@ -112,6 +114,87 @@ function OperatorSelector() {
     setPendingPerson(null);
     setPin(['', '', '', '']);
     setPinError('');
+    setMfaScreen(false);
+    setMfaCode(['', '', '', '', '', '']);
+    setMfaError('');
+  };
+
+  const sendMfaCode = async (person) => {
+    if (!person.email) {
+      setPinError('No email on file. Contact admin.');
+      setPin(['', '', '', '']);
+      setTimeout(() => pinRefs[0].current?.focus(), 100);
+      return;
+    }
+    setMfaLoading(true);
+    setPinError('');
+    try {
+      const res = await mfaApi.send(person.id, person.email);
+      setMaskedEmail(res.data.masked_email);
+      setMfaScreen(true);
+      setMfaCode(['', '', '', '', '', '']);
+      setMfaError('');
+      setTimeout(() => mfaRefs[0].current?.focus(), 100);
+    } catch (err) {
+      setPinError(err.message || 'Failed to send verification email.');
+      setPin(['', '', '', '']);
+      setTimeout(() => pinRefs[0].current?.focus(), 100);
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleMfaCodeChange = (index, value) => {
+    if (value.length > 1) return;
+    if (value && !/^\d$/.test(value)) return;
+    const newCode = [...mfaCode];
+    newCode[index] = value;
+    setMfaCode(newCode);
+    setMfaError('');
+    if (value && index < 5) mfaRefs[index + 1].current?.focus();
+    if (value && index === 5 && newCode.every(d => d !== '')) handleMfaSubmit(newCode.join(''));
+  };
+
+  const handleMfaCodeKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !mfaCode[index] && index > 0) mfaRefs[index - 1].current?.focus();
+    if (e.key === 'Enter') { const code = mfaCode.join(''); if (code.length === 6) handleMfaSubmit(code); }
+    if (e.key === 'Escape') handleCancelPin();
+  };
+
+  const handleMfaSubmit = async (code) => {
+    setMfaLoading(true);
+    setMfaError('');
+    try {
+      await mfaApi.verify(pendingPerson.id, code);
+      selectOperator(pendingPerson);
+      setPendingPerson(null);
+      setMfaScreen(false);
+      setIsOpen(false);
+      setSearchTerm('');
+    } catch (err) {
+      setMfaError(err.message || 'Invalid code. Please try again.');
+      setMfaCode(['', '', '', '', '', '']);
+      setTimeout(() => mfaRefs[0].current?.focus(), 100);
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (resendCooldown > 0 || !pendingPerson?.email) return;
+    setMfaError('');
+    setMfaCode(['', '', '', '', '', '']);
+    try {
+      const res = await mfaApi.send(pendingPerson.id, pendingPerson.email);
+      setMaskedEmail(res.data.masked_email);
+      setResendCooldown(60);
+      const timer = setInterval(() => {
+        setResendCooldown(prev => { if (prev <= 1) { clearInterval(timer); return 0; } return prev - 1; });
+      }, 1000);
+      setTimeout(() => mfaRefs[0].current?.focus(), 100);
+    } catch (err) {
+      setMfaError(err.message || 'Failed to resend code.');
+    }
   };
 
   const handleClear = (e) => {
@@ -173,6 +256,58 @@ function OperatorSelector() {
       {isOpen && (
         <div className="operator-dropdown">
           {pendingPerson ? (
+            mfaScreen ? (
+              /* MFA email code entry panel */
+              <div style={{ padding: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                  <button onClick={() => { setMfaScreen(false); setPin(['', '', '', '']); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-secondary)' }} title="Back">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+                      <line x1="19" y1="12" x2="5" y2="12" />
+                      <polyline points="12 19 5 12 12 5" />
+                    </svg>
+                  </button>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Verify Email</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Code sent to {maskedEmail}</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 8 }}>
+                  {mfaCode.map((digit, i) => (
+                    <input
+                      key={i}
+                      ref={mfaRefs[i]}
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={1}
+                      value={digit}
+                      onChange={(e) => handleMfaCodeChange(i, e.target.value)}
+                      onKeyDown={(e) => handleMfaCodeKeyDown(i, e)}
+                      disabled={mfaLoading}
+                      style={{
+                        width: 34, height: 42, textAlign: 'center', fontSize: '1.1rem',
+                        border: `2px solid ${mfaError ? '#d32f2f' : 'var(--border-color)'}`,
+                        borderRadius: 8, background: 'var(--bg-primary)', color: 'var(--text-primary)',
+                        outline: 'none',
+                      }}
+                      onFocus={(e) => e.target.style.borderColor = '#1976d2'}
+                      onBlur={(e) => e.target.style.borderColor = mfaError ? '#d32f2f' : 'var(--border-color)'}
+                    />
+                  ))}
+                </div>
+                {mfaLoading && <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', textAlign: 'center' }}>Verifying...</div>}
+                {mfaError && <div style={{ color: '#d32f2f', fontSize: '0.78rem', textAlign: 'center' }}>{mfaError}</div>}
+                <div style={{ textAlign: 'center', marginTop: 6 }}>
+                  <button
+                    onClick={handleResendCode}
+                    disabled={resendCooldown > 0}
+                    style={{ background: 'none', border: 'none', color: resendCooldown > 0 ? 'var(--text-secondary)' : 'var(--primary-color)', fontSize: '0.78rem', cursor: resendCooldown > 0 ? 'default' : 'pointer', padding: '4px 8px' }}
+                  >
+                    {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend code'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+            /* PIN entry panel */
             <div style={{ padding: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                 <button onClick={handleCancelPin} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-secondary)' }} title="Back">
@@ -200,6 +335,7 @@ function OperatorSelector() {
                     value={digit}
                     onChange={(e) => handlePinChange(i, e.target.value)}
                     onKeyDown={(e) => handlePinKeyDown(i, e)}
+                    disabled={mfaLoading}
                     style={{
                       width: 40, height: 48, textAlign: 'center', fontSize: '1.2rem',
                       border: `2px solid ${pinError ? '#d32f2f' : 'var(--border-color)'}`,
@@ -211,8 +347,10 @@ function OperatorSelector() {
                   />
                 ))}
               </div>
+              {mfaLoading && <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'center' }}>Sending code...</div>}
               {pinError && <div style={{ color: '#d32f2f', fontSize: '0.8rem', textAlign: 'center' }}>{pinError}</div>}
             </div>
+            )
           ) : (
           <>
           <div className="operator-dropdown-search">

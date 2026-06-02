@@ -1,0 +1,9 @@
+{
+  "name": "equipment-store-functions",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@supabase/supabase-js": "^2.47.10",
+    "nodemailer": "^6.9.15"
+  }
+}

@@ -1560,4 +1560,33 @@ export const softwareAssignmentsApi = {
     ),
 };
 
+// ============================================
+// MFA — email OTP via Netlify serverless functions
+// ============================================
+export const mfaApi = {
+    // Send a 6-digit OTP to the person's email address
+    send: (personnelId, email) =>
+        fetch('/.netlify/functions/mfa-send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ personnel_id: personnelId, email }),
+        }).then(async (res) => {
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to send verification code');
+            return { data };
+        }),
+
+    // Verify the OTP the user typed
+    verify: (personnelId, token) =>
+        fetch('/.netlify/functions/mfa-verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ personnel_id: personnelId, token }),
+        }).then(async (res) => {
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Invalid verification code');
+            return { data };
+        }),
+};
+
 export default supabase;

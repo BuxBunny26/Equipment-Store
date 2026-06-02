@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useOperator } from '../context/OperatorContext';
+import { mfaApi } from '../services/api';
 
 // Derive the 4-digit PIN from an employee ID
 // e.g. WC492 → 0492, WEC094 → 0094, WCN008 → 0008
@@ -14,8 +15,15 @@ function OperatorModal({ onClose }) {
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [pin, setPin] = useState(['', '', '', '']);
   const [pinError, setPinError] = useState('');
+  const [mfaScreen, setMfaScreen] = useState(false);
+  const [mfaCode, setMfaCode] = useState(['', '', '', '', '', '']);
+  const [mfaError, setMfaError] = useState('');
+  const [mfaLoading, setMfaLoading] = useState(false);
+  const [maskedEmail, setMaskedEmail] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
   const searchInputRef = useRef(null);
   const pinRefs = [useRef(null), useRef(null), useRef(null), useRef(null)];
+  const mfaRefs = [useRef(null), useRef(null), useRef(null), useRef(null), useRef(null), useRef(null)];
 
   // Focus search input on mount
   useEffect(() => {
@@ -26,10 +34,17 @@ function OperatorModal({ onClose }) {
 
   // Focus first pin input when person is selected
   useEffect(() => {
-    if (selectedPerson && pinRefs[0].current) {
+    if (selectedPerson && !mfaScreen && pinRefs[0].current) {
       pinRefs[0].current.focus();
     }
-  }, [selectedPerson]);
+  }, [selectedPerson, mfaScreen]);
+
+  // Focus first MFA input when MFA screen appears
+  useEffect(() => {
+    if (mfaScreen) {
+      setTimeout(() => mfaRefs[0].current?.focus(), 100);
+    }
+  }, [mfaScreen]);
 
   // If operator already selected, don't show
   if (operator) return null;
@@ -49,6 +64,9 @@ function OperatorModal({ onClose }) {
     setSelectedPerson(null);
     setPin(['', '', '', '']);
     setPinError('');
+    setMfaScreen(false);
+    setMfaCode(['', '', '', '', '', '']);
+    setMfaError('');
   };
 
   const handlePinChange = (index, value) => {
@@ -70,8 +88,7 @@ function OperatorModal({ onClose }) {
       const enteredPin = newPin.join('');
       const correctPin = derivePin(selectedPerson.employee_id);
       if (enteredPin === correctPin) {
-        selectOperator(selectedPerson);
-        if (onClose) onClose();
+        sendMfaCode(selectedPerson);
       } else {
         setPinError('Incorrect PIN. Please try again.');
         setPin(['', '', '', '']);
@@ -89,14 +106,98 @@ function OperatorModal({ onClose }) {
       if (enteredPin.length === 4) {
         const correctPin = derivePin(selectedPerson.employee_id);
         if (enteredPin === correctPin) {
-          selectOperator(selectedPerson);
-          if (onClose) onClose();
+          sendMfaCode(selectedPerson);
         } else {
           setPinError('Incorrect PIN. Please try again.');
           setPin(['', '', '', '']);
           setTimeout(() => pinRefs[0].current?.focus(), 100);
         }
       }
+    }
+  };
+
+  const sendMfaCode = async (person) => {
+    if (!person.email) {
+      setPinError('No email address on file. Contact admin to add your email before logging in.');
+      setPin(['', '', '', '']);
+      setTimeout(() => pinRefs[0].current?.focus(), 100);
+      return;
+    }
+    setMfaLoading(true);
+    setPinError('');
+    try {
+      const res = await mfaApi.send(person.id, person.email);
+      setMaskedEmail(res.data.masked_email);
+      setMfaScreen(true);
+      setMfaCode(['', '', '', '', '', '']);
+      setMfaError('');
+    } catch (err) {
+      setPinError(err.message || 'Failed to send verification email.');
+      setPin(['', '', '', '']);
+      setTimeout(() => pinRefs[0].current?.focus(), 100);
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleMfaCodeChange = (index, value) => {
+    if (value.length > 1) return;
+    if (value && !/^\d$/.test(value)) return;
+    const newCode = [...mfaCode];
+    newCode[index] = value;
+    setMfaCode(newCode);
+    setMfaError('');
+    if (value && index < 5) {
+      mfaRefs[index + 1].current?.focus();
+    }
+    if (value && index === 5 && newCode.every(d => d !== '')) {
+      handleMfaSubmit(newCode.join(''));
+    }
+  };
+
+  const handleMfaCodeKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !mfaCode[index] && index > 0) {
+      mfaRefs[index - 1].current?.focus();
+    }
+    if (e.key === 'Enter') {
+      const code = mfaCode.join('');
+      if (code.length === 6) handleMfaSubmit(code);
+    }
+  };
+
+  const handleMfaSubmit = async (code) => {
+    setMfaLoading(true);
+    setMfaError('');
+    try {
+      await mfaApi.verify(selectedPerson.id, code);
+      selectOperator(selectedPerson);
+      if (onClose) onClose();
+    } catch (err) {
+      setMfaError(err.message || 'Invalid code. Please try again.');
+      setMfaCode(['', '', '', '', '', '']);
+      setTimeout(() => mfaRefs[0].current?.focus(), 100);
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (resendCooldown > 0 || !selectedPerson?.email) return;
+    setMfaError('');
+    setMfaCode(['', '', '', '', '', '']);
+    try {
+      const res = await mfaApi.send(selectedPerson.id, selectedPerson.email);
+      setMaskedEmail(res.data.masked_email);
+      setResendCooldown(60);
+      const timer = setInterval(() => {
+        setResendCooldown(prev => {
+          if (prev <= 1) { clearInterval(timer); return 0; }
+          return prev - 1;
+        });
+      }, 1000);
+      setTimeout(() => mfaRefs[0].current?.focus(), 100);
+    } catch (err) {
+      setMfaError(err.message || 'Failed to resend code.');
     }
   };
 
@@ -107,6 +208,69 @@ function OperatorModal({ onClose }) {
     );
     window.open(`mailto:nadhira@wearcheckrs.com?subject=${subject}&body=${body}`, '_blank');
   };
+
+  // MFA Email Verification Screen
+  if (mfaScreen && selectedPerson) {
+    return (
+      <div className="operator-modal-overlay">
+        <div className="operator-modal">
+          <div className="operator-modal-header">
+            <div className="operator-modal-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                <polyline points="22,6 12,13 2,6" />
+              </svg>
+            </div>
+            <h2>Check Your Email</h2>
+            <p>A 6-digit code was sent to <strong>{maskedEmail}</strong>. Enter it below to continue.</p>
+          </div>
+
+          <div className="operator-pin-container">
+            <div className="operator-mfa-inputs">
+              {mfaCode.map((digit, i) => (
+                <input
+                  key={i}
+                  ref={mfaRefs[i]}
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={(e) => handleMfaCodeChange(i, e.target.value)}
+                  onKeyDown={(e) => handleMfaCodeKeyDown(i, e)}
+                  className={`operator-pin-digit ${mfaError ? 'error' : ''}`}
+                  autoComplete="off"
+                  disabled={mfaLoading}
+                />
+              ))}
+            </div>
+            {mfaLoading && <div className="operator-pin-error" style={{ color: 'var(--text-secondary)' }}>Verifying...</div>}
+            {mfaError && <div className="operator-pin-error">{mfaError}</div>}
+            <button
+              type="button"
+              className="operator-pin-forgot"
+              onClick={handleResendCode}
+              disabled={resendCooldown > 0}
+            >
+              {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend code'}
+            </button>
+          </div>
+
+          <div className="operator-modal-footer">
+            <button
+              type="button"
+              className="operator-modal-back-btn"
+              onClick={() => { setMfaScreen(false); setPin(['', '', '', '']); setPinError(''); }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+              Back
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // PIN Entry Screen
   if (selectedPerson) {
@@ -143,6 +307,9 @@ function OperatorModal({ onClose }) {
             </div>
             {pinError && (
               <div className="operator-pin-error">{pinError}</div>
+            )}
+            {mfaLoading && !mfaScreen && (
+              <div className="operator-pin-error" style={{ color: 'var(--text-secondary)' }}>Sending verification code...</div>
             )}
             <button
               type="button"
