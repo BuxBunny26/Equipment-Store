@@ -192,6 +192,8 @@ button {
   position: fixed;
   height: 100vh;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .sidebar-header {
@@ -212,6 +214,7 @@ button {
 
 .sidebar-nav {
   padding: 16px 0;
+  flex: 1;
 }
 
 .nav-section {
@@ -835,6 +838,35 @@ input[type="search"]::-webkit-search-results-decoration {
 .sidebar-operator {
   padding: 12px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-logout {
+  padding: 12px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: auto;
+}
+
+.sidebar-logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(211, 47, 47, 0.15);
+  border: 1px solid rgba(211, 47, 47, 0.3);
+  border-radius: var(--radius-md);
+  color: rgba(255, 120, 120, 0.9);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: var(--transition-fast);
+  text-align: left;
+}
+
+.sidebar-logout-btn:hover {
+  background: rgba(211, 47, 47, 0.28);
+  border-color: rgba(211, 47, 47, 0.5);
+  color: #ff8a80;
 }
 
 .operator-selector {
