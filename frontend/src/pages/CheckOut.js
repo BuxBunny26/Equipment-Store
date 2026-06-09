@@ -14,6 +14,7 @@ import { supabase } from '../services/supabaseClient';
 function CheckOut() {
     const [showConfirm, setShowConfirm] = useState(false);
     const [pendingSubmit, setPendingSubmit] = useState(null);
+    const [validationErrors, setValidationErrors] = useState([]);
     const [showAddEquipment, setShowAddEquipment] = useState(false);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -199,30 +200,45 @@ function CheckOut() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const errors = [];
+
     if (selectedEquipmentIds.length === 0) {
-      setError('Please select at least one piece of equipment.');
-      return;
+      errors.push('Select at least one piece of equipment.');
     }
     if (!formData.personnel_id) {
-      setError('Please select the person issuing the equipment.');
-      return;
+      errors.push('Select the person to issue equipment to (Issue To field).');
     }
     if (formData.destination_type === 'internal' && !formData.location_id) {
-      setError('Please select a destination location.');
-      return;
+      errors.push('Select a destination location.');
     }
     if (formData.destination_type === 'customer' && selectedCustomerIds.length === 0) {
-      setError('Please select at least one customer site.');
-      return;
+      errors.push('Select at least one customer site.');
     }
     if (formData.destination_type === 'calibration' && !formData.calibration_provider) {
-      setError('Please enter a calibration provider.');
-      return;
+      errors.push('Enter a calibration provider.');
     }
     if (formData.destination_type === 'transfer' && selectedTransferSiteIds.length === 0) {
-      setError('Please select at least one destination site for the transfer.');
+      errors.push('Select at least one destination site for the transfer.');
+    }
+    const quantityTrackedItem = [...availableEquipment, ...checkedOutEquipment].find(
+      eq => selectedEquipmentIds.includes(eq.id.toString()) && eq.is_quantity_tracked
+    );
+    if (quantityTrackedItem && (!formData.quantity || parseInt(formData.quantity) < 1)) {
+      errors.push(`Enter a valid quantity for "${quantityTrackedItem.equipment_name}".`);
+    }
+    if (!formData.condition) {
+      errors.push('Select the current condition of the equipment.');
+    }
+    if (formData.condition && formData.condition !== 'Excellent' && !formData.reason) {
+      errors.push('Enter a reason for the non-Excellent condition.');
+    }
+
+    if (errors.length > 0) {
+      setValidationErrors(errors);
       return;
     }
+
+    setValidationErrors([]);
     setError(null);
     setPendingSubmit(() => () => {
       setSubmitting(true);
@@ -693,6 +709,21 @@ function CheckOut() {
           </div>
 
           <form onSubmit={handleSubmit}>
+                  {validationErrors.length > 0 && (
+                    <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.7)' }}>
+                      <div className="modal" style={{ padding: '24px', borderRadius: '8px', maxWidth: '420px', margin: 'auto' }}>
+                        <h2 style={{ marginBottom: '12px', color: 'var(--danger-color, #dc3545)' }}>Please fix the following</h2>
+                        <ul style={{ margin: '0 0 20px 0', paddingLeft: '20px', lineHeight: '1.7' }}>
+                          {validationErrors.map((err, i) => (
+                            <li key={i} style={{ fontSize: '0.9rem' }}>{err}</li>
+                          ))}
+                        </ul>
+                        <div style={{ display: 'flex', justifyContent: 'center' }}>
+                          <button className="btn btn-primary" onClick={() => setValidationErrors([])}>OK, I'll fix it</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {showConfirm && (
                     <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.7)' }}>
                       <div className="modal" style={{ padding: '24px', borderRadius: '8px', maxWidth: '400px', margin: 'auto' }}>
@@ -1142,7 +1173,6 @@ function CheckOut() {
                   onChange={(val) => setFormData((prev) => ({ ...prev, receiving_personnel_id: val }))}
                   placeholder="Search by name or employee ID..."
                   options={personnel
-                    .filter((p) => p.id.toString() !== formData.personnel_id)
                     .map((person) => ({
                       id: person.id,
                       label: person.full_name || `${person.first_name} ${person.last_name}`,
