@@ -1199,7 +1199,6 @@ function CheckOut() {
                   onChange={handleChange}
                   min="1"
                   max={selectedEquipmentList.find(eq => eq.is_quantity_tracked)?.available_quantity}
-                  required
                 />
               </div>
             )}
@@ -1403,18 +1402,7 @@ function CheckOut() {
               <button
                 type="submit"
                 className="btn btn-primary btn-lg"
-                disabled={
-                  selectedEquipmentIds.length === 0 ||
-                  !formData.personnel_id ||
-                  (formData.destination_type === 'internal' ? !formData.location_id :
-                    formData.destination_type === 'customer' ? selectedCustomerIds.length === 0 :
-                    formData.destination_type === 'calibration' ? !formData.calibration_provider :
-                    formData.destination_type === 'transfer' ? selectedTransferSiteIds.length === 0 : false) ||
-                  submitting ||
-                  (shouldShowReason() && !formData.reason) ||
-                  ((formData.destination_type === 'internal' || formData.destination_type === 'customer') && !formData.expected_return_date) ||
-                  (selectedEquipmentList.some(eq => eq.is_quantity_tracked) && (!formData.quantity || formData.quantity < 1 || formData.quantity > selectedEquipmentList.find(eq => eq.is_quantity_tracked)?.available_quantity))
-                }
+                disabled={submitting}
               >
                 {submitting ? 'Processing...' : 'Check Out Equipment'}
               </button>
