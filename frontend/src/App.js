@@ -34,6 +34,7 @@ import Vehicles from './pages/Vehicles';
 import VehicleCheckoutForm from './pages/VehicleCheckoutForm';
 import AssetsDashboard from './pages/AssetsDashboard';
 import AssetAnalytics from './pages/AssetAnalytics';
+import MyHistory from './pages/MyHistory';
 import EquipmentAnalytics from './pages/EquipmentAnalytics';
 import SoftwareLicenses from './pages/SoftwareLicenses';
 
@@ -289,6 +290,11 @@ function AppContent() {
           <NavLink to="/customer-sites" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <Icons.Building /> Customer Sites
           </NavLink>
+          {operator && (
+            <NavLink to="/my-history" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+              <Icons.Clock /> My History
+            </NavLink>
+          )}
         </div>
         
         <div className="nav-section">
@@ -387,6 +393,7 @@ function AppContent() {
         <Route path="/assets" element={<AssetsDashboard />} />
         <Route path="/asset-analytics" element={<AssetAnalytics />} />
         <Route path="/software-licenses" element={['admin', 'manager'].includes(operatorRole?.toLowerCase()) ? <SoftwareLicenses /> : <Navigate to="/" replace />} />
+        <Route path="/my-history" element={<MyHistory />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     </main>
