@@ -315,18 +315,22 @@ function AppContent() {
           <NavLink to="/laptop-assignments" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <Icons.Laptop /> Laptops
           </NavLink>
-          <NavLink to="/cellphone-assignments" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-            <Icons.Phone /> Cellphones
-          </NavLink>
+          {['admin', 'manager'].includes(operatorRole?.toLowerCase()) && (
+            <NavLink to="/cellphone-assignments" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+              <Icons.Phone /> Cellphones
+            </NavLink>
+          )}
           <NavLink to="/vehicles" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <Icons.Vehicle /> Vehicles
           </NavLink>
           <NavLink to="/vehicle-checkout" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             <Icons.CheckOut /> Pre-Trip Form
           </NavLink>
-          <NavLink to="/software-licenses" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-            <Icons.Software /> Software
-          </NavLink>
+          {['admin', 'manager'].includes(operatorRole?.toLowerCase()) && (
+            <NavLink to="/software-licenses" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+              <Icons.Software /> Software
+            </NavLink>
+          )}
         </div>
         
         <div className="nav-section">
@@ -377,12 +381,12 @@ function AppContent() {
         <Route path="/audit-log" element={<AuditLog />} />
         <Route path="/users" element={operatorRole?.toLowerCase() === 'admin' ? <UserManagement /> : <Navigate to="/" replace />} />
         <Route path="/laptop-assignments" element={<LaptopAssignments />} />
-        <Route path="/cellphone-assignments" element={<CellphoneAssignments />} />
+        <Route path="/cellphone-assignments" element={['admin', 'manager'].includes(operatorRole?.toLowerCase()) ? <CellphoneAssignments /> : <Navigate to="/" replace />} />
         <Route path="/vehicles" element={<Vehicles />} />
         <Route path="/vehicle-checkout" element={<VehicleCheckoutForm />} />
         <Route path="/assets" element={<AssetsDashboard />} />
         <Route path="/asset-analytics" element={<AssetAnalytics />} />
-        <Route path="/software-licenses" element={<SoftwareLicenses />} />
+        <Route path="/software-licenses" element={['admin', 'manager'].includes(operatorRole?.toLowerCase()) ? <SoftwareLicenses /> : <Navigate to="/" replace />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     </main>

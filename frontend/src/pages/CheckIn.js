@@ -136,6 +136,55 @@ function CheckIn() {
     }
   };
 
+  const handleReturnAndReissue = async () => {
+    if (!formData.location_id) {
+      setError('Please select a return location before re-issuing.');
+      return;
+    }
+    if (!formData.condition) {
+      setError('Please select a condition before re-issuing.');
+      return;
+    }
+    if (isReasonRequired() && !formData.reason) {
+      setError('Please provide a reason for the condition before re-issuing.');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const payload = {
+        equipment_id: parseInt(formData.equipment_id),
+        action: 'IN',
+        quantity: 1,
+        location_id: parseInt(formData.location_id),
+        notes: [
+          formData.condition ? `Condition: ${formData.condition}` : null,
+          formData.reason ? `Reason: ${formData.reason}` : null,
+          formData.notes || null,
+        ].filter(Boolean).join(' | '),
+        created_by: operator?.full_name || 'System',
+      };
+      await movementsApi.create(payload, photoFile);
+      try {
+        const resResponse = await reservationsApi.getAll({ equipment_id: parseInt(formData.equipment_id) });
+        const activeRes = (resResponse.data || []).filter(r =>
+          ['active', 'approved'].includes(r.status?.toLowerCase()) &&
+          r.equipment_id === parseInt(formData.equipment_id)
+        );
+        for (const res of activeRes) {
+          await reservationsApi.updateStatus(res.id, 'completed');
+        }
+      } catch (resErr) {
+        console.error('Failed to update reservation on check-in:', resErr);
+      }
+      navigate(`/check-out?equipment=${selectedEquipment.id}`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -553,9 +602,10 @@ function CheckIn() {
               <button
                 type="button"
                 className="btn btn-secondary"
-                onClick={() => navigate(`/check-out?equipment=${selectedEquipment.id}`)}
+                onClick={handleReturnAndReissue}
+                disabled={submitting || !formData.location_id || !formData.condition || (isReasonRequired() && !formData.reason)}
               >
-                Return & Re-issue →
+                {submitting ? 'Processing...' : 'Return & Re-issue →'}
               </button>
             </div>
           )}
