@@ -292,7 +292,7 @@ function AppContent() {
           </NavLink>
           {operator && (
             <NavLink to="/my-history" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-              <Icons.Clock /> My History
+              <Icons.History /> My History
             </NavLink>
           )}
         </div>
