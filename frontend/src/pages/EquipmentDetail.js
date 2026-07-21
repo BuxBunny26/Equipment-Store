@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { equipmentApi, calibrationApi } from '../services/api';
+import { equipmentApi, calibrationApi, categoriesApi, subcategoriesApi } from '../services/api';
 import EquipmentImageGallery from '../components/EquipmentImageGallery';
 import { getCustomFieldRule, getCustomFieldValue } from '../utils/customFields';
+import { useOperator } from '../context/OperatorContext';
 
 function EquipmentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { operatorRole } = useOperator();
+  const isAdmin = operatorRole && ['admin', 'manager'].includes(operatorRole.toLowerCase());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [equipment, setEquipment] = useState(null);
@@ -16,6 +19,12 @@ function EquipmentDetail() {
   const [editingChannel, setEditingChannel] = useState(false);
   const [channelValue, setChannelValue] = useState('');
   const [savingChannel, setSavingChannel] = useState(false);
+  const [editingCategory, setEditingCategory] = useState(false);
+  const [catEditCatId, setCatEditCatId] = useState('');
+  const [catEditSubId, setCatEditSubId] = useState('');
+  const [savingCategory, setSavingCategory] = useState(false);
+  const [availableCats, setAvailableCats] = useState([]);
+  const [availableSubs, setAvailableSubs] = useState([]);
 
   useEffect(() => {
     fetchEquipment();
@@ -33,6 +42,64 @@ function EquipmentDetail() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openCategoryEdit = async () => {
+    try {
+      const [catRes, subRes] = await Promise.all([
+        categoriesApi.getAll(),
+        subcategoriesApi.getAll(equipment.category_id),
+      ]);
+      setAvailableCats(catRes.data || []);
+      setAvailableSubs(subRes.data || []);
+      setCatEditCatId(equipment.category_id?.toString() || '');
+      setCatEditSubId(equipment.subcategory_id?.toString() || '');
+      setEditingCategory(true);
+    } catch (err) {
+      console.error('Failed to load categories:', err);
+    }
+  };
+
+  const handleCatEditCategoryChange = async (newCatId) => {
+    setCatEditCatId(newCatId);
+    setCatEditSubId('');
+    if (newCatId) {
+      try {
+        const { data } = await subcategoriesApi.getAll(newCatId);
+        setAvailableSubs(data || []);
+      } catch (err) {
+        setAvailableSubs([]);
+      }
+    } else {
+      setAvailableSubs([]);
+    }
+  };
+
+  const handleSaveCategory = async () => {
+    if (!catEditCatId || !catEditSubId) return;
+    setSavingCategory(true);
+    try {
+      await equipmentApi.update(equipment.id, {
+        category_id: parseInt(catEditCatId),
+        subcategory_id: parseInt(catEditSubId),
+      });
+      const selectedCat = availableCats.find(c => c.id.toString() === catEditCatId);
+      const selectedSub = availableSubs.find(s => s.id.toString() === catEditSubId);
+      setEquipment(prev => ({
+        ...prev,
+        category_id: parseInt(catEditCatId),
+        subcategory_id: parseInt(catEditSubId),
+        category_name: selectedCat?.name || prev.category_name,
+        subcategory_name: selectedSub?.name || prev.subcategory_name,
+        is_checkout_allowed: selectedCat?.is_checkout_allowed ?? prev.is_checkout_allowed,
+        is_consumable: selectedCat?.is_consumable ?? prev.is_consumable,
+      }));
+      setEditingCategory(false);
+    } catch (err) {
+      console.error('Failed to save category:', err);
+    } finally {
+      setSavingCategory(false);
     }
   };
 
@@ -288,27 +355,94 @@ function EquipmentDetail() {
             </div>
 
             <div>
-              <h3 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '16px', color: 'var(--text-secondary)' }}>
+              <h3 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '16px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 Classification
+                {isAdmin && !editingCategory && (
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    onClick={openCategoryEdit}
+                    style={{ fontSize: '0.75rem', padding: '2px 8px' }}
+                    title="Reassign category"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12" style={{ display: 'inline', marginRight: 3 }}>
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                    Reassign
+                  </button>
+                )}
               </h3>
-              <dl style={{ display: 'grid', gap: '12px' }}>
-                <div>
-                  <dt style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Category</dt>
-                  <dd style={{ fontWeight: 500 }}>{equipment.category_name}</dd>
+              {editingCategory ? (
+                <div style={{ display: 'grid', gap: '10px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Category</label>
+                    <select
+                      className="form-select"
+                      value={catEditCatId}
+                      onChange={e => handleCatEditCategoryChange(e.target.value)}
+                      style={{ fontSize: '0.85rem' }}
+                    >
+                      <option value="">Select category...</option>
+                      {availableCats.map(cat => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}{cat.is_consumable ? ' (Consumable)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Subcategory</label>
+                    <select
+                      className="form-select"
+                      value={catEditSubId}
+                      onChange={e => setCatEditSubId(e.target.value)}
+                      disabled={!catEditCatId}
+                      style={{ fontSize: '0.85rem' }}
+                    >
+                      <option value="">Select subcategory...</option>
+                      {availableSubs.map(sub => (
+                        <option key={sub.id} value={sub.id}>{sub.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={handleSaveCategory}
+                      disabled={!catEditCatId || !catEditSubId || savingCategory}
+                      style={{ fontSize: '0.78rem' }}
+                    >
+                      {savingCategory ? 'Saving...' : 'Save'}
+                    </button>
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      onClick={() => setEditingCategory(false)}
+                      style={{ fontSize: '0.78rem' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <dt style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Subcategory</dt>
-                  <dd style={{ fontWeight: 500 }}>{equipment.subcategory_name}</dd>
-                </div>
-                <div>
-                  <dt style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Checkout Allowed</dt>
-                  <dd>{equipment.is_checkout_allowed ? 'Yes' : 'No'}</dd>
-                </div>
-                <div>
-                  <dt style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Consumable</dt>
-                  <dd>{equipment.is_consumable ? 'Yes' : 'No'}</dd>
-                </div>
-              </dl>
+              ) : (
+                <dl style={{ display: 'grid', gap: '12px' }}>
+                  <div>
+                    <dt style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Category</dt>
+                    <dd style={{ fontWeight: 500 }}>{equipment.category_name}</dd>
+                  </div>
+                  <div>
+                    <dt style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Subcategory</dt>
+                    <dd style={{ fontWeight: 500 }}>{equipment.subcategory_name}</dd>
+                  </div>
+                  <div>
+                    <dt style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Checkout Allowed</dt>
+                    <dd>{equipment.is_checkout_allowed ? 'Yes' : 'No'}</dd>
+                  </div>
+                  <div>
+                    <dt style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Consumable</dt>
+                    <dd>{equipment.is_consumable ? 'Yes' : 'No'}</dd>
+                  </div>
+                </dl>
+              )}
             </div>
 
             <div>
