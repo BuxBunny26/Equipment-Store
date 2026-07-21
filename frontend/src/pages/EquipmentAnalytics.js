@@ -335,7 +335,7 @@ function EquipmentAnalytics() {
   // -- Site / Location checkout analytics --
 
   // Which site currently has which equipment (grouped by location -> list of equipment)
-  // Only include checked-out equipment â€” available/in-storage items have no meaningful site
+  // Only include checked-out equipment — available/in-storage items have no meaningful site
   const equipmentBySite = useMemo(() => {
     const grouped = {};
     equipment.filter(e => e.status === 'Checked Out').forEach(e => {
@@ -493,7 +493,7 @@ function EquipmentAnalytics() {
   };
 
   const truncLabel = (str) => truncate(str, isSmall ? 12 : isMobile ? 16 : 22);
-  const truncate = (str, len = 20) => str && str.length > len ? str.slice(0, len - 1) + 'â€¦' : str;
+  const truncate = (str, len = 20) => str && str.length > len ? str.slice(0, len - 1) + '...' : str;
 
   const renderCustomLegend = (props) => {
     const { payload } = props;
@@ -777,7 +777,7 @@ function EquipmentAnalytics() {
                         <span className="badge" style={{ background: o.a.status === 'approved' ? '#1976d2' : '#ed6c02', fontSize: '0.7rem' }}>{o.a.status}</span>
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>
-                        {formatDate(o.a.start_date)} â€” {formatDate(o.a.end_date)}
+                        {formatDate(o.a.start_date)} — {formatDate(o.a.end_date)}
                       </td>
                       <td>
                         <div>{o.b.personnel_name}</div>
@@ -785,7 +785,7 @@ function EquipmentAnalytics() {
                         <span className="badge" style={{ background: o.b.status === 'approved' ? '#1976d2' : '#ed6c02', fontSize: '0.7rem' }}>{o.b.status}</span>
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>
-                        {formatDate(o.b.start_date)} â€” {formatDate(o.b.end_date)}
+                        {formatDate(o.b.start_date)} — {formatDate(o.b.end_date)}
                       </td>
                       <td>
                         <span className="badge" style={{ background: '#d32f2f' }}>{overlapDays} day{overlapDays !== 1 ? 's' : ''}</span>
@@ -1363,7 +1363,7 @@ function EquipmentAnalytics() {
                     : noDate.slice(0, 4).map(e => (
                       <div key={e.id} style={{ fontSize: '0.78rem', marginBottom: 3 }}>
                         <span style={{ fontWeight: 600 }}>{e.equipment_id}</span>
-                        <span style={{ color: 'var(--text-secondary)', marginLeft: 6 }}>{e.checked_out_to || 'â€”'}</span>
+                        <span style={{ color: 'var(--text-secondary)', marginLeft: 6 }}>{e.checked_out_to || '—'}</span>
                       </div>
                     ))
                   }
@@ -1539,7 +1539,7 @@ function EquipmentAnalytics() {
             {/* Overdue items */}
             {enrichedOverdue.length > 0 && (
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontWeight: 600, marginBottom: 8, color: '#d32f2f', fontSize: '0.9rem' }}>Overdue â€” Not Yet Returned</div>
+                <div style={{ fontWeight: 600, marginBottom: 8, color: '#d32f2f', fontSize: '0.9rem' }}>Overdue — Not Yet Returned</div>
                 <div className="table-container">
                   <table className="equipment-table">
                     <thead><tr><th>Equipment</th><th>Held By</th><th>Site / Location</th><th>Was Due</th><th>Days Overdue</th><th>Calibration</th></tr></thead>
@@ -1603,7 +1603,7 @@ function EquipmentAnalytics() {
                           <td><strong>{r.equipment_code}</strong><br /><span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{r.equipment_name}</span></td>
                           <td>{r.personnel_name || r.customer_name || '-'}</td>
                           <td style={{ whiteSpace: 'nowrap', fontSize: '0.82rem' }}>{formatDate(r.end_date)}</td>
-                          <td style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{r.purpose || 'â€”'}</td>
+                          <td style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{r.purpose || '—'}</td>
                           <td><span className="badge" style={{ background: r.status === 'approved' ? '#1976d2' : '#ed6c02', fontSize: '0.7rem' }}>{r.status}</span></td>
                         </tr>
                       ))}
@@ -1624,7 +1624,7 @@ function EquipmentAnalytics() {
                       {selectedDayData.calExpiries.map((c, idx) => (
                         <tr key={c.equipment_id || idx}>
                           <td><strong>{c.equipment_code}</strong><br /><span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{c.equipment_name}</span></td>
-                          <td style={{ fontSize: '0.82rem' }}>{c.serial_number || 'â€”'}</td>
+                          <td style={{ fontSize: '0.82rem' }}>{c.serial_number || '—'}</td>
                           <td style={{ fontSize: '0.82rem', color: '#f59e0b', fontWeight: 600 }}>{c.expiry_date || c.calibration_expiry_date}</td>
                           <td><span className="badge" style={{ background: c.calibration_status === 'Expired' ? '#d32f2f' : '#f59e0b', fontSize: '0.7rem' }}>{c.calibration_status || 'Due'}</span></td>
                         </tr>
@@ -1638,7 +1638,7 @@ function EquipmentAnalytics() {
             {/* Quick-book reservation form */}
             {quickBookDay === selectedDayData.dateStr && (
               <div style={{ marginTop: 16, padding: 16, borderRadius: 10, border: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}>
-                <div style={{ fontWeight: 700, marginBottom: 12, color: '#1976d2', fontSize: '0.95rem' }}>New Reservation â€” {selectedDayData.dateStr}</div>
+                <div style={{ fontWeight: 700, marginBottom: 12, color: '#1976d2', fontSize: '0.95rem' }}>New Reservation — {selectedDayData.dateStr}</div>
                 {quickBookSuccess ? (
                   <div style={{ color: '#2e7d32', fontWeight: 600 }}>Reservation created successfully! <button className="btn btn-sm btn-secondary" style={{ marginLeft: 8 }} onClick={() => { setQuickBookDay(null); setQuickBookSuccess(false); }}>Close</button></div>
                 ) : (
@@ -1647,9 +1647,9 @@ function EquipmentAnalytics() {
                       <label className="form-label">Equipment *</label>
                       <select className="form-control" value={quickBookForm.equipment_id}
                         onChange={e => setQuickBookForm(f => ({ ...f, equipment_id: e.target.value }))}>
-                        <option value="">â€” select â€”</option>
+                        <option value="">— select —</option>
                         {equipment.filter(eq => eq.status === 'Available').map(eq => (
-                          <option key={eq.id} value={eq.id}>{eq.equipment_id} â€” {eq.equipment_name}</option>
+                          <option key={eq.id} value={eq.id}>{eq.equipment_id} — {eq.equipment_name}</option>
                         ))}
                       </select>
                     </div>
@@ -1657,7 +1657,7 @@ function EquipmentAnalytics() {
                       <label className="form-label">For (Person) *</label>
                       <select className="form-control" value={quickBookForm.personnel_id}
                         onChange={e => setQuickBookForm(f => ({ ...f, personnel_id: e.target.value }))}>
-                        <option value="">â€” select â€”</option>
+                        <option value="">— select —</option>
                         {quickBookPersonnel.map(p => (
                           <option key={p.id} value={p.id}>{p.full_name}</option>
                         ))}
