@@ -1398,6 +1398,67 @@ export const laptopAssignmentsApi = {
     ),
 };
 
+// Laptop Images
+export const laptopImagesApi = {
+    getAll: (assignmentId) => wrap(
+        supabase.from('laptop_images').select('*')
+            .eq('laptop_assignment_id', assignmentId)
+            .order('is_primary', { ascending: false })
+            .order('sort_order').order('created_at')
+    ),
+    upload: async (assignmentId, file, caption, isPrimary, uploadedBy) => {
+        if (isPrimary === 'true' || isPrimary === true) {
+            await supabase.from('laptop_images').update({ is_primary: false }).eq('laptop_assignment_id', assignmentId);
+        }
+        const fileName = `laptop-${assignmentId}-${Date.now()}-${file.name}`;
+        const { error: uploadError } = await supabase.storage.from('laptop-images')
+            .upload(fileName, file, { contentType: file.type });
+        if (uploadError) throw new Error(uploadError.message);
+        const { data: urlData } = supabase.storage.from('laptop-images').getPublicUrl(fileName);
+        const { data: maxOrder } = await supabase.from('laptop_images')
+            .select('sort_order').eq('laptop_assignment_id', assignmentId)
+            .order('sort_order', { ascending: false }).limit(1);
+        const nextOrder = (maxOrder?.[0]?.sort_order || 0) + 1;
+        return wrap(supabase.from('laptop_images').insert({
+            laptop_assignment_id: assignmentId, filename: fileName, original_filename: file.name,
+            file_path: urlData.publicUrl, file_size: file.size, mime_type: file.type,
+            caption: caption || null, is_primary: isPrimary === 'true' || isPrimary === true,
+            sort_order: nextOrder, uploaded_by: uploadedBy || null,
+        }).select().single());
+    },
+    uploadMultiple: async (assignmentId, files, uploadedBy) => {
+        const { data: maxOrder } = await supabase.from('laptop_images')
+            .select('sort_order').eq('laptop_assignment_id', assignmentId)
+            .order('sort_order', { ascending: false }).limit(1);
+        let currentOrder = maxOrder?.[0]?.sort_order || 0;
+        const uploaded = [];
+        for (const file of files) {
+            currentOrder++;
+            const fileName = `laptop-${assignmentId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}${file.name.substring(file.name.lastIndexOf('.'))}`;
+            await supabase.storage.from('laptop-images').upload(fileName, file, { contentType: file.type });
+            const { data: urlData } = supabase.storage.from('laptop-images').getPublicUrl(fileName);
+            const { data: img } = await supabase.from('laptop_images').insert({
+                laptop_assignment_id: assignmentId, filename: fileName, original_filename: file.name,
+                file_path: urlData.publicUrl, file_size: file.size, mime_type: file.type,
+                sort_order: currentOrder, uploaded_by: uploadedBy || null,
+            }).select().single();
+            if (img) uploaded.push(img);
+        }
+        return { data: uploaded };
+    },
+    update: (imageId, data) => wrap(supabase.from('laptop_images').update(data).eq('id', imageId).select().single()),
+    setPrimary: async (imageId) => {
+        const { data: img } = await supabase.from('laptop_images').select('laptop_assignment_id').eq('id', imageId).single();
+        if (img) await supabase.from('laptop_images').update({ is_primary: false }).eq('laptop_assignment_id', img.laptop_assignment_id);
+        return wrap(supabase.from('laptop_images').update({ is_primary: true }).eq('id', imageId).select().single());
+    },
+    delete: async (imageId) => {
+        const { data: img } = await supabase.from('laptop_images').select('filename').eq('id', imageId).single();
+        if (img?.filename) await supabase.storage.from('laptop-images').remove([img.filename]);
+        return wrap(supabase.from('laptop_images').delete().eq('id', imageId));
+    },
+};
+
 // Cellphone Assignments
 export const cellphoneAssignmentsApi = {
     getAll: (activeOnly = true) => {

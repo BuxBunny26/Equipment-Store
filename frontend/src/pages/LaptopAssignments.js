@@ -7,10 +7,13 @@ import { buildDivisionLookup, lookupDivision } from '../utils/divisionUtils';
 import { getAssetConfig } from './Settings';
 import { exportData } from '../services/exportUtils';
 import ExportMenu from '../components/ExportMenu';
+import LaptopImageGallery from '../components/LaptopImageGallery';
 
 function LaptopAssignments() {
-  const { operatorRole } = useOperator();
+  const { operator, operatorRole } = useOperator();
   const isAdminOrManager = true;
+  const isAdmin = operatorRole?.toLowerCase() === 'admin';
+  const isManagerRole = operatorRole?.toLowerCase() === 'manager';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [assignments, setAssignments] = useState([]);
@@ -154,10 +157,36 @@ function LaptopAssignments() {
     });
   };
 
+  // Which laptop records the current operator is allowed to see:
+  // - admin: everyone's laptops
+  // - manager: their own laptop + laptops of personnel who report to them (direct reports)
+  // - everyone else: only their own laptop
+  const visibleAssignments = useMemo(() => {
+    if (isAdmin) return assignments;
+    if (!operator) return [];
+
+    const normalise = (s) => (s || '').trim().toLowerCase();
+    const isOperatorRecord = (a) => (
+      (operator.employee_id && a.employee_id === operator.employee_id) ||
+      (!operator.employee_id && normalise(a.employee_name) === normalise(operator.full_name))
+    );
+
+    if (isManagerRole) {
+      const reportNames = new Set(
+        personnel
+          .filter(p => normalise(p.supervisor) === normalise(operator.full_name))
+          .map(p => normalise(p.full_name))
+      );
+      return assignments.filter(a => isOperatorRecord(a) || reportNames.has(normalise(a.employee_name)));
+    }
+
+    return assignments.filter(isOperatorRecord);
+  }, [assignments, personnel, operator, isAdmin, isManagerRole]);
+
   // Detect laptop assignment records not linked to any personnel entry
   const unlinkedEmployees = useMemo(() => {
     const seen = new Set();
-    return assignments
+    return visibleAssignments
       .filter(a => a.laptop_status === 'Active')
       .filter(a => {
         const linked = personnel.some(
@@ -170,15 +199,15 @@ function LaptopAssignments() {
       })
       .map(a => ({ employee_name: a.employee_name, employee_id: a.employee_id || '', employee_email: a.employee_email || '' }))
       .filter(a => !ignoredUnlinked.has(a.employee_name));
-  }, [assignments, personnel, ignoredUnlinked]);
+  }, [visibleAssignments, personnel, ignoredUnlinked]);
 
   // Unique divisions and brands for filters
   const personnelDivisions = personnel.map(p => p.division).filter(Boolean);
-  const assignmentDivisions = assignments.map(a => getDivision(a)).filter(Boolean);
+  const assignmentDivisions = visibleAssignments.map(a => getDivision(a)).filter(Boolean);
   const divisions = [...new Set([...personnelDivisions, ...assignmentDivisions])].sort();
-  const brands = [...new Set(assignments.map(a => a.laptop_brand).filter(Boolean))].sort();
+  const brands = [...new Set(visibleAssignments.map(a => a.laptop_brand).filter(Boolean))].sort();
 
-  const filtered = assignments.filter(a => {
+  const filtered = visibleAssignments.filter(a => {
     if (statusFilter && a.laptop_status !== statusFilter) return false;
     if (brandFilter && a.laptop_brand !== brandFilter) return false;
     if (divisionFilter) {
@@ -233,36 +262,36 @@ function LaptopAssignments() {
   // Division breakdown
   const divisionBreakdown = useMemo(() => {
     const counts = {};
-    assignments.filter(a => a.laptop_status === 'Active').forEach(a => {
+    visibleAssignments.filter(a => a.laptop_status === 'Active').forEach(a => {
       const div = getDivision(a) || 'Unassigned';
       counts[div] = (counts[div] || 0) + 1;
     });
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  }, [assignments, personnel]);
+  }, [visibleAssignments, personnel]);
 
   // Brand distribution
   const brandDistribution = useMemo(() => {
     const counts = {};
-    assignments.filter(a => a.laptop_status === 'Active').forEach(a => {
+    visibleAssignments.filter(a => a.laptop_status === 'Active').forEach(a => {
       const brand = a.laptop_brand || 'Unknown';
       counts[brand] = (counts[brand] || 0) + 1;
     });
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  }, [assignments]);
+  }, [visibleAssignments]);
 
   const brandColors = { 'Lenovo': '#E2231A', 'Dell': '#007DB8', 'HP': '#0096D6', 'Asus': '#00539B', 'Acer': '#83B81A', 'Apple': '#555', 'Microsoft': '#00A4EF', 'Huawei': '#CF0A2C' };
 
   // Cost per division
   const costPerDivision = useMemo(() => {
     const map = {};
-    assignments.filter(a => a.laptop_status === 'Active').forEach(a => {
+    visibleAssignments.filter(a => a.laptop_status === 'Active').forEach(a => {
       const div = getDivision(a) || 'Unassigned';
       if (!map[div]) map[div] = { count: 0, totalDevice: 0 };
       map[div].count++;
       if (a.device_cost) map[div].totalDevice += Number(a.device_cost);
     });
     return Object.entries(map).sort((a, b) => b[1].count - a[1].count);
-  }, [assignments, personnel]);
+  }, [visibleAssignments, personnel]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(sortedFiltered.length / pageSize));
@@ -964,7 +993,7 @@ function LaptopAssignments() {
         <LaptopModal
           item={editItem}
           personnel={personnel}
-          allAssignments={assignments}
+          allAssignments={visibleAssignments}
           operatorRole={operatorRole}
           onClose={() => { setShowModal(false); setEditItem(null); }}
           onSuccess={() => { setShowModal(false); setEditItem(null); fetchData(); }}
@@ -1672,6 +1701,18 @@ function LaptopModal({ item, personnel, allAssignments, operatorRole, onClose, o
                 rows="2"
                 placeholder="Any additional notes"
               />
+            </div>
+
+            {/* Photos */}
+            <div className="form-group">
+              <label className="form-label">Photos</label>
+              {item?.id ? (
+                <LaptopImageGallery assignmentId={item.id} editable={true} />
+              ) : (
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                  Save this laptop assignment first, then edit it to upload photos.
+                </div>
+              )}
             </div>
           </div>
 

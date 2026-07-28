@@ -1,0 +1,407 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { laptopImagesApi } from '../services/api';
+import { Icons } from './Icons';
+
+function LaptopImageGallery({ assignmentId, editable = false }) {
+  const [images, setImages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState(null);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    if (assignmentId) {
+      fetchImages();
+    }
+  }, [assignmentId]); // eslint-disable-line
+
+  // Keyboard navigation for lightbox
+  useEffect(() => {
+    if (!selectedImage) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setSelectedImage(null);
+      if (e.key === 'ArrowLeft' && images.length > 1) {
+        const idx = images.findIndex(i => i.id === selectedImage.id);
+        setSelectedImage(images[(idx - 1 + images.length) % images.length]);
+      }
+      if (e.key === 'ArrowRight' && images.length > 1) {
+        const idx = images.findIndex(i => i.id === selectedImage.id);
+        setSelectedImage(images[(idx + 1) % images.length]);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedImage, images]);
+
+  const fetchImages = async () => {
+    try {
+      setLoading(true);
+      const response = await laptopImagesApi.getAll(assignmentId);
+      setImages(response.data);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFileSelect = async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    // Validate file types and sizes
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) {
+        setError(`"${file.name}" is not an image file`);
+        return;
+      }
+      if (file.size > maxSize) {
+        setError(`"${file.name}" exceeds 10MB limit`);
+        return;
+      }
+    }
+
+    setUploading(true);
+    setError(null);
+
+    try {
+      const filesArray = Array.from(files);
+      await laptopImagesApi.uploadMultiple(assignmentId, filesArray);
+      fetchImages();
+    } catch (err) {
+      setError(err.message || 'Error uploading images');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleSetPrimary = async (imageId) => {
+    try {
+      await laptopImagesApi.setPrimary(imageId);
+      fetchImages();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleDelete = async (imageId) => {
+    if (!window.confirm('Delete this image?')) return;
+
+    try {
+      await laptopImagesApi.delete(imageId);
+      fetchImages();
+      if (selectedImage?.id === imageId) {
+        setSelectedImage(null);
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const primaryImage = images.find(img => img.is_primary) || images[0];
+
+  if (loading) {
+    return (
+      <div style={{ padding: '1rem', textAlign: 'center' }}>
+        <div className="spinner" style={{ width: '24px', height: '24px' }}></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="laptop-gallery">
+      {error && (
+        <div className="alert alert-error" style={{ marginBottom: '1rem' }}>
+          {error}
+        </div>
+      )}
+
+      {/* Main Image Display */}
+      <div
+        className="gallery-main"
+        style={{
+          backgroundColor: 'var(--bg-secondary)',
+          borderRadius: '8px',
+          overflow: 'hidden',
+          aspectRatio: '4/3',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: '1rem',
+          position: 'relative',
+          cursor: primaryImage ? 'pointer' : 'default',
+        }}
+        onClick={() => primaryImage && setSelectedImage(primaryImage)}
+      >
+        {primaryImage ? (
+          <img
+            src={primaryImage.file_path}
+            alt={primaryImage.caption || 'Laptop'}
+            style={{
+              maxWidth: '100%',
+              maxHeight: '100%',
+              objectFit: 'contain',
+            }}
+          />
+        ) : (
+          <div style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>
+            <div style={{ marginBottom: '0.5rem' }}><Icons.Camera size={48} /></div>
+            <div>No images</div>
+          </div>
+        )}
+
+        {primaryImage?.is_primary && (
+          <span
+            style={{
+              position: 'absolute',
+              top: '8px',
+              left: '8px',
+              background: 'var(--success)',
+              color: 'white',
+              padding: '0.25rem 0.5rem',
+              borderRadius: '4px',
+              fontSize: '0.75rem',
+            }}
+          >
+            Primary
+          </span>
+        )}
+      </div>
+
+      {/* Thumbnail Strip */}
+      {images.length > 1 && (
+        <div
+          className="gallery-thumbnails"
+          style={{
+            display: 'flex',
+            gap: '0.5rem',
+            overflowX: 'auto',
+            padding: '0.5rem 0',
+            marginBottom: '1rem',
+          }}
+        >
+          {images.map(img => (
+            <div
+              key={img.id}
+              onClick={() => setSelectedImage(img)}
+              style={{
+                flexShrink: 0,
+                width: '60px',
+                height: '60px',
+                borderRadius: '4px',
+                overflow: 'hidden',
+                cursor: 'pointer',
+                border: img.is_primary ? '2px solid var(--success)' : '2px solid transparent',
+              }}
+            >
+              <img
+                src={img.file_path}
+                alt={img.caption || 'Thumbnail'}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Upload Button */}
+      {editable && (
+        <div>
+          <input
+            type="file"
+            ref={fileInputRef}
+            multiple
+            accept="image/*"
+            onChange={handleFileSelect}
+            style={{ display: 'none' }}
+          />
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            style={{ width: '100%' }}
+          >
+            {uploading ? (
+              <>
+                <span className="spinner" style={{ width: '16px', height: '16px', marginRight: '0.5rem' }}></span>
+                Uploading...
+              </>
+            ) : (
+              '+ Upload Images'
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Image Count */}
+      <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
+        {images.length} image{images.length !== 1 ? 's' : ''}
+      </div>
+
+      {/* Lightbox Modal */}
+      {selectedImage && (
+        <div
+          className="modal-overlay"
+          style={{ zIndex: 1100 }}
+          onClick={() => setSelectedImage(null)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              backgroundColor: 'var(--bg-secondary)',
+              borderRadius: '8px',
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              position: 'relative',
+            }}
+          >
+            {/* Lightbox Header */}
+            <div style={{
+              padding: '1rem',
+              borderBottom: '1px solid var(--border)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}>
+              <div>
+                {selectedImage.caption && (
+                  <div style={{ fontWeight: 500 }}>{selectedImage.caption}</div>
+                )}
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                  Uploaded {selectedImage.created_at ? new Date(selectedImage.created_at).toLocaleDateString() : 'Unknown'}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setSelectedImage(null)}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Lightbox Image */}
+            <div style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '1rem',
+              backgroundColor: 'var(--bg-secondary)',
+              maxHeight: '70vh',
+            }}>
+              <img
+                src={selectedImage.file_path}
+                alt={selectedImage.caption || 'Laptop'}
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                  objectFit: 'contain',
+                }}
+              />
+            </div>
+
+            {/* Lightbox Footer - Actions */}
+            {editable && (
+              <div style={{
+                padding: '1rem',
+                borderTop: '1px solid var(--border)',
+                display: 'flex',
+                gap: '0.5rem',
+                justifyContent: 'flex-end',
+              }}>
+                {!selectedImage.is_primary && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => handleSetPrimary(selectedImage.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <Icons.Star size={14} /> Set as Primary
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={() => handleDelete(selectedImage.id)}
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+
+            {/* Navigation Arrows */}
+            {images.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentIndex = images.findIndex(i => i.id === selectedImage.id);
+                    const prevIndex = (currentIndex - 1 + images.length) % images.length;
+                    setSelectedImage(images[prevIndex]);
+                  }}
+                  style={{
+                    position: 'absolute',
+                    left: '1rem',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'rgba(0,0,0,0.5)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '50%',
+                    width: '40px',
+                    height: '40px',
+                    cursor: 'pointer',
+                    fontSize: '1.5rem',
+                  }}
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentIndex = images.findIndex(i => i.id === selectedImage.id);
+                    const nextIndex = (currentIndex + 1) % images.length;
+                    setSelectedImage(images[nextIndex]);
+                  }}
+                  style={{
+                    position: 'absolute',
+                    right: '1rem',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'rgba(0,0,0,0.5)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '50%',
+                    width: '40px',
+                    height: '40px',
+                    cursor: 'pointer',
+                    fontSize: '1.5rem',
+                  }}
+                >
+                  ›
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default LaptopImageGallery;
