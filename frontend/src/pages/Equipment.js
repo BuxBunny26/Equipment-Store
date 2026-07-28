@@ -7,8 +7,12 @@ import ExportMenu from '../components/ExportMenu';
 import { Icons } from '../components/Icons';
 import AddEquipmentModal from '../components/AddEquipmentModal';
 import { getCustomFieldRule, getCustomFieldValue } from '../utils/customFields';
+import { useOperator } from '../context/OperatorContext';
 
 function Equipment() {
+  const { operatorRole } = useOperator();
+  const isManager = !!operatorRole && ['admin', 'manager'].includes(operatorRole.toLowerCase());
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [equipment, setEquipment] = useState([]);
@@ -23,6 +27,7 @@ function Equipment() {
   });
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showDeletedModal, setShowDeletedModal] = useState(false);
   const [importData, setImportData] = useState(null);
   const [importResults, setImportResults] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -126,6 +131,16 @@ function Equipment() {
     fetchEquipment();
   };
 
+  const handleDelete = async (item) => {
+    if (!window.confirm(`Delete "${item.equipment_name}" (${item.equipment_id})? It can be restored from Recently Deleted within 30 days.`)) return;
+    try {
+      await equipmentApi.softDelete(item.id);
+      fetchEquipment();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const getStatusBadge = (item) => {
     if (item.is_consumable) {
       if (item.available_quantity <= item.reorder_level) {
@@ -226,6 +241,11 @@ function Equipment() {
             onExport={(fmt) => exportData(fmt, equipment, EXPORT_COLUMNS.equipment, 'equipment', 'Equipment List')}
             disabled={equipment.length === 0}
           />
+          {isManager && (
+            <button className="btn btn-secondary" onClick={() => setShowDeletedModal(true)}>
+              Recently Deleted
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={() => { setShowImportModal(true); setImportData(null); setImportResults(null); }}>
             <Icons.Upload size={16} /> Import
           </button>
@@ -416,6 +436,11 @@ function Equipment() {
                             Check In
                           </Link>
                         )}
+                        {isManager && (
+                          <button className="btn btn-sm btn-danger" onClick={() => handleDelete(item)}>
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -434,6 +459,14 @@ function Equipment() {
             setShowAddModal(false);
             fetchEquipment();
           }}
+        />
+      )}
+
+      {/* Recently Deleted Modal */}
+      {showDeletedModal && (
+        <RecentlyDeletedModal
+          onClose={() => setShowDeletedModal(false)}
+          onRestored={fetchEquipment}
         />
       )}
 
@@ -573,6 +606,121 @@ function Equipment() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Recently Deleted - lets managers/admins restore equipment deleted within
+// the last 30 days.
+function RecentlyDeletedModal({ onClose, onRestored }) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [items, setItems] = useState([]);
+  const [restoringId, setRestoringId] = useState(null);
+
+  useEffect(() => {
+    fetchDeleted();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const fetchDeleted = async () => {
+    try {
+      setLoading(true);
+      const data = await equipmentApi.getDeleted();
+      setItems(data);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRestore = async (item) => {
+    setRestoringId(item.id);
+    try {
+      await equipmentApi.restore(item.id);
+      setItems(prev => prev.filter(i => i.id !== item.id));
+      onRestored();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal modal-large" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">Recently Deleted Equipment</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body" style={{ maxHeight: '60vh', overflow: 'auto' }}>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '12px' }}>
+            Deleted equipment can be restored for 30 days, after which it is no longer recoverable here.
+          </p>
+          {error && <div className="alert alert-error">{error}</div>}
+          {loading ? (
+            <div className="loading"><div className="spinner"></div> Loading...</div>
+          ) : items.length === 0 ? (
+            <div className="empty-state">
+              <h3>Nothing here</h3>
+              <p>No equipment has been deleted in the last 30 days.</p>
+            </div>
+          ) : (
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Equipment ID</th>
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th>Deleted By</th>
+                    <th>Deleted</th>
+                    <th>Days Left</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => (
+                    <tr key={item.id}>
+                      <td><strong>{item.equipment_id}</strong></td>
+                      <td>{item.equipment_name}</td>
+                      <td style={{ fontSize: '0.8rem' }}>
+                        {item.category_name}
+                        <br />
+                        <span style={{ color: 'var(--text-secondary)' }}>{item.subcategory_name}</span>
+                      </td>
+                      <td>{item.deleted_by || '-'}</td>
+                      <td style={{ fontSize: '0.8rem' }}>
+                        {new Date(item.deleted_at).toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </td>
+                      <td>
+                        <span className={`badge ${item.days_remaining <= 5 ? 'badge-overdue' : ''}`}>
+                          {item.days_remaining} day{item.days_remaining !== 1 ? 's' : ''}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          className="btn btn-sm btn-primary"
+                          onClick={() => handleRestore(item)}
+                          disabled={restoringId === item.id}
+                        >
+                          {restoringId === item.id ? 'Restoring...' : 'Restore'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose}>Close</button>
+        </div>
+      </div>
     </div>
   );
 }

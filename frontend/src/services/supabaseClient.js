@@ -13,6 +13,8 @@ export const setOperatorName = (name) => {
     _operatorName = name || 'System';
 };
 
+export const getOperatorName = () => _operatorName;
+
 export const supabase = createClient(
     supabaseUrl || 'https://placeholder.supabase.co',
     supabaseAnonKey || 'placeholder',

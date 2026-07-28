@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient';
+import { supabase, getOperatorName } from './supabaseClient';
 
 // ============================================
 // Helper: wrap Supabase responses to match axios { data } shape
@@ -48,7 +48,8 @@ export const categoriesApi = {
     getEquipmentCount: async (id) => {
         const { count, error } = await supabase.from('equipment')
             .select('id', { count: 'exact', head: true })
-            .eq('category_id', id);
+            .eq('category_id', id)
+            .is('deleted_at', null);
         if (error) throw new Error(error.message);
         return count || 0;
     },
@@ -58,6 +59,7 @@ export const categoriesApi = {
         const { data, error } = await supabase.from('equipment')
             .update({ category_id: toCategoryId, subcategory_id: null })
             .eq('category_id', fromCategoryId)
+            .is('deleted_at', null)
             .select('id');
         if (error) throw new Error(error.message);
         return data?.length || 0;
@@ -99,7 +101,8 @@ export const subcategoriesApi = {
     getEquipmentCount: async (id) => {
         const { count, error } = await supabase.from('equipment')
             .select('id', { count: 'exact', head: true })
-            .eq('subcategory_id', id);
+            .eq('subcategory_id', id)
+            .is('deleted_at', null);
         if (error) throw new Error(error.message);
         return count || 0;
     },
@@ -112,6 +115,7 @@ export const subcategoriesApi = {
         const { data, error } = await supabase.from('equipment')
             .update({ category_id: target.category_id, subcategory_id: toSubcategoryId })
             .eq('subcategory_id', fromSubcategoryId)
+            .is('deleted_at', null)
             .select('id');
         if (error) throw new Error(error.message);
         return data?.length || 0;
@@ -175,6 +179,7 @@ export const equipmentApi = {
                 last_action, last_action_timestamp,
                 notes, created_at, updated_at, manufacturer, model, custom_fields
             `)
+            .is('deleted_at', null)
             .order('equipment_name');
         if (status) query = query.eq('status', status);
         if (category_id) query = query.eq('category_id', category_id);
@@ -206,7 +211,7 @@ export const equipmentApi = {
     getById: (id) => wrap(
         supabase.from('equipment')
             .select(`*, categories(name, is_checkout_allowed, is_consumable), subcategories(name), locations(name), personnel(full_name, employee_id, email), customers(display_name)`)
-            .eq('id', id).single()
+            .eq('id', id).is('deleted_at', null).single()
     ).then(res => {
         const e = res.data;
         return { data: { ...e,
@@ -222,7 +227,7 @@ export const equipmentApi = {
     getByCode: (equipmentId) => wrap(
         supabase.from('equipment')
             .select(`*, categories(name, is_checkout_allowed, is_consumable), subcategories(name), locations(name), personnel(full_name, employee_id)`)
-            .eq('equipment_id', equipmentId).single()
+            .eq('equipment_id', equipmentId).is('deleted_at', null).single()
     ).then(res => {
         const e = res.data;
         return { data: { ...e,
@@ -238,6 +243,7 @@ export const equipmentApi = {
         supabase.from('equipment')
             .select('id, equipment_id, equipment_name, serial_number, categories(name), subcategories(name), status')
             .ilike('serial_number', serialNumber)
+            .is('deleted_at', null)
             .limit(1)
     ).then(res => ({
         data: (res.data || []).map(e => ({
@@ -256,6 +262,42 @@ export const equipmentApi = {
     update: (id, data) => wrap(
         supabase.from('equipment').update(data).eq('id', id).select().single()
     ),
+
+    // Soft-delete: hides the item everywhere but keeps its history (movements,
+    // calibration records, etc.) intact. Recoverable via restore() for 30 days.
+    softDelete: async (id) => {
+        const { data, error } = await supabase.from('equipment')
+            .update({ deleted_at: new Date().toISOString(), deleted_by: getOperatorName() })
+            .eq('id', id).select().single();
+        if (error) throw new Error(error.message);
+        return data;
+    },
+    restore: async (id) => {
+        const { data, error } = await supabase.from('equipment')
+            .update({ deleted_at: null, deleted_by: null })
+            .eq('id', id).select().single();
+        if (error) throw new Error(error.message);
+        return data;
+    },
+    // Equipment deleted within the last 30 days (the recovery window). Items
+    // older than that simply stop appearing here - they're still soft-deleted
+    // in the database, just no longer offered for restore in the UI.
+    getDeleted: async () => {
+        const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const { data, error } = await supabase.from('equipment')
+            .select('id, equipment_id, equipment_name, serial_number, deleted_at, deleted_by, categories(name), subcategories(name)')
+            .not('deleted_at', 'is', null)
+            .gte('deleted_at', cutoff)
+            .order('deleted_at', { ascending: false });
+        if (error) throw new Error(error.message);
+        return (data || []).map(e => ({
+            ...e,
+            category_name: e.categories?.name,
+            subcategory_name: e.subcategories?.name,
+            days_remaining: Math.max(0, 30 - Math.floor((Date.now() - new Date(e.deleted_at).getTime()) / (1000 * 60 * 60 * 24))),
+            categories: undefined, subcategories: undefined,
+        }));
+    },
 
     getHistory: (id, limit = 50) => wrap(
         supabase.from('equipment_movements')
@@ -626,6 +668,7 @@ export const reportsApi = {
         supabase.from('equipment')
             .select(`id, equipment_id, equipment_name, categories!inner(name, is_consumable), subcategories(name), available_quantity, total_quantity, reorder_level, unit, locations(name)`)
             .eq('categories.is_consumable', true)
+            .is('deleted_at', null)
     ).then(res => ({
         data: (res.data || [])
             .filter(e => e.available_quantity <= e.reorder_level)
@@ -639,6 +682,7 @@ export const reportsApi = {
         supabase.from('equipment')
             .select(`id, equipment_id, equipment_name, categories!inner(name, is_consumable), subcategories(name), available_quantity, total_quantity, reorder_level, unit, locations(name)`)
             .eq('categories.is_consumable', true)
+            .is('deleted_at', null)
             .order('equipment_name')
     ).then(res => ({
         data: (res.data || []).map(e => ({ ...e,
@@ -648,25 +692,31 @@ export const reportsApi = {
         }))
     })),
     getByCategory: () => wrap(
-        supabase.from('categories').select(`id, name, is_checkout_allowed, is_consumable, equipment(id, status)`).order('name')
+        supabase.from('categories').select(`id, name, is_checkout_allowed, is_consumable, equipment(id, status, deleted_at)`).order('name')
     ).then(res => ({
-        data: (res.data || []).map(c => ({
-            category_id: c.id, category: c.name, is_checkout_allowed: c.is_checkout_allowed,
-            is_consumable: c.is_consumable, total_items: c.equipment?.length || 0,
-            available: c.equipment?.filter(e => e.status === 'Available').length || 0,
-            checked_out: c.equipment?.filter(e => e.status === 'Checked Out').length || 0,
-            equipment: undefined,
-        }))
+        data: (res.data || []).map(c => {
+            const active = (c.equipment || []).filter(e => !e.deleted_at);
+            return {
+                category_id: c.id, category: c.name, is_checkout_allowed: c.is_checkout_allowed,
+                is_consumable: c.is_consumable, total_items: active.length,
+                available: active.filter(e => e.status === 'Available').length,
+                checked_out: active.filter(e => e.status === 'Checked Out').length,
+                equipment: undefined,
+            };
+        })
     })),
     getByLocation: () => wrap(
-        supabase.from('locations').select(`id, name, equipment(id, status)`).eq('is_active', true).order('name')
+        supabase.from('locations').select(`id, name, equipment(id, status, deleted_at)`).eq('is_active', true).order('name')
     ).then(res => ({
-        data: (res.data || []).map(l => ({
-            location_id: l.id, location: l.name, total_items: l.equipment?.length || 0,
-            available: l.equipment?.filter(e => e.status === 'Available').length || 0,
-            checked_out: l.equipment?.filter(e => e.status === 'Checked Out').length || 0,
-            equipment: undefined,
-        }))
+        data: (res.data || []).map(l => {
+            const active = (l.equipment || []).filter(e => !e.deleted_at);
+            return {
+                location_id: l.id, location: l.name, total_items: active.length,
+                available: active.filter(e => e.status === 'Available').length,
+                checked_out: active.filter(e => e.status === 'Checked Out').length,
+                equipment: undefined,
+            };
+        })
     })),
     getMovementHistory: (params = {}) => {
         const { from_date, to_date, action, personnel_id, limit = 500 } = params;
