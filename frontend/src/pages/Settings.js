@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { categoriesApi, subcategoriesApi, locationsApi, personnelApi } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
+import { useOperator } from '../context/OperatorContext';
 
 function Settings() {
   const [activeTab, setActiveTab] = useState('categories');
@@ -69,15 +70,22 @@ function Settings() {
 
 // Categories Settings
 function CategoriesSettings() {
+  const { operatorRole } = useOperator();
+  const isManager = !!operatorRole && ['admin', 'manager'].includes(operatorRole.toLowerCase());
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [categories, setCategories] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     is_checkout_allowed: true,
     is_consumable: false,
   });
+
+  // Reassign / delete flow
+  const [reassign, setReassign] = useState(null); // { source, andDelete, targetId, busy, message }
 
   useEffect(() => {
     fetchCategories();
@@ -96,15 +104,88 @@ function CategoriesSettings() {
     }
   };
 
+  const openAddModal = () => {
+    setEditingId(null);
+    setFormData({ name: '', is_checkout_allowed: true, is_consumable: false });
+    setShowModal(true);
+  };
+
+  const openEditModal = (cat) => {
+    setEditingId(cat.id);
+    setFormData({
+      name: cat.name,
+      is_checkout_allowed: cat.is_checkout_allowed,
+      is_consumable: cat.is_consumable,
+    });
+    setShowModal(true);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await categoriesApi.create(formData);
+      if (editingId) {
+        await categoriesApi.update(editingId, formData);
+      } else {
+        await categoriesApi.create(formData);
+      }
       setShowModal(false);
+      setEditingId(null);
       setFormData({ name: '', is_checkout_allowed: true, is_consumable: false });
       fetchCategories();
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const handleDeleteClick = async (cat) => {
+    setError(null);
+    try {
+      const count = await categoriesApi.getEquipmentCount(cat.id);
+      if (count > 0) {
+        setReassign({
+          source: cat,
+          andDelete: true,
+          targetId: '',
+          busy: false,
+          message: `${count} equipment item(s) are assigned to "${cat.name}". Choose a category to reassign them to before it can be deleted.`,
+        });
+        return;
+      }
+      if (!window.confirm(`Delete category "${cat.name}"? This cannot be undone.`)) return;
+      await categoriesApi.remove(cat.id);
+      fetchCategories();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const openReassignOnly = (cat) => {
+    setError(null);
+    setReassign({ source: cat, andDelete: false, targetId: '', busy: false, message: '' });
+  };
+
+  const handleReassignConfirm = async () => {
+    if (!reassign?.targetId) return;
+    setReassign(prev => ({ ...prev, busy: true }));
+    try {
+      const moved = await categoriesApi.reassignEquipment(reassign.source.id, parseInt(reassign.targetId));
+      if (reassign.andDelete) {
+        await categoriesApi.remove(reassign.source.id);
+      }
+      setReassign(null);
+      setError(null);
+      fetchCategories();
+      // eslint-disable-next-line no-alert
+      if (moved > 0 || reassign.andDelete) {
+        window.alert(
+          reassign.andDelete
+            ? `Moved ${moved} equipment item(s) and deleted "${reassign.source.name}".`
+            : `Moved ${moved} equipment item(s) to the selected category.`
+        );
+      }
+    } catch (err) {
+      setError(err.message);
+      setReassign(prev => ({ ...prev, busy: false }));
     }
   };
 
@@ -116,9 +197,11 @@ function CategoriesSettings() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
         <h3>Categories ({categories.length})</h3>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-          + Add Category
-        </button>
+        {isManager && (
+          <button className="btn btn-primary" onClick={openAddModal}>
+            + Add Category
+          </button>
+        )}
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
@@ -130,6 +213,7 @@ function CategoriesSettings() {
               <th>Name</th>
               <th>Checkout Allowed</th>
               <th>Consumable</th>
+              {isManager && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -150,6 +234,15 @@ function CategoriesSettings() {
                     <span style={{ color: 'var(--text-secondary)' }}>No</span>
                   )}
                 </td>
+                {isManager && (
+                  <td>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button className="btn btn-sm btn-secondary" onClick={() => openEditModal(cat)}>Edit</button>
+                      <button className="btn btn-sm btn-secondary" onClick={() => openReassignOnly(cat)}>Reassign</button>
+                      <button className="btn btn-sm btn-danger" onClick={() => handleDeleteClick(cat)}>Delete</button>
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -160,7 +253,7 @@ function CategoriesSettings() {
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 className="modal-title">Add Category</h2>
+              <h2 className="modal-title">{editingId ? 'Edit Category' : 'Add Category'}</h2>
               <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
             </div>
             <form onSubmit={handleSubmit}>
@@ -200,9 +293,50 @@ function CategoriesSettings() {
                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">Create</button>
+                <button type="submit" className="btn btn-primary">{editingId ? 'Save' : 'Create'}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {reassign && (
+        <div className="modal-overlay" onClick={() => !reassign.busy && setReassign(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Reassign "{reassign.source.name}"</h2>
+              <button className="modal-close" onClick={() => setReassign(null)} disabled={reassign.busy}>×</button>
+            </div>
+            <div className="modal-body">
+              {reassign.message && <div className="alert alert-warning" style={{ marginBottom: '12px' }}>{reassign.message}</div>}
+              <div className="form-group">
+                <label className="form-label">Move equipment to *</label>
+                <select
+                  className="form-select"
+                  value={reassign.targetId}
+                  onChange={(e) => setReassign(prev => ({ ...prev, targetId: e.target.value }))}
+                  required
+                >
+                  <option value="">Select category...</option>
+                  {categories.filter(c => c.id !== reassign.source.id).map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setReassign(null)} disabled={reassign.busy}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleReassignConfirm}
+                disabled={!reassign.targetId || reassign.busy}
+              >
+                {reassign.busy ? 'Working...' : reassign.andDelete ? 'Reassign & Delete' : 'Reassign'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -210,14 +344,22 @@ function CategoriesSettings() {
   );
 }
 
+
 // Subcategories Settings
 function SubcategoriesSettings() {
+  const { operatorRole } = useOperator();
+  const isManager = !!operatorRole && ['admin', 'manager'].includes(operatorRole.toLowerCase());
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [subcategories, setSubcategories] = useState([]);
   const [categories, setCategories] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({ name: '', category_id: '' });
+
+  // Reassign / delete flow
+  const [reassign, setReassign] = useState(null); // { source, andDelete, targetId, busy, message }
 
   useEffect(() => {
     fetchData();
@@ -240,15 +382,84 @@ function SubcategoriesSettings() {
     }
   };
 
+  const openAddModal = () => {
+    setEditingId(null);
+    setFormData({ name: '', category_id: '' });
+    setShowModal(true);
+  };
+
+  const openEditModal = (sub) => {
+    setEditingId(sub.id);
+    setFormData({ name: sub.name, category_id: sub.category_id?.toString() || '' });
+    setShowModal(true);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await subcategoriesApi.create(formData);
+      if (editingId) {
+        await subcategoriesApi.update(editingId, { name: formData.name, category_id: parseInt(formData.category_id) });
+      } else {
+        await subcategoriesApi.create(formData);
+      }
       setShowModal(false);
+      setEditingId(null);
       setFormData({ name: '', category_id: '' });
       fetchData();
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const handleDeleteClick = async (sub) => {
+    setError(null);
+    try {
+      const count = await subcategoriesApi.getEquipmentCount(sub.id);
+      if (count > 0) {
+        setReassign({
+          source: sub,
+          andDelete: true,
+          targetId: '',
+          busy: false,
+          message: `${count} equipment item(s) are assigned to "${sub.name}". Choose a subcategory to reassign them to before it can be deleted.`,
+        });
+        return;
+      }
+      if (!window.confirm(`Delete subcategory "${sub.name}"? This cannot be undone.`)) return;
+      await subcategoriesApi.remove(sub.id);
+      fetchData();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const openReassignOnly = (sub) => {
+    setError(null);
+    setReassign({ source: sub, andDelete: false, targetId: '', busy: false, message: '' });
+  };
+
+  const handleReassignConfirm = async () => {
+    if (!reassign?.targetId) return;
+    setReassign(prev => ({ ...prev, busy: true }));
+    try {
+      const moved = await subcategoriesApi.reassignEquipment(reassign.source.id, parseInt(reassign.targetId));
+      if (reassign.andDelete) {
+        await subcategoriesApi.remove(reassign.source.id);
+      }
+      setReassign(null);
+      setError(null);
+      fetchData();
+      // eslint-disable-next-line no-alert
+      if (moved > 0 || reassign.andDelete) {
+        window.alert(
+          reassign.andDelete
+            ? `Moved ${moved} equipment item(s) and deleted "${reassign.source.name}".`
+            : `Moved ${moved} equipment item(s) to the selected subcategory.`
+        );
+      }
+    } catch (err) {
+      setError(err.message);
+      setReassign(prev => ({ ...prev, busy: false }));
     }
   };
 
@@ -260,9 +471,11 @@ function SubcategoriesSettings() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
         <h3>Subcategories ({subcategories.length})</h3>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-          + Add Subcategory
-        </button>
+        {isManager && (
+          <button className="btn btn-primary" onClick={openAddModal}>
+            + Add Subcategory
+          </button>
+        )}
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
@@ -273,6 +486,7 @@ function SubcategoriesSettings() {
             <tr>
               <th>Name</th>
               <th>Category</th>
+              {isManager && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -280,6 +494,15 @@ function SubcategoriesSettings() {
               <tr key={sub.id}>
                 <td><strong>{sub.name}</strong></td>
                 <td>{sub.category_name}</td>
+                {isManager && (
+                  <td>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button className="btn btn-sm btn-secondary" onClick={() => openEditModal(sub)}>Edit</button>
+                      <button className="btn btn-sm btn-secondary" onClick={() => openReassignOnly(sub)}>Reassign</button>
+                      <button className="btn btn-sm btn-danger" onClick={() => handleDeleteClick(sub)}>Delete</button>
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -290,7 +513,7 @@ function SubcategoriesSettings() {
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 className="modal-title">Add Subcategory</h2>
+              <h2 className="modal-title">{editingId ? 'Edit Subcategory' : 'Add Subcategory'}</h2>
               <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
             </div>
             <form onSubmit={handleSubmit}>
@@ -324,9 +547,50 @@ function SubcategoriesSettings() {
                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">Create</button>
+                <button type="submit" className="btn btn-primary">{editingId ? 'Save' : 'Create'}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {reassign && (
+        <div className="modal-overlay" onClick={() => !reassign.busy && setReassign(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Reassign "{reassign.source.name}"</h2>
+              <button className="modal-close" onClick={() => setReassign(null)} disabled={reassign.busy}>×</button>
+            </div>
+            <div className="modal-body">
+              {reassign.message && <div className="alert alert-warning" style={{ marginBottom: '12px' }}>{reassign.message}</div>}
+              <div className="form-group">
+                <label className="form-label">Move equipment to *</label>
+                <select
+                  className="form-select"
+                  value={reassign.targetId}
+                  onChange={(e) => setReassign(prev => ({ ...prev, targetId: e.target.value }))}
+                  required
+                >
+                  <option value="">Select subcategory...</option>
+                  {subcategories.filter(s => s.id !== reassign.source.id).map((s) => (
+                    <option key={s.id} value={s.id}>{s.name} ({s.category_name})</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setReassign(null)} disabled={reassign.busy}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleReassignConfirm}
+                disabled={!reassign.targetId || reassign.busy}
+              >
+                {reassign.busy ? 'Working...' : reassign.andDelete ? 'Reassign & Delete' : 'Reassign'}
+              </button>
+            </div>
           </div>
         </div>
       )}

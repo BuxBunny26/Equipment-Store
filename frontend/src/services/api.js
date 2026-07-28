@@ -44,6 +44,27 @@ export const categoriesApi = {
     update: (id, data) => wrap(
         supabase.from('categories').update(data).eq('id', id).select().single()
     ),
+    // Count equipment items currently assigned to this category (used to guard deletes)
+    getEquipmentCount: async (id) => {
+        const { count, error } = await supabase.from('equipment')
+            .select('id', { count: 'exact', head: true })
+            .eq('category_id', id);
+        if (error) throw new Error(error.message);
+        return count || 0;
+    },
+    // Move all equipment from one category to another (subcategory is cleared since it
+    // belongs to the old category). Logged automatically via the equipment audit trigger.
+    reassignEquipment: async (fromCategoryId, toCategoryId) => {
+        const { data, error } = await supabase.from('equipment')
+            .update({ category_id: toCategoryId, subcategory_id: null })
+            .eq('category_id', fromCategoryId)
+            .select('id');
+        if (error) throw new Error(error.message);
+        return data?.length || 0;
+    },
+    remove: (id) => wrap(
+        supabase.from('categories').delete().eq('id', id)
+    ),
 };
 
 // Subcategories
@@ -72,7 +93,31 @@ export const subcategoriesApi = {
         supabase.from('subcategories').insert(data).select().single()
     ),
     update: (id, data) => wrap(
-        supabase.from('subcategories').update({ name: data.name }).eq('id', id).select().single()
+        supabase.from('subcategories').update({ name: data.name, category_id: data.category_id }).eq('id', id).select().single()
+    ),
+    // Count equipment items currently assigned to this subcategory (used to guard deletes)
+    getEquipmentCount: async (id) => {
+        const { count, error } = await supabase.from('equipment')
+            .select('id', { count: 'exact', head: true })
+            .eq('subcategory_id', id);
+        if (error) throw new Error(error.message);
+        return count || 0;
+    },
+    // Move all equipment from one subcategory to another. The target's parent category
+    // is applied too, in case the target belongs to a different category.
+    reassignEquipment: async (fromSubcategoryId, toSubcategoryId) => {
+        const { data: target, error: targetError } = await supabase.from('subcategories')
+            .select('category_id').eq('id', toSubcategoryId).single();
+        if (targetError) throw new Error(targetError.message);
+        const { data, error } = await supabase.from('equipment')
+            .update({ category_id: target.category_id, subcategory_id: toSubcategoryId })
+            .eq('subcategory_id', fromSubcategoryId)
+            .select('id');
+        if (error) throw new Error(error.message);
+        return data?.length || 0;
+    },
+    remove: (id) => wrap(
+        supabase.from('subcategories').delete().eq('id', id)
     ),
 };
 
