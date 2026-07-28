@@ -345,9 +345,13 @@ ON CONFLICT (category_id, name) DO NOTHING;
 
 -- Branch locations
 INSERT INTO locations (name, description, type) VALUES
+    ('WearCheck - Klerkdorp', 'Klerkdorp Branch', 'Branch'),
     ('WearCheck - Longmeadow', 'Longmeadow Head Office Branch', 'Branch'),
     ('WearCheck - Springs', 'Springs Branch', 'Branch'),
-    ('WearCheck - Westville', 'Westville Branch', 'Branch')
+    ('WearCheck - Westville', 'Westville Branch', 'Branch'),
+    ('WearCheck - Fochville', 'Fochville Branch', 'Branch'),
+    ('WearCheck - Rustenburg', 'Rustenburg Branch', 'Branch'),
+    ('WearCheck - Krugersdorp', 'Krugersdorp Branch', 'Branch')
 ON CONFLICT (name) DO NOTHING;
 
 -- Roles
@@ -855,7 +859,7 @@ VALUES ('CUS-00002', 'A Siwele General Services', 'ZAR', 'Johannesburg', 'Gauten
 ON CONFLICT (customer_number) DO UPDATE SET display_name = EXCLUDED.display_name, currency_code = EXCLUDED.currency_code, billing_city = EXCLUDED.billing_city, billing_state = EXCLUDED.billing_state, billing_country = EXCLUDED.billing_country, email = EXCLUDED.email;
 
 INSERT INTO customers (customer_number, display_name, currency_code, billing_city, billing_state, billing_country, shipping_city, shipping_state, shipping_country, tax_registration_number, vat_treatment, email)
-VALUES ('1SS504', 'ABACO Offshore Limited', 'USD', 'Kuala', 'Wilayah Persekutuan Kuala Lumpur', 'Malaysia', 'L+¦hne', NULL, 'Germany', NULL, 'overseas', 'gabriel.tungo@bumiarmada.com')
+VALUES ('1SS504', 'ABACO Offshore Limited', 'USD', 'Kuala', 'Wilayah Persekutuan Kuala Lumpur', 'Malaysia', 'L+ï¿½hne', NULL, 'Germany', NULL, 'overseas', 'gabriel.tungo@bumiarmada.com')
 ON CONFLICT (customer_number) DO UPDATE SET display_name = EXCLUDED.display_name, currency_code = EXCLUDED.currency_code, billing_city = EXCLUDED.billing_city, billing_state = EXCLUDED.billing_state, billing_country = EXCLUDED.billing_country, email = EXCLUDED.email;
 
 INSERT INTO customers (customer_number, display_name, currency_code, billing_city, billing_state, billing_country, shipping_city, shipping_state, shipping_country, tax_registration_number, vat_treatment, email)
@@ -951,7 +955,7 @@ VALUES ('CUS-00026', 'Clover SA (Pty) Ltd', 'ZAR', 'Johannesburg', 'Gauteng', 'S
 ON CONFLICT (customer_number) DO UPDATE SET display_name = EXCLUDED.display_name, currency_code = EXCLUDED.currency_code, billing_city = EXCLUDED.billing_city, billing_state = EXCLUDED.billing_state, billing_country = EXCLUDED.billing_country, email = EXCLUDED.email;
 
 INSERT INTO customers (customer_number, display_name, currency_code, billing_city, billing_state, billing_country, shipping_city, shipping_state, shipping_country, tax_registration_number, vat_treatment, email)
-VALUES ('CUS-00027', 'CNNC R+¦ssing Uranium', 'NAD', 'Arandis', 'Windhoek', 'Namibia', NULL, 'Arandis', 'Namibia', NULL, 'vat_not_registered', 'Kenneth.Strauss@Rossing.com.na')
+VALUES ('CUS-00027', 'CNNC R+ï¿½ssing Uranium', 'NAD', 'Arandis', 'Windhoek', 'Namibia', NULL, 'Arandis', 'Namibia', NULL, 'vat_not_registered', 'Kenneth.Strauss@Rossing.com.na')
 ON CONFLICT (customer_number) DO UPDATE SET display_name = EXCLUDED.display_name, currency_code = EXCLUDED.currency_code, billing_city = EXCLUDED.billing_city, billing_state = EXCLUDED.billing_state, billing_country = EXCLUDED.billing_country, email = EXCLUDED.email;
 
 INSERT INTO customers (customer_number, display_name, currency_code, billing_city, billing_state, billing_country, shipping_city, shipping_state, shipping_country, tax_registration_number, vat_treatment, email)
@@ -2545,7 +2549,7 @@ At line:1 char:106
     + CategoryInfo          : NotSpecified: (:String) [], RemoteException
     + FullyQualifiedErrorId : NativeCommandError
  
-G£à SQL generated successfully!
+Gï¿½ï¿½ SQL generated successfully!
     INSERT INTO equipment (equipment_id, equipment_name, manufacturer, serial_number, category_id, subcategory_id, status)
     VALUES ('EQ-11755', 'Portable Vibration Calibrator 9110D', 'The Modal Shop', '11755', v_category_id, v_subcategory_id, 'Available')
     ON CONFLICT (equipment_id) DO UPDATE SET equipment_name = EXCLUDED.equipment_name, manufacturer = EXCLUDED.manufacturer, serial_number = EXCLUDED.serial_number

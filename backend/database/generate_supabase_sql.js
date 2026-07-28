@@ -415,9 +415,13 @@ sql += `ON CONFLICT (category_id, name) DO NOTHING;\n\n`;
 
 sql += `-- Branch locations\n`;
 sql += `INSERT INTO locations (name, description, type) VALUES\n`;
+sql += `    ('WearCheck - Klerkdorp', 'Klerkdorp Branch', 'Branch'),\n`;
 sql += `    ('WearCheck - Longmeadow', 'Longmeadow Head Office Branch', 'Branch'),\n`;
 sql += `    ('WearCheck - Springs', 'Springs Branch', 'Branch'),\n`;
-sql += `    ('WearCheck - Westville', 'Westville Branch', 'Branch')\n`;
+sql += `    ('WearCheck - Westville', 'Westville Branch', 'Branch'),\n`;
+sql += `    ('WearCheck - Fochville', 'Fochville Branch', 'Branch'),\n`;
+sql += `    ('WearCheck - Rustenburg', 'Rustenburg Branch', 'Branch'),\n`;
+sql += `    ('WearCheck - Krugersdorp', 'Krugersdorp Branch', 'Branch')\n`;
 sql += `ON CONFLICT (name) DO NOTHING;\n\n`;
 
 sql += `-- Roles\n`;

@@ -443,8 +443,12 @@ INSERT INTO subcategories (category_id, name) VALUES
 
 -- Branch locations
 INSERT INTO locations (name, description, type) VALUES
+    ('WearCheck - Klerkdorp', 'Klerkdorp Branch', 'Branch'),
     ('WearCheck - Longmeadow', 'Longmeadow Head Office Branch', 'Branch'),
     ('WearCheck - Springs', 'Springs Branch', 'Branch'),
-    ('WearCheck - Westville', 'Westville Branch', 'Branch');
+    ('WearCheck - Westville', 'Westville Branch', 'Branch'),
+    ('WearCheck - Fochville', 'Fochville Branch', 'Branch'),
+    ('WearCheck - Rustenburg', 'Rustenburg Branch', 'Branch'),
+    ('WearCheck - Krugersdorp', 'Krugersdorp Branch', 'Branch');
 
 COMMIT;
