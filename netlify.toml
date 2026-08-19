@@ -15,6 +15,17 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
+# Calibration reminder job — runs once daily. Production sending stays OFF
+# until CALIBRATION_REMINDERS_ENABLED=true is set in Netlify env vars (not
+# set yet). Until then every run is a safe dry-run — see the function file.
+# CALIBRATION_FALLBACK_PERSONNEL_IDS (comma-separated personnel ids, e.g.
+# "7,72,79") must also be set in Netlify env vars before enabling — it's the
+# calibration-responsible fallback group for unassigned/in-storage
+# equipment. Not set yet either.
+[[functions]]
+  name = "calibration-reminders-cron"
+  schedule = "0 6 * * *"
+
 # Prevent index.html from being cached so users always get the latest build
 [[headers]]
   for = "/index.html"
