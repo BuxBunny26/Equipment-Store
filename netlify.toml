@@ -22,8 +22,10 @@
 # "7,72,79") must also be set in Netlify env vars before enabling — it's the
 # calibration-responsible fallback group for unassigned/in-storage
 # equipment. Not set yet either.
-[[functions]]
-  name = "calibration-reminders-cron"
+# Per-function config must nest under [functions] as [functions."name"] —
+# a sibling [[functions]] array-of-tables redefines the already-declared
+# [functions] table and fails TOML parsing.
+[functions."calibration-reminders-cron"]
   schedule = "0 6 * * *"
 
 # Prevent index.html from being cached so users always get the latest build
