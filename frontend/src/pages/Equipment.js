@@ -101,7 +101,7 @@ function Equipment() {
       // Apply calibration filter client-side
       if (filters.calibration_status) {
         if (filters.calibration_status === 'Not Calibrated') {
-          items = items.filter(e => e.calibration_status === 'N/A');
+          items = items.filter(e => e.calibration_status === 'Not Calibrated' || e.calibration_status === 'N/A');
         } else if (filters.calibration_status === 'Calibrated') {
           items = items.filter(e => e.calibration_status === 'Valid');
         } else {
@@ -158,6 +158,9 @@ function Equipment() {
   const getCalibrationBadge = (item) => {
     if (!item.calibration_status || item.calibration_status === 'N/A') {
       return <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>N/A</span>;
+    }
+    if (item.calibration_status === 'Not Calibrated') {
+      return <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Not Calibrated</span>;
     }
     if (item.calibration_status === 'Expired') {
       return <span className="badge" style={{ background: 'var(--error-color)' }}>Expired</span>;
