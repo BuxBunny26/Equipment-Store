@@ -1,4 +1,5 @@
 import { supabase, getOperatorName } from './supabaseClient';
+import { filterCalibrationDueRows } from '../utils/calibrationDueReport';
 
 // ============================================
 // Helper: wrap Supabase responses to match axios { data } shape
@@ -756,19 +757,12 @@ export const reportsApi = {
         supabase.from('laptop_assignments').select('*').order('employee_name')
     ).then(res => ({ data: res.data || [] })),
 
-    getCalibrationDueReport: () => wrap(
-        supabase.from('calibration_records')
-            .select(`id, serial_number, expiry_date, calibration_status, certificate_number, calibration_provider, calibration_date,
-                equipment(equipment_id, equipment_name, manufacturer, categories(name))`)
-            .in('calibration_status', ['Expired', 'Due Soon'])
-            .order('expiry_date', { ascending: true })
-    ).then(res => ({
-        data: (res.data || []).map(r => ({ ...r,
-            equipment_code: r.equipment?.equipment_id, equipment_name: r.equipment?.equipment_name,
-            manufacturer: r.equipment?.manufacturer, category: r.equipment?.categories?.name,
-            equipment: undefined,
-        }))
-    })),
+    // Uses the same derived-current-status source of truth as Calibration.js/Equipment.js
+    // (get_calibration_management), instead of the frozen per-record calibration_status
+    // column, so stale/superseded historical rows never appear here.
+    getCalibrationDueReport: () => wrapRpc(
+        supabase.rpc('get_calibration_management', { p_status: null, p_category: null, p_search: null })
+    ).then(res => ({ data: filterCalibrationDueRows(res.data) })),
 };
 
 // Customers

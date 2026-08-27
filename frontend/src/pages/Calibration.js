@@ -4,6 +4,7 @@ import { calibrationApi, categoriesApi } from '../services/api';
 import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
 import ExportMenu from '../components/ExportMenu';
 import { Icons } from '../components/Icons';
+import { pickCurrentCalibrationRecord } from '../utils/calibrationCurrent';
 
 function Calibration() {
   const [searchParams] = useSearchParams();
@@ -531,6 +532,7 @@ function Calibration() {
                   <table className="data-table">
                     <thead>
                       <tr>
+                        <th>Current</th>
                         <th>Calibration Date</th>
                         <th>Expiry Date</th>
                         <th>Validity (Days)</th>
@@ -541,8 +543,13 @@ function Calibration() {
                       </tr>
                     </thead>
                     <tbody>
-                      {calibrationHistory.map((record, index) => (
-                        <tr key={record.id} style={index === 0 ? { background: 'var(--bg-primary)' } : {}}>
+                      {(() => {
+                        const currentRecordId = pickCurrentCalibrationRecord(calibrationHistory)?.id;
+                        return calibrationHistory.map((record) => {
+                          const isCurrent = record.id === currentRecordId;
+                          return (
+                      <tr key={record.id} style={isCurrent ? { background: 'var(--bg-primary)' } : {}}>
+                          <td>{isCurrent && <span className="badge badge-available">Current</span>}</td>
                           <td>{formatDate(record.calibration_date)}</td>
                           <td>{formatDate(record.expiry_date)}</td>
                           <td>{record.validity_days}</td>
@@ -572,7 +579,9 @@ function Calibration() {
                             )}
                           </td>
                         </tr>
-                      ))}
+                          );
+                        });
+                      })()}
                     </tbody>
                   </table>
                 </div>

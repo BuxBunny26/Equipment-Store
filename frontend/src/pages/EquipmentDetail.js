@@ -4,6 +4,7 @@ import { equipmentApi, calibrationApi, categoriesApi, subcategoriesApi } from '.
 import EquipmentImageGallery from '../components/EquipmentImageGallery';
 import { getCustomFieldRule, getCustomFieldValue } from '../utils/customFields';
 import { useOperator } from '../context/OperatorContext';
+import { pickCurrentCalibrationRecord } from '../utils/calibrationCurrent';
 
 function EquipmentDetail() {
   const { id } = useParams();
@@ -570,6 +571,7 @@ function EquipmentDetail() {
               <table>
                 <thead>
                   <tr>
+                    <th>Current</th>
                     <th>Calibration Date</th>
                     <th>Expiry Date</th>
                     <th>Status</th>
@@ -578,27 +580,31 @@ function EquipmentDetail() {
                   </tr>
                 </thead>
                 <tbody>
-                  {calibrationHistory.map((record) => (
-                    <tr key={record.id}>
-                      <td>{formatDateOnly(record.calibration_date)}</td>
-                      <td>{formatDateOnly(record.expiry_date)}</td>
-                      <td>{getCalibrationStatusBadge(record.expiry_date)}</td>
-                      <td style={{ fontWeight: 500 }}>{record.certificate_number || '-'}</td>
-                      <td>
-                        {record.certificate_file_url ? (
-                          <button
-                            className="btn btn-sm btn-primary"
-                            onClick={() => openCertificate(record)}
-                            title="View Certificate"
-                          >
-                            📄 View
-                          </button>
-                        ) : (
-                          <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>No file</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {(() => {
+                    const currentRecordId = pickCurrentCalibrationRecord(calibrationHistory)?.id;
+                    return calibrationHistory.map((record) => (
+                      <tr key={record.id}>
+                        <td>{record.id === currentRecordId && <span className="badge badge-valid" style={{ background: 'var(--success-color)' }}>Current</span>}</td>
+                        <td>{formatDateOnly(record.calibration_date)}</td>
+                        <td>{formatDateOnly(record.expiry_date)}</td>
+                        <td>{getCalibrationStatusBadge(record.expiry_date)}</td>
+                        <td style={{ fontWeight: 500 }}>{record.certificate_number || '-'}</td>
+                        <td>
+                          {record.certificate_file_url ? (
+                            <button
+                              className="btn btn-sm btn-primary"
+                              onClick={() => openCertificate(record)}
+                              title="View Certificate"
+                            >
+                              📄 View
+                            </button>
+                          ) : (
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>No file</span>
+                          )}
+                        </td>
+                      </tr>
+                    ));
+                  })()}
                 </tbody>
               </table>
             </div>
