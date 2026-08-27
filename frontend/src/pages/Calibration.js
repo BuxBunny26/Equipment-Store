@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { calibrationApi, categoriesApi } from '../services/api';
 import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
 import ExportMenu from '../components/ExportMenu';
 import { Icons } from '../components/Icons';
 
 function Calibration() {
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -14,7 +15,7 @@ function Calibration() {
   const [summary, setSummary] = useState({ summary: [], total: 0 });
   const [filters, setFilters] = useState({
     search: '',
-    status: '',
+    status: searchParams.get('status') || '',
     category: '',
   });
   const [showAddModal, setShowAddModal] = useState(false);
@@ -75,6 +76,17 @@ function Calibration() {
     fetchCategories();
     fetchSummary();
   }, []);
+
+  // Route matching on path alone (e.g. Dashboard's status cards) does not
+  // remount this component when only the query string changes, so the
+  // useState initializer above only covers the very first mount. Re-sync
+  // whenever the URL's status param changes; the equality guard makes this
+  // a no-op (and avoids re-triggering fetchCalibrationStatus) for manual
+  // dropdown edits, which don't touch the URL.
+  useEffect(() => {
+    const statusFromUrl = searchParams.get('status') || '';
+    setFilters((prev) => (prev.status === statusFromUrl ? prev : { ...prev, status: statusFromUrl }));
+  }, [searchParams]);
 
   useEffect(() => {
     fetchCalibrationStatus();
