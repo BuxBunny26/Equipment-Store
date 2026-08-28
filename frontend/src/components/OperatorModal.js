@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useOperator } from '../context/OperatorContext';
 import { mfaApi } from '../services/api';
-import { setAuthToken } from '../services/supabaseClient';
 
 // Derive the 4-digit PIN from an employee ID
 // e.g. WC492 → 0492, WEC094 → 0094, WCN008 → 0008
@@ -170,8 +169,7 @@ function OperatorModal({ onClose }) {
     setMfaLoading(true);
     setMfaError('');
     try {
-      const { data } = await mfaApi.verify(selectedPerson.id, code);
-      if (data?.token) setAuthToken(data.token); // staging-only, inert until RLS is enabled
+      await mfaApi.verify(selectedPerson.id, code);
       selectOperator(selectedPerson);
       if (onClose) onClose();
     } catch (err) {
