@@ -1,6 +1,5 @@
 import { supabase, getOperatorName } from './supabaseClient';
 import { filterCalibrationDueRows } from '../utils/calibrationDueReport';
-import { validateDeletionReason } from '../utils/calibrationDelete';
 
 // ============================================
 // Helper: wrap Supabase responses to match axios { data } shape
@@ -147,12 +146,8 @@ export const locationsApi = {
 
 // Personnel
 export const personnelApi = {
-    // `fields` defaults to '*' so every existing caller keeps its current
-    // behaviour unchanged. Pass a narrower column list for screens (like the
-    // pre-login operator picker) that don't need the full PII-bearing row —
-    // see OperatorContext.js for the minimal-field example.
-    getAll: (activeOnly = true, search = '', fields = '*') => {
-        let query = supabase.from('personnel').select(fields).order('full_name');
+    getAll: (activeOnly = true, search = '') => {
+        let query = supabase.from('personnel').select('*').order('full_name');
         if (activeOnly) query = query.eq('is_active', true);
         if (search) query = query.or(`full_name.ilike.%${escapeSearch(search)}%,employee_id.ilike.%${escapeSearch(search)}%,email.ilike.%${escapeSearch(search)}%`);
         return wrap(query);
@@ -854,7 +849,6 @@ export const calibrationApi = {
             .select(`id, serial_number, expiry_date, calibration_status, certificate_number,
                 equipment(equipment_id, equipment_name, manufacturer, categories(name))`)
             .in('calibration_status', ['Expired', 'Due Soon'])
-            .is('deleted_at', null)
             .order('expiry_date', { ascending: true })
     ).then(res => ({
         data: (res.data || []).map(r => ({ ...r,
@@ -872,7 +866,6 @@ export const calibrationApi = {
         supabase.from('calibration_records')
             .select('id, serial_number, calibration_date, expiry_date, certificate_number, calibration_provider, calibration_status, certificate_file_url, notes, created_at')
             .eq('equipment_id', equipmentId)
-            .is('deleted_at', null)
             .order('calibration_date', { ascending: false })
     ).then(res => ({
         data: (res.data || []).map(r => ({
@@ -934,31 +927,7 @@ export const calibrationApi = {
         return promise;
     },
 
-    // Soft delete only -- a calibration_records row is NEVER hard-deleted. This preserves the
-    // row (and its audit_trigger INSERT/UPDATE history, and any certificate file reference) for
-    // auditability/recoverability. Every "current status" query (get_calibration_management,
-    // get_calibration_summary, get_available_report, getHistory above) excludes it via
-    // deleted_at IS NULL, so status recalculates correctly from the remaining active records.
-    //
-    // Goes through the soft_delete_calibration_record RPC, NOT a direct table update -- the
-    // RPC derives the acting personnel_id from the caller's verified JWT (auth_personnel_id(),
-    // see add_auth_personnel_id_helper.sql), re-verifies manager/admin role from live
-    // users/roles/personnel data, and enforces a non-blank reason -- all server-side (see
-    // add_calibration_soft_delete.sql). The browser sends ONLY the record id and reason; there
-    // is no personnel_id/role parameter to spoof. Direct UPDATE/DELETE on calibration_records
-    // is revoked for anon/authenticated, so this RPC is the only way to soft-delete a record.
-    softDelete: (id, { reason } = {}) => {
-        let cleanReason;
-        try {
-            cleanReason = validateDeletionReason(reason);
-        } catch (err) {
-            return Promise.reject(err);
-        }
-        return wrapRpc(supabase.rpc('soft_delete_calibration_record', {
-            p_record_id: id,
-            p_reason: cleanReason,
-        })).then(res => ({ data: Array.isArray(res.data) ? res.data[0] : res.data }));
-    },
+    delete: (id) => wrap(supabase.from('calibration_records').delete().eq('id', id)),
 };
 
 // Reservations
@@ -1213,21 +1182,15 @@ export const usersApi = {
             }))
         }));
     },
-    // Explicit column list — never select('*') here. password_hash must not
-    // be transmitted to the browser under any circumstance, even for an
-    // admin-only screen and even though the column is currently unused.
     getById: (id) => wrap(
-        supabase.from('users')
-            .select(`id, username, email, full_name, role_id, personnel_id, is_active,
-                last_login, phone, department, created_at, updated_at,
-                roles(name, permissions), personnel(employee_id, full_name)`)
-            .eq('id', id).single()
+        supabase.from('users').select('*, roles(name, permissions), personnel(employee_id, full_name)').eq('id', id).single()
     ).then(res => {
         const u = res.data;
         const result = { ...u, role_name: u.roles?.name, permissions: u.roles?.permissions,
             employee_id: u.personnel?.employee_id, personnel_name: u.personnel?.full_name,
             roles: undefined, personnel: undefined,
         };
+        delete result.password_hash;
         return { data: result };
     }),
     create: (data) => wrap(supabase.from('users').insert({
