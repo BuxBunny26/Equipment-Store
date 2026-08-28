@@ -1,6 +1,7 @@
 ﻿import React, { useState, useRef, useEffect } from 'react';
 import { useOperator } from '../context/OperatorContext';
 import { mfaApi } from '../services/api';
+import { setAuthToken } from '../services/supabaseClient';
 
 // Derive the 4-digit PIN from an employee ID (same logic as OperatorModal)
 function derivePin(employeeId) {
@@ -165,7 +166,8 @@ function OperatorSelector() {
     setMfaLoading(true);
     setMfaError('');
     try {
-      await mfaApi.verify(pendingPerson.id, code);
+      const { data } = await mfaApi.verify(pendingPerson.id, code);
+      if (data?.token) setAuthToken(data.token); // staging-only, inert until RLS is enabled (matches OperatorModal.js)
       selectOperator(pendingPerson);
       setPendingPerson(null);
       setMfaScreen(false);

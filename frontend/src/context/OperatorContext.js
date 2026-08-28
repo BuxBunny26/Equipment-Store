@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { personnelApi, usersApi, movementsApi } from '../services/api';
-import { setOperatorName } from '../services/supabaseClient';
+import { setOperatorName, clearAuthToken } from '../services/supabaseClient';
 
 const OperatorContext = createContext();
 
@@ -36,6 +36,7 @@ export function OperatorProvider({ children }) {
           localStorage.removeItem(ACTIVITY_KEY);
           localStorage.removeItem(ROLE_KEY);
           setOperatorName('System');
+          clearAuthToken();
         } else {
           setOperator(parsed);
           setOperatorName(parsed.full_name || 'System');
@@ -149,6 +150,7 @@ export function OperatorProvider({ children }) {
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(ACTIVITY_KEY);
       localStorage.removeItem(ROLE_KEY);
+      clearAuthToken();
       setOperatorRole(null);
       setOverdueItems([]);
     }
@@ -158,6 +160,7 @@ export function OperatorProvider({ children }) {
     setOperator(null);
     setOperatorRole(null);
     setOperatorName('System');
+    clearAuthToken();
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(ACTIVITY_KEY);
     localStorage.removeItem(ROLE_KEY);
