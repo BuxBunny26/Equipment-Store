@@ -559,7 +559,9 @@ tr:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  /* Must stay above .mobile-header (z-index: 1001) so the mobile top bar
+     never overlaps/hides the modal's own header and first fields. */
+  z-index: 1010;
   padding: 20px;
 }
 
@@ -936,6 +938,19 @@ input[type="search"]::-webkit-search-results-decoration {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.operator-test-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #fff;
+  background: var(--warning-color, #f59e0b);
+  border-radius: 4px;
+  vertical-align: middle;
 }
 
 .operator-id {

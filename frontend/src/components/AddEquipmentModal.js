@@ -6,9 +6,11 @@ import SearchableSelect from './SearchableSelect';
 import { getCustomFieldRule } from '../utils/customFields';
 import { uniqueCountries, customerMatchesCountry, regionLabel } from '../utils/provinces';
 import { useOperator } from '../context/OperatorContext';
+import { canManageSerialNumbers } from '../utils/permissions';
 
 function AddEquipmentModal({ onClose, onSuccess }) {
-  const { operator } = useOperator();
+  const { operator, operatorRole } = useOperator();
+  const isAuthorized = canManageSerialNumbers(operatorRole);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [categories, setCategories] = useState([]);
@@ -19,6 +21,9 @@ function AddEquipmentModal({ onClose, onSuccess }) {
   const [duplicateMatch, setDuplicateMatch] = useState(null);
   const [checkingSerial, setCheckingSerial] = useState(false);
   const [customFieldValues, setCustomFieldValues] = useState({});
+  // Equipment ID auto-fill: mirrors "EQ-<Serial Number>" (matches this store's
+  // existing ID convention) until the user manually edits Equipment ID themselves.
+  const [autoGenerateId, setAutoGenerateId] = useState(true);
   // Unified site picker state (mirrors the destination picker on Check Out)
   const [siteType, setSiteType] = useState('internal'); // 'internal' | 'customer'
   const [siteCountryFilter, setSiteCountryFilter] = useState('South Africa');
@@ -113,6 +118,7 @@ function AddEquipmentModal({ onClose, onSuccess }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isAuthorized) { setError('You do not have permission to add equipment.'); return; }
     if (duplicateMatch) return;
     setLoading(true);
     setError(null);
@@ -239,10 +245,18 @@ function AddEquipmentModal({ onClose, onSuccess }) {
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     const newVal = type === 'checkbox' ? checked : value;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: newVal,
-    }));
+    setFormData((prev) => {
+      const next = { ...prev, [name]: newVal };
+      // Keep Equipment ID in sync with Serial Number ("EQ-<serial>") until
+      // the user has typed into Equipment ID themselves.
+      if (name === 'serial_number' && autoGenerateId) {
+        next.equipment_id = value.trim() ? `EQ-${value.trim()}` : '';
+      }
+      return next;
+    });
+    if (name === 'equipment_id') {
+      setAutoGenerateId(false);
+    }
     if (name === 'serial_number') {
       checkSerialNumber(value);
     }
@@ -258,6 +272,11 @@ function AddEquipmentModal({ onClose, onSuccess }) {
           </button>
         </div>
 
+        {!isAuthorized ? (
+          <div className="modal-body">
+            <div className="alert alert-error">You do not have permission to add equipment.</div>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
             {error && <div className="alert alert-error">{error}</div>}
@@ -288,7 +307,12 @@ function AddEquipmentModal({ onClose, onSuccess }) {
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Equipment ID *</label>
+                <label className="form-label">
+                  Equipment ID *{' '}
+                  <span style={{ fontWeight: 400, color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                    (same as Serial Number by default)
+                  </span>
+                </label>
                 <input
                   type="text"
                   name="equipment_id"
@@ -298,6 +322,19 @@ function AddEquipmentModal({ onClose, onSuccess }) {
                   required
                   placeholder="e.g., EQP-001"
                 />
+                {!autoGenerateId && formData.is_serialised && formData.serial_number.trim() && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ marginTop: '6px' }}
+                    onClick={() => {
+                      setAutoGenerateId(true);
+                      setFormData((prev) => ({ ...prev, equipment_id: `EQ-${prev.serial_number.trim()}` }));
+                    }}
+                  >
+                    Reset to EQ-{formData.serial_number.trim()}
+                  </button>
+                )}
               </div>
 
               <div className="form-group">
@@ -740,6 +777,7 @@ function AddEquipmentModal({ onClose, onSuccess }) {
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );
