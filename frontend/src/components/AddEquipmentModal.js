@@ -6,11 +6,9 @@ import SearchableSelect from './SearchableSelect';
 import { getCustomFieldRule } from '../utils/customFields';
 import { uniqueCountries, customerMatchesCountry, regionLabel } from '../utils/provinces';
 import { useOperator } from '../context/OperatorContext';
-import { canManageSerialNumbers } from '../utils/permissions';
 
 function AddEquipmentModal({ onClose, onSuccess }) {
-  const { operator, operatorRole } = useOperator();
-  const isAuthorized = canManageSerialNumbers(operatorRole);
+  const { operator } = useOperator();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [categories, setCategories] = useState([]);
@@ -118,7 +116,6 @@ function AddEquipmentModal({ onClose, onSuccess }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!isAuthorized) { setError('You do not have permission to add equipment.'); return; }
     if (duplicateMatch) return;
     setLoading(true);
     setError(null);
@@ -272,11 +269,6 @@ function AddEquipmentModal({ onClose, onSuccess }) {
           </button>
         </div>
 
-        {!isAuthorized ? (
-          <div className="modal-body">
-            <div className="alert alert-error">You do not have permission to add equipment.</div>
-          </div>
-        ) : (
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
             {error && <div className="alert alert-error">{error}</div>}
@@ -777,7 +769,6 @@ function AddEquipmentModal({ onClose, onSuccess }) {
             </button>
           </div>
         </form>
-        )}
       </div>
     </div>
   );
