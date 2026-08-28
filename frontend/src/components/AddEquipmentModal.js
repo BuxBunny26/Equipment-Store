@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { equipmentApi, categoriesApi, locationsApi, subcategoriesApi, customersApi, personnelApi, movementsApi } from '../services/api';
 import { Icons } from './Icons';
@@ -7,8 +7,16 @@ import { getCustomFieldRule } from '../utils/customFields';
 import { uniqueCountries, customerMatchesCountry, regionLabel } from '../utils/provinces';
 import { useOperator } from '../context/OperatorContext';
 
+// First 3 alphanumeric characters of a name, uppercased (e.g. "Vibration
+// Analyzer" -> "VIB", "SKF" -> "SKF"). Falls back to "GEN" if nothing usable.
+function codeFromName(name) {
+  const clean = (name || '').replace(/[^a-zA-Z0-9]/g, '');
+  return (clean.slice(0, 3) || 'GEN').toUpperCase();
+}
+
 function AddEquipmentModal({ onClose, onSuccess }) {
-  const { operator } = useOperator();
+  const { operator, operatorRole } = useOperator();
+  const isManagerPlus = !!operatorRole && ['admin', 'manager'].includes(operatorRole.toLowerCase());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [categories, setCategories] = useState([]);
@@ -19,9 +27,12 @@ function AddEquipmentModal({ onClose, onSuccess }) {
   const [duplicateMatch, setDuplicateMatch] = useState(null);
   const [checkingSerial, setCheckingSerial] = useState(false);
   const [customFieldValues, setCustomFieldValues] = useState({});
-  // Equipment ID auto-fill: mirrors "EQ-<Serial Number>" (matches this store's
-  // existing ID convention) until the user manually edits Equipment ID themselves.
+  // Equipment ID auto-fill: "<CATEGORY>-<MANUFACTURER>-<SEQUENCE>" (e.g.
+  // VIB-SKF-0001), recomputed whenever Category/Manufacturer change, until an
+  // admin/manager manually edits Equipment ID themselves. Non-manager users
+  // can never edit it (see isManagerPlus / the Equipment ID field below).
   const [autoGenerateId, setAutoGenerateId] = useState(true);
+  const idGenRequestRef = useRef(0);
   // Unified site picker state (mirrors the destination picker on Check Out)
   const [siteType, setSiteType] = useState('internal'); // 'internal' | 'customer'
   const [siteCountryFilter, setSiteCountryFilter] = useState('South Africa');
@@ -87,6 +98,35 @@ function AddEquipmentModal({ onClose, onSuccess }) {
     }
   };
 
+  // Auto-generate Equipment ID as "<CAT>-<MFR>-<SEQUENCE>" whenever Category
+  // or Manufacturer change, as long as auto-fill hasn't been overridden.
+  useEffect(() => {
+    if (!autoGenerateId) return;
+    const categoryName = categories.find((c) => c.id === parseInt(formData.category_id, 10))?.name;
+    const manufacturer = formData.manufacturer.trim();
+    if (!categoryName || !manufacturer) {
+      setFormData((prev) => (prev.equipment_id ? { ...prev, equipment_id: '' } : prev));
+      return;
+    }
+    const requestId = ++idGenRequestRef.current;
+    const timer = setTimeout(async () => {
+      try {
+        const prefix = `${codeFromName(categoryName)}-${codeFromName(manufacturer)}`;
+        const { data } = await equipmentApi.getIdsByPrefix(prefix);
+        if (requestId !== idGenRequestRef.current) return; // a newer request superseded this one
+        const maxSeq = (data || []).reduce((max, row) => {
+          const m = /-(\d+)$/.exec(row.equipment_id || '');
+          return m ? Math.max(max, parseInt(m[1], 10)) : max;
+        }, 0);
+        const nextId = `${prefix}-${String(maxSeq + 1).padStart(4, '0')}`;
+        setFormData((prev) => (prev.equipment_id === nextId ? prev : { ...prev, equipment_id: nextId }));
+      } catch (err) {
+        console.error('Error generating Equipment ID:', err);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [formData.category_id, formData.manufacturer, autoGenerateId, categories]);
+
   // Debounced serial number duplicate check
   const checkSerialNumber = useCallback(
     (() => {
@@ -119,6 +159,20 @@ function AddEquipmentModal({ onClose, onSuccess }) {
     if (duplicateMatch) return;
     setLoading(true);
     setError(null);
+
+    const trimmedEquipmentId = formData.equipment_id.trim();
+    try {
+      const { data: existing } = await equipmentApi.checkEquipmentIdExists(trimmedEquipmentId);
+      if (existing && existing.length > 0) {
+        setError(`Equipment ID "${trimmedEquipmentId}" is already in use. Please choose a different one.`);
+        setLoading(false);
+        return;
+      }
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+      return;
+    }
 
     // Resolve primary + roving sites from the multi-select arrays.
     const primaryLocationId = siteType === 'internal' && selectedLocationIds[0]
@@ -205,7 +259,12 @@ function AddEquipmentModal({ onClose, onSuccess }) {
 
       onSuccess();
     } catch (err) {
-      setError(err.message);
+      // The DB's UNIQUE constraint is the final backstop against a race with
+      // another concurrent create; surface it as a friendly message.
+      const isDuplicateId = /equipment_id/i.test(err.message) && /duplicate|unique/i.test(err.message);
+      setError(isDuplicateId
+        ? `Equipment ID "${trimmedEquipmentId}" is already in use. Please choose a different one.`
+        : err.message);
     } finally {
       setLoading(false);
     }
@@ -242,16 +301,8 @@ function AddEquipmentModal({ onClose, onSuccess }) {
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     const newVal = type === 'checkbox' ? checked : value;
-    setFormData((prev) => {
-      const next = { ...prev, [name]: newVal };
-      // Keep Equipment ID in sync with Serial Number ("EQ-<serial>") until
-      // the user has typed into Equipment ID themselves.
-      if (name === 'serial_number' && autoGenerateId) {
-        next.equipment_id = value.trim() ? `EQ-${value.trim()}` : '';
-      }
-      return next;
-    });
-    if (name === 'equipment_id') {
+    setFormData((prev) => ({ ...prev, [name]: newVal }));
+    if (name === 'equipment_id' && isManagerPlus) {
       setAutoGenerateId(false);
     }
     if (name === 'serial_number') {
@@ -299,12 +350,7 @@ function AddEquipmentModal({ onClose, onSuccess }) {
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">
-                  Equipment ID *{' '}
-                  <span style={{ fontWeight: 400, color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-                    (same as Serial Number by default)
-                  </span>
-                </label>
+                <label className="form-label">Equipment ID *</label>
                 <input
                   type="text"
                   name="equipment_id"
@@ -312,19 +358,23 @@ function AddEquipmentModal({ onClose, onSuccess }) {
                   value={formData.equipment_id}
                   onChange={handleChange}
                   required
-                  placeholder="e.g., EQP-001"
+                  readOnly={!isManagerPlus}
+                  disabled={!isManagerPlus}
+                  placeholder={isManagerPlus ? 'e.g., VIB-SKF-0001' : 'Auto-filling...'}
                 />
-                {!autoGenerateId && formData.is_serialised && formData.serial_number.trim() && (
+                <div className="form-hint">
+                  {isManagerPlus
+                    ? 'Auto-filled from Category + Manufacturer (edit to override).'
+                    : 'Auto-filled from Category + Manufacturer \u2014 only Admin/Manager can edit.'}
+                </div>
+                {!autoGenerateId && isManagerPlus && (
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm"
                     style={{ marginTop: '6px' }}
-                    onClick={() => {
-                      setAutoGenerateId(true);
-                      setFormData((prev) => ({ ...prev, equipment_id: `EQ-${prev.serial_number.trim()}` }));
-                    }}
+                    onClick={() => setAutoGenerateId(true)}
                   >
-                    Reset to EQ-{formData.serial_number.trim()}
+                    Reset to auto-generated ID
                   </button>
                 )}
               </div>
