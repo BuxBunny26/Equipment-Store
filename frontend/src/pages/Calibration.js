@@ -5,8 +5,6 @@ import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
 import ExportMenu from '../components/ExportMenu';
 import { Icons } from '../components/Icons';
 import { pickCurrentCalibrationRecord } from '../utils/calibrationCurrent';
-import { useOperator } from '../context/OperatorContext';
-import { isAdminOrManager } from '../utils/permissions';
 
 // Formats free-typed digits into DD/MM/YYYY, auto-inserting "/" -- built
 // from the browser's own post-edit value each time, so native cursor and
