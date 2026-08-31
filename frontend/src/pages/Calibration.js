@@ -5,6 +5,40 @@ import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
 import ExportMenu from '../components/ExportMenu';
 import { Icons } from '../components/Icons';
 import { pickCurrentCalibrationRecord } from '../utils/calibrationCurrent';
+import { useOperator } from '../context/OperatorContext';
+import { isAdminOrManager } from '../utils/permissions';
+
+// Formats free-typed digits into DD/MM/YYYY, auto-inserting "/" -- built
+// from the browser's own post-edit value each time, so native cursor and
+// Backspace/Delete behaviour is never fought or reconstructed.
+function formatDateInputChange(rawValue) {
+  const digits = rawValue.replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+// Converts a complete DD/MM/YYYY string to YYYY-MM-DD, or null if it's
+// incomplete or not a real calendar date (e.g. 31/04/2026, 29/02/2025).
+function displayDateToIso(displayValue) {
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(displayValue || '');
+  if (!match) return null;
+  const [, dd, mm, yyyy] = match;
+  const day = parseInt(dd, 10);
+  const month = parseInt(mm, 10);
+  const year = parseInt(yyyy, 10);
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return null;
+  }
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+// Converts a YYYY-MM-DD string to DD/MM/YYYY for display (e.g. today's default).
+function isoDateToDisplay(isoValue) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoValue || '');
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
+}
 
 function Calibration() {
   const [searchParams] = useSearchParams();
@@ -117,7 +151,7 @@ function Calibration() {
     setSelectedEquipment(item);
     setCalibrationForm({
       equipment_id: item.equipment_id,
-      calibration_date: new Date().toISOString().split('T')[0],
+      calibration_date: isoDateToDisplay(new Date().toISOString().split('T')[0]),
       expiry_date: '',
       certificate_number: '',
       calibration_provider: '',
@@ -135,14 +169,26 @@ function Calibration() {
       setTimeout(() => setError(null), 5000);
       return;
     }
-    if (calibrationForm.expiry_date && calibrationForm.calibration_date && calibrationForm.expiry_date < calibrationForm.calibration_date) {
+    const isoCalibrationDate = displayDateToIso(calibrationForm.calibration_date);
+    if (!isoCalibrationDate) {
+      setError('Calibration date must be a valid date in DD/MM/YYYY format');
+      setTimeout(() => setError(null), 5000);
+      return;
+    }
+    const isoExpiryDate = calibrationForm.expiry_date ? displayDateToIso(calibrationForm.expiry_date) : null;
+    if (calibrationForm.expiry_date && !isoExpiryDate) {
+      setError('Expiry date must be a valid date in DD/MM/YYYY format');
+      setTimeout(() => setError(null), 5000);
+      return;
+    }
+    if (isoExpiryDate && isoExpiryDate < isoCalibrationDate) {
       setError('Expiry date cannot be before calibration date');
       setTimeout(() => setError(null), 5000);
       return;
     }
     setFormSubmitting(true);
     try {
-      await calibrationApi.create(calibrationForm, certificateFile);
+      await calibrationApi.create({ ...calibrationForm, calibration_date: isoCalibrationDate, expiry_date: isoExpiryDate }, certificateFile);
       setShowAddModal(false);
       fetchCalibrationStatus();
       fetchSummary();
@@ -424,20 +470,26 @@ function Calibration() {
                   <div className="form-group">
                     <label className="form-label">Calibration Date *</label>
                     <input
-                      type="date"
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="DD/MM/YYYY"
+                      maxLength={10}
                       className="form-input"
                       value={calibrationForm.calibration_date}
-                      onChange={(e) => setCalibrationForm({ ...calibrationForm, calibration_date: e.target.value })}
+                      onChange={(e) => setCalibrationForm({ ...calibrationForm, calibration_date: formatDateInputChange(e.target.value) })}
                       required
                     />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Expiry Date *</label>
                     <input
-                      type="date"
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="DD/MM/YYYY"
+                      maxLength={10}
                       className="form-input"
                       value={calibrationForm.expiry_date}
-                      onChange={(e) => setCalibrationForm({ ...calibrationForm, expiry_date: e.target.value })}
+                      onChange={(e) => setCalibrationForm({ ...calibrationForm, expiry_date: formatDateInputChange(e.target.value) })}
                       required
                     />
                   </div>
