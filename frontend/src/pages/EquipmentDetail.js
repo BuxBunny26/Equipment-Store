@@ -200,6 +200,11 @@ function EquipmentDetail() {
     setShowAddCalibrationModal(true);
   };
 
+  const handleCloseAddCalibrationModal = () => {
+    setShowAddCalibrationModal(false);
+    setCalibrationAddError(null);
+  };
+
   const handleAddCalibrationSubmit = async (e) => {
     e.preventDefault();
     if (calibrationFile && calibrationFile.size > 10 * 1024 * 1024) {
@@ -227,6 +232,7 @@ function EquipmentDetail() {
         calibrationFile
       );
       setShowAddCalibrationModal(false);
+      setCalibrationAddError(null);
       await fetchCalibrationHistory();
       setCalibrationAddSuccess('Calibration record added successfully!');
       setTimeout(() => setCalibrationAddSuccess(null), 5000);
@@ -796,11 +802,11 @@ function EquipmentDetail() {
 
       {/* Add Calibration Modal */}
       {showAddCalibrationModal && (
-        <div className="modal-overlay" onClick={() => setShowAddCalibrationModal(false)}>
+        <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Add Calibration Record</h2>
-              <button className="modal-close" onClick={() => setShowAddCalibrationModal(false)}>×</button>
+              <button className="modal-close" onClick={handleCloseAddCalibrationModal}>×</button>
             </div>
             <div className="modal-body">
               <div className="equipment-info" style={{ marginBottom: '1rem', padding: '1rem', background: 'var(--bg-primary)', borderRadius: '4px' }}>
@@ -889,7 +895,7 @@ function EquipmentDetail() {
                 </div>
 
                 <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary" onClick={() => setShowAddCalibrationModal(false)}>
+                  <button type="button" className="btn btn-secondary" onClick={handleCloseAddCalibrationModal}>
                     Cancel
                   </button>
                   <button type="submit" className="btn btn-primary" disabled={calibrationSubmitting}>

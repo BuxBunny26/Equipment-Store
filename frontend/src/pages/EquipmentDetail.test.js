@@ -265,4 +265,44 @@ describe('EquipmentDetail Add Calibration', () => {
     await unmount();
     container.remove();
   });
+
+  // Regression coverage for: clicking the dark overlay outside the Add
+  // Calibration modal must NOT close it or lose entered form data.
+  test('clicking the overlay does not close the modal or clear entered values', async () => {
+    const { container, unmount } = await renderDetail();
+    const tabBtn = Array.from(container.querySelectorAll('button')).find(b => b.textContent.startsWith('Calibration ('));
+    await act(async () => { tabBtn.click(); });
+    openModal(container);
+
+    const certNumberInput = getModalInput(container, 'Certificate Number');
+    act(() => { setInputValue(certNumberInput, 'CAL-KEEP-ME'); });
+
+    const overlay = container.querySelector('.modal-overlay');
+    act(() => { overlay.click(); });
+
+    expect(container.querySelector('.modal')).toBeTruthy();
+    expect(getModalInput(container, 'Certificate Number').value).toBe('CAL-KEEP-ME');
+
+    await unmount();
+    container.remove();
+  });
+
+  test('Cancel and × close the modal', async () => {
+    const { container, unmount } = await renderDetail();
+    const tabBtn = Array.from(container.querySelectorAll('button')).find(b => b.textContent.startsWith('Calibration ('));
+    await act(async () => { tabBtn.click(); });
+    openModal(container);
+
+    const closeBtn = container.querySelector('.modal-close');
+    act(() => { closeBtn.click(); });
+    expect(container.querySelector('.modal')).toBeNull();
+
+    openModal(container);
+    const cancelBtn = Array.from(container.querySelectorAll('button')).find(b => b.textContent.trim() === 'Cancel');
+    act(() => { cancelBtn.click(); });
+    expect(container.querySelector('.modal')).toBeNull();
+
+    await unmount();
+    container.remove();
+  });
 });

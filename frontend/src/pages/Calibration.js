@@ -68,6 +68,7 @@ function Calibration() {
   });
   const [certificateFile, setCertificateFile] = useState(null);
   const [formSubmitting, setFormSubmitting] = useState(false);
+  const [calibrationFormError, setCalibrationFormError] = useState(null);
 
   const fetchCalibrationStatus = useCallback(async () => {
     try {
@@ -146,6 +147,7 @@ function Calibration() {
   };
 
   const handleAddCalibration = (item) => {
+    setCalibrationFormError(null);
     setSelectedEquipment(item);
     setCalibrationForm({
       equipment_id: item.equipment_id,
@@ -160,41 +162,42 @@ function Calibration() {
     setShowAddModal(true);
   };
 
+  const handleCloseAddModal = () => {
+    setShowAddModal(false);
+    setCalibrationFormError(null);
+  };
+
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     if (certificateFile && certificateFile.size > 10 * 1024 * 1024) {
-      setError('Certificate file must be less than 10MB');
-      setTimeout(() => setError(null), 5000);
+      setCalibrationFormError('Certificate file must be less than 10MB');
       return;
     }
     const isoCalibrationDate = displayDateToIso(calibrationForm.calibration_date);
     if (!isoCalibrationDate) {
-      setError('Calibration date must be a valid date in DD/MM/YYYY format');
-      setTimeout(() => setError(null), 5000);
+      setCalibrationFormError('Calibration date must be a valid date in DD/MM/YYYY format');
       return;
     }
     const isoExpiryDate = calibrationForm.expiry_date ? displayDateToIso(calibrationForm.expiry_date) : null;
     if (calibrationForm.expiry_date && !isoExpiryDate) {
-      setError('Expiry date must be a valid date in DD/MM/YYYY format');
-      setTimeout(() => setError(null), 5000);
+      setCalibrationFormError('Expiry date must be a valid date in DD/MM/YYYY format');
       return;
     }
     if (isoExpiryDate && isoExpiryDate < isoCalibrationDate) {
-      setError('Expiry date cannot be before calibration date');
-      setTimeout(() => setError(null), 5000);
+      setCalibrationFormError('Expiry date cannot be before calibration date');
       return;
     }
     setFormSubmitting(true);
     try {
       await calibrationApi.create({ ...calibrationForm, calibration_date: isoCalibrationDate, expiry_date: isoExpiryDate }, certificateFile);
       setShowAddModal(false);
+      setCalibrationFormError(null);
       fetchCalibrationStatus();
       fetchSummary();
       setSuccess('Calibration record added successfully!');
       setTimeout(() => setSuccess(null), 5000);
     } catch (err) {
-      setError('Error adding calibration: ' + err.message);
-      setTimeout(() => setError(null), 5000);
+      setCalibrationFormError('Error adding calibration: ' + err.message);
     } finally {
       setFormSubmitting(false);
     }
@@ -446,13 +449,14 @@ function Calibration() {
 
       {/* Add Calibration Modal */}
       {showAddModal && (
-        <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
+        <div className="modal-overlay">
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Add Calibration Record</h2>
-              <button className="modal-close" onClick={() => setShowAddModal(false)}>×</button>
+              <button className="modal-close" onClick={handleCloseAddModal}>×</button>
             </div>
             <div className="modal-body">
+              {calibrationFormError && <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{calibrationFormError}</div>}
               {selectedEquipment && (
                 <div className="equipment-info" style={{ marginBottom: '1rem', padding: '1rem', background: 'var(--bg-primary)', borderRadius: '4px' }}>
                   <strong>{selectedEquipment.equipment_name}</strong>
@@ -539,7 +543,7 @@ function Calibration() {
                 </div>
 
                 <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary" onClick={() => setShowAddModal(false)}>
+                  <button type="button" className="btn btn-secondary" onClick={handleCloseAddModal}>
                     Cancel
                   </button>
                   <button type="submit" className="btn btn-primary" disabled={formSubmitting}>
