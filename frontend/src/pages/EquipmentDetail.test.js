@@ -31,8 +31,10 @@ jest.mock('../services/api', () => ({
 }));
 
 jest.mock('../context/OperatorContext', () => ({
-  useOperator: () => ({ operator: { id: 1, full_name: 'Test Operator' }, operatorRole: 'operator' }),
+  useOperator: jest.fn(),
 }));
+
+const { useOperator } = require('../context/OperatorContext');
 
 const baseEquipment = {
   id: 42,
@@ -103,6 +105,7 @@ describe('EquipmentDetail Add Calibration', () => {
     calibrationApi.create.mockReset().mockResolvedValue({ data: { id: 999 } });
     categoriesApi.getAll.mockReset().mockResolvedValue({ data: [] });
     subcategoriesApi.getAll.mockReset().mockResolvedValue({ data: [] });
+    useOperator.mockReset().mockReturnValue({ operator: { id: 1, full_name: 'Test Operator' }, operatorRole: 'operator' });
   });
 
   test('"+ Add Calibration" button is visible with zero calibration records', async () => {
@@ -301,6 +304,191 @@ describe('EquipmentDetail Add Calibration', () => {
     const cancelBtn = Array.from(container.querySelectorAll('button')).find(b => b.textContent.trim() === 'Cancel');
     act(() => { cancelBtn.click(); });
     expect(container.querySelector('.modal')).toBeNull();
+
+    await unmount();
+    container.remove();
+  });
+});
+
+// Regression coverage for: "Admin/Manager can edit Equipment Name and
+// Description from Equipment Detail". Only Admin/Manager may inline-edit
+// those two Basic Information fields; Equipment ID stays read-only, and
+// no other equipment field is touched.
+function getEditButton(container) {
+  return Array.from(container.querySelectorAll('button')).find(b => b.textContent.trim() === 'Edit');
+}
+
+describe('EquipmentDetail Basic Information editing', () => {
+  beforeEach(() => {
+    equipmentApi.getById.mockReset().mockResolvedValue({ data: { ...baseEquipment } });
+    equipmentApi.getHistory.mockReset().mockResolvedValue({ data: [] });
+    equipmentApi.update.mockReset().mockResolvedValue({ data: { ...baseEquipment } });
+    calibrationApi.getHistory.mockReset().mockResolvedValue({ data: [] });
+    categoriesApi.getAll.mockReset().mockResolvedValue({ data: [] });
+    subcategoriesApi.getAll.mockReset().mockResolvedValue({ data: [] });
+    useOperator.mockReset().mockReturnValue({ operator: { id: 1, full_name: 'Test Operator' }, operatorRole: 'operator' });
+  });
+
+  test('Admin sees the Basic Information Edit action', async () => {
+    useOperator.mockReturnValue({ operator: { id: 1 }, operatorRole: 'admin' });
+    const { container, unmount } = await renderDetail();
+
+    expect(getEditButton(container)).toBeTruthy();
+
+    await unmount();
+    container.remove();
+  });
+
+  test('Manager sees the Basic Information Edit action', async () => {
+    useOperator.mockReturnValue({ operator: { id: 1 }, operatorRole: 'manager' });
+    const { container, unmount } = await renderDetail();
+
+    expect(getEditButton(container)).toBeTruthy();
+
+    await unmount();
+    container.remove();
+  });
+
+  test('ordinary user does not see the Basic Information Edit action', async () => {
+    useOperator.mockReturnValue({ operator: { id: 1 }, operatorRole: 'operator' });
+    const { container, unmount } = await renderDetail();
+
+    expect(getEditButton(container)).toBeFalsy();
+
+    await unmount();
+    container.remove();
+  });
+
+  test('clicking Edit pre-fills the current name and description, and Equipment ID stays read-only', async () => {
+    useOperator.mockReturnValue({ operator: { id: 1 }, operatorRole: 'admin' });
+    const { container, unmount } = await renderDetail();
+
+    act(() => { getEditButton(container).click(); });
+
+    const nameInput = getModalInput(container, 'Equipment Name *');
+    const descInput = getModalInput(container, 'Description');
+    expect(nameInput.value).toBe('Test Analyser');
+    expect(descInput.value).toBe('A test unit');
+    // Equipment ID has no associated input/textarea -- it stays plain text.
+    expect(container.textContent).toContain('EQ-TEST-0042');
+    expect(container.querySelectorAll('input[value="EQ-TEST-0042"]').length).toBe(0);
+
+    await unmount();
+    container.remove();
+  });
+
+  test('blank Equipment Name is rejected without calling equipmentApi.update', async () => {
+    useOperator.mockReturnValue({ operator: { id: 1 }, operatorRole: 'admin' });
+    const { container, unmount } = await renderDetail();
+
+    act(() => { getEditButton(container).click(); });
+    const nameInput = getModalInput(container, 'Equipment Name *');
+    act(() => { setInputValue(nameInput, '   '); });
+    const saveBtn = Array.from(container.querySelectorAll('button')).find(b => b.textContent.trim() === 'Save');
+    act(() => { saveBtn.click(); });
+
+    expect(equipmentApi.update).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Equipment Name is required');
+
+    await unmount();
+    container.remove();
+  });
+
+  test('valid save calls equipmentApi.update with only equipment_name and description, and updates the title/name/description', async () => {
+    useOperator.mockReturnValue({ operator: { id: 1 }, operatorRole: 'admin' });
+    const { container, unmount } = await renderDetail();
+
+    act(() => { getEditButton(container).click(); });
+    const nameInput = getModalInput(container, 'Equipment Name *');
+    const descInput = getModalInput(container, 'Description');
+    act(() => { setInputValue(nameInput, '  Updated Analyser Name  '); });
+    act(() => { setInputValue(descInput, 'Updated description text'); });
+
+    await act(async () => {
+      const saveBtn = Array.from(container.querySelectorAll('button')).find(b => b.textContent.trim() === 'Save');
+      saveBtn.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(equipmentApi.update).toHaveBeenCalledTimes(1);
+    const [equipmentId, payload] = equipmentApi.update.mock.calls[0];
+    expect(equipmentId).toBe(42);
+    expect(payload).toEqual({ equipment_name: 'Updated Analyser Name', description: 'Updated description text' });
+
+    expect(container.querySelector('.page-title').textContent).toBe('Updated Analyser Name');
+    expect(container.textContent).toContain('Updated description text');
+    expect(getEditButton(container)).toBeTruthy(); // edit mode exited, Edit action reappears
+    expect(container.querySelectorAll('textarea').length).toBe(0);
+
+    await unmount();
+    container.remove();
+  });
+
+  test('clearing the description is allowed and saves as null', async () => {
+    useOperator.mockReturnValue({ operator: { id: 1 }, operatorRole: 'admin' });
+    const { container, unmount } = await renderDetail();
+
+    act(() => { getEditButton(container).click(); });
+    const descInput = getModalInput(container, 'Description');
+    act(() => { setInputValue(descInput, ''); });
+
+    await act(async () => {
+      const saveBtn = Array.from(container.querySelectorAll('button')).find(b => b.textContent.trim() === 'Save');
+      saveBtn.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const [, payload] = equipmentApi.update.mock.calls[0];
+    expect(payload.description).toBeNull();
+
+    await unmount();
+    container.remove();
+  });
+
+  test('Cancel discards changes without calling equipmentApi.update', async () => {
+    useOperator.mockReturnValue({ operator: { id: 1 }, operatorRole: 'admin' });
+    const { container, unmount } = await renderDetail();
+
+    act(() => { getEditButton(container).click(); });
+    const nameInput = getModalInput(container, 'Equipment Name *');
+    act(() => { setInputValue(nameInput, 'Discarded Name'); });
+
+    const cancelBtn = Array.from(container.querySelectorAll('button')).find(b => b.textContent.trim() === 'Cancel');
+    act(() => { cancelBtn.click(); });
+
+    expect(equipmentApi.update).not.toHaveBeenCalled();
+    expect(container.querySelector('.page-title').textContent).toBe('Test Analyser');
+    expect(container.textContent).toContain('A test unit');
+
+    // Re-opening Edit confirms the saved values were restored, not the discarded ones.
+    act(() => { getEditButton(container).click(); });
+    expect(getModalInput(container, 'Equipment Name *').value).toBe('Test Analyser');
+
+    await unmount();
+    container.remove();
+  });
+
+  test('a failed save keeps edit mode open, preserves entered values, and shows a local error', async () => {
+    useOperator.mockReturnValue({ operator: { id: 1 }, operatorRole: 'admin' });
+    equipmentApi.update.mockRejectedValue(new Error('Network error'));
+    const { container, unmount } = await renderDetail();
+
+    act(() => { getEditButton(container).click(); });
+    const nameInput = getModalInput(container, 'Equipment Name *');
+    act(() => { setInputValue(nameInput, 'Attempted Name'); });
+
+    await act(async () => {
+      const saveBtn = Array.from(container.querySelectorAll('button')).find(b => b.textContent.trim() === 'Save');
+      saveBtn.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('Error saving changes');
+    expect(getModalInput(container, 'Equipment Name *').value).toBe('Attempted Name');
+    expect(container.querySelector('.page-title').textContent).toBe('Test Analyser');
 
     await unmount();
     container.remove();

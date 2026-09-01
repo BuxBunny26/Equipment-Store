@@ -60,6 +60,11 @@ function EquipmentDetail() {
   const [savingCategory, setSavingCategory] = useState(false);
   const [availableCats, setAvailableCats] = useState([]);
   const [availableSubs, setAvailableSubs] = useState([]);
+  const [editingBasicInfo, setEditingBasicInfo] = useState(false);
+  const [basicInfoName, setBasicInfoName] = useState('');
+  const [basicInfoDescription, setBasicInfoDescription] = useState('');
+  const [savingBasicInfo, setSavingBasicInfo] = useState(false);
+  const [basicInfoEditError, setBasicInfoEditError] = useState(null);
   const [showAddCalibrationModal, setShowAddCalibrationModal] = useState(false);
   const [calibrationForm, setCalibrationForm] = useState({
     equipment_id: '',
@@ -148,6 +153,41 @@ function EquipmentDetail() {
       console.error('Failed to save category:', err);
     } finally {
       setSavingCategory(false);
+    }
+  };
+
+  const openBasicInfoEdit = () => {
+    setBasicInfoName(equipment.equipment_name || '');
+    setBasicInfoDescription(equipment.description || '');
+    setBasicInfoEditError(null);
+    setEditingBasicInfo(true);
+  };
+
+  const handleCancelBasicInfoEdit = () => {
+    setEditingBasicInfo(false);
+    setBasicInfoEditError(null);
+  };
+
+  const handleSaveBasicInfo = async () => {
+    const trimmedName = basicInfoName.trim();
+    if (!trimmedName) {
+      setBasicInfoEditError('Equipment Name is required');
+      return;
+    }
+    setSavingBasicInfo(true);
+    setBasicInfoEditError(null);
+    try {
+      const trimmedDescription = basicInfoDescription.trim() || null;
+      await equipmentApi.update(equipment.id, {
+        equipment_name: trimmedName,
+        description: trimmedDescription,
+      });
+      setEquipment(prev => ({ ...prev, equipment_name: trimmedName, description: trimmedDescription }));
+      setEditingBasicInfo(false);
+    } catch (err) {
+      setBasicInfoEditError('Error saving changes: ' + err.message);
+    } finally {
+      setSavingBasicInfo(false);
     }
   };
 
@@ -440,23 +480,81 @@ function EquipmentDetail() {
         <div className="card">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '24px' }}>
             <div>
-              <h3 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '16px', color: 'var(--text-secondary)' }}>
+              <h3 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '16px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 Basic Information
+                {isAdmin && !editingBasicInfo && (
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    onClick={openBasicInfoEdit}
+                    style={{ fontSize: '0.75rem', padding: '2px 8px' }}
+                    title="Edit name and description"
+                  >
+                    Edit
+                  </button>
+                )}
               </h3>
-              <dl style={{ display: 'grid', gap: '12px' }}>
-                <div>
-                  <dt style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Equipment ID</dt>
-                  <dd style={{ fontWeight: 500 }}>{equipment.equipment_id}</dd>
+              {editingBasicInfo ? (
+                <div style={{ display: 'grid', gap: '10px' }}>
+                  {basicInfoEditError && <div className="alert alert-error" style={{ fontSize: '0.8rem', padding: '6px 10px' }}>{basicInfoEditError}</div>}
+                  <div>
+                    <dt style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Equipment ID</dt>
+                    <dd style={{ fontWeight: 500 }}>{equipment.equipment_id}</dd>
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Equipment Name *</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={basicInfoName}
+                      onChange={e => setBasicInfoName(e.target.value)}
+                      style={{ fontSize: '0.85rem' }}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Description</label>
+                    <textarea
+                      className="form-input"
+                      value={basicInfoDescription}
+                      onChange={e => setBasicInfoDescription(e.target.value)}
+                      rows={3}
+                      style={{ fontSize: '0.85rem' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={handleSaveBasicInfo}
+                      disabled={savingBasicInfo}
+                      style={{ fontSize: '0.78rem' }}
+                    >
+                      {savingBasicInfo ? 'Saving...' : 'Save'}
+                    </button>
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      onClick={handleCancelBasicInfoEdit}
+                      disabled={savingBasicInfo}
+                      style={{ fontSize: '0.78rem' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <dt style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Name</dt>
-                  <dd style={{ fontWeight: 500 }}>{equipment.equipment_name}</dd>
-                </div>
-                <div>
-                  <dt style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Description</dt>
-                  <dd>{equipment.description || '-'}</dd>
-                </div>
-              </dl>
+              ) : (
+                <dl style={{ display: 'grid', gap: '12px' }}>
+                  <div>
+                    <dt style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Equipment ID</dt>
+                    <dd style={{ fontWeight: 500 }}>{equipment.equipment_id}</dd>
+                  </div>
+                  <div>
+                    <dt style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Name</dt>
+                    <dd style={{ fontWeight: 500 }}>{equipment.equipment_name}</dd>
+                  </div>
+                  <div>
+                    <dt style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Description</dt>
+                    <dd>{equipment.description || '-'}</dd>
+                  </div>
+                </dl>
+              )}
             </div>
 
             <div>
