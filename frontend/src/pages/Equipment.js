@@ -1,13 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
-import { equipmentApi, categoriesApi, calibrationApi } from '../services/api';
+import { equipmentApi, categoriesApi, subcategoriesApi, calibrationApi } from '../services/api';
 import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
 import ExportMenu from '../components/ExportMenu';
 import { Icons } from '../components/Icons';
 import AddEquipmentModal from '../components/AddEquipmentModal';
 import { getCustomFieldRule, getCustomFieldValue } from '../utils/customFields';
 import { useOperator } from '../context/OperatorContext';
+import {
+  createInitialBulkEditForm,
+  hasAnyBulkEditChange,
+  getBulkEditValidationError,
+  buildBulkEditPayload,
+  describeBulkEditChanges,
+} from '../utils/bulkEditEquipment';
 
 function Equipment() {
   const { operatorRole } = useOperator();
@@ -32,6 +39,16 @@ function Equipment() {
   const [importResults, setImportResults] = useState(null);
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef(null);
+
+  // Admin/Manager multi-select + bulk edit
+  const [selectedEquipmentIds, setSelectedEquipmentIds] = useState([]);
+  const [showBulkEditModal, setShowBulkEditModal] = useState(false);
+  const [showBulkEditConfirm, setShowBulkEditConfirm] = useState(false);
+  const [bulkEditForm, setBulkEditForm] = useState(createInitialBulkEditForm());
+  const [bulkEditSubcategories, setBulkEditSubcategories] = useState([]);
+  const [bulkEditSubmitting, setBulkEditSubmitting] = useState(false);
+  const [bulkEditError, setBulkEditError] = useState(null);
+  const [bulkEditSuccessMessage, setBulkEditSuccessMessage] = useState(null);
 
   useEffect(() => {
     fetchCategories();
@@ -141,6 +158,89 @@ function Equipment() {
     }
   };
 
+  // Select-all only ever targets the rows currently visible under the active
+  // filters, never the full unfiltered dataset. Previously selected ids that
+  // scroll out of view (e.g. after changing filters) are deliberately kept,
+  // not silently dropped or expanded.
+  const visibleEquipmentIds = equipment.map(e => e.id);
+  const allVisibleSelected = visibleEquipmentIds.length > 0 &&
+    visibleEquipmentIds.every(id => selectedEquipmentIds.includes(id));
+
+  const handleToggleSelectAll = () => {
+    if (allVisibleSelected) {
+      setSelectedEquipmentIds(prev => prev.filter(id => !visibleEquipmentIds.includes(id)));
+    } else {
+      setSelectedEquipmentIds(prev => Array.from(new Set([...prev, ...visibleEquipmentIds])));
+    }
+  };
+
+  const handleToggleSelectRow = (id) => {
+    setSelectedEquipmentIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const handleClearSelection = () => setSelectedEquipmentIds([]);
+
+  const openBulkEditModal = () => {
+    setBulkEditForm(createInitialBulkEditForm());
+    setBulkEditSubcategories([]);
+    setBulkEditError(null);
+    setShowBulkEditConfirm(false);
+    setBulkEditSuccessMessage(null);
+    setShowBulkEditModal(true);
+  };
+
+  const handleCloseBulkEditModal = () => {
+    setShowBulkEditModal(false);
+    setShowBulkEditConfirm(false);
+    setBulkEditForm(createInitialBulkEditForm());
+    setBulkEditSubcategories([]);
+    setBulkEditError(null);
+  };
+
+  const handleBulkEditCategoryChange = async (categoryId) => {
+    try {
+      const { data } = await subcategoriesApi.getAll(categoryId);
+      setBulkEditSubcategories(data || []);
+    } catch (err) {
+      setBulkEditSubcategories([]);
+    }
+  };
+
+  const handleRequestBulkEditSave = () => {
+    const validationError = getBulkEditValidationError(bulkEditForm);
+    if (validationError) {
+      setBulkEditError(validationError);
+      return;
+    }
+    setBulkEditError(null);
+    setShowBulkEditConfirm(true);
+  };
+
+  const handleCancelBulkEditConfirm = () => {
+    setShowBulkEditConfirm(false);
+  };
+
+  const handleConfirmBulkEdit = async () => {
+    const payload = buildBulkEditPayload(bulkEditForm);
+    setBulkEditSubmitting(true);
+    setBulkEditError(null);
+    try {
+      const updated = await equipmentApi.bulkUpdate(selectedEquipmentIds, payload);
+      setShowBulkEditModal(false);
+      setShowBulkEditConfirm(false);
+      setBulkEditForm(createInitialBulkEditForm());
+      setBulkEditSubcategories([]);
+      setSelectedEquipmentIds([]);
+      setBulkEditSuccessMessage(`${updated.length} equipment record${updated.length !== 1 ? 's' : ''} updated successfully.`);
+      fetchEquipment();
+    } catch (err) {
+      setBulkEditError('Error updating equipment: ' + err.message);
+      setShowBulkEditConfirm(false);
+    } finally {
+      setBulkEditSubmitting(false);
+    }
+  };
+
   const getStatusBadge = (item) => {
     if (item.is_consumable) {
       if (item.available_quantity <= item.reorder_level) {
@@ -234,6 +334,27 @@ function Equipment() {
 
   return (
     <div>
+      {bulkEditSuccessMessage && (
+        <div className="alert alert-success" style={{ marginBottom: '12px' }}>
+          {bulkEditSuccessMessage}
+          <button
+            className="btn btn-sm btn-secondary"
+            onClick={() => setBulkEditSuccessMessage(null)}
+            style={{ marginLeft: 'auto' }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {isManager && selectedEquipmentIds.length > 0 && (
+        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 16px', marginBottom: '12px' }}>
+          <strong>{selectedEquipmentIds.length} selected</strong>
+          <button className="btn btn-sm btn-primary" onClick={openBulkEditModal}>Bulk Edit</button>
+          <button className="btn btn-sm btn-secondary" onClick={handleClearSelection}>Clear Selection</button>
+        </div>
+      )}
+
       <div className="page-header">
         <div>
           <h1 className="page-title">Equipment</h1>
@@ -365,6 +486,16 @@ function Equipment() {
             <table className="equipment-table">
               <thead>
                 <tr>
+                  {isManager && (
+                    <th style={{ width: '32px' }}>
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={handleToggleSelectAll}
+                        aria-label="Select all visible equipment"
+                      />
+                    </th>
+                  )}
                   <th>Equipment ID</th>
                   <th>Name</th>
                   <th>Category</th>
@@ -379,6 +510,16 @@ function Equipment() {
               <tbody>
                 {equipment.map((item) => (
                   <tr key={item.id}>
+                    {isManager && (
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedEquipmentIds.includes(item.id)}
+                          onChange={() => handleToggleSelectRow(item.id)}
+                          aria-label={`Select ${item.equipment_id}`}
+                        />
+                      </td>
+                    )}
                     <td>
                       <Link to={`/equipment/${item.id}`} style={{ fontWeight: 600 }}>
                         {item.equipment_id}
@@ -470,6 +611,25 @@ function Equipment() {
         <RecentlyDeletedModal
           onClose={() => setShowDeletedModal(false)}
           onRestored={fetchEquipment}
+        />
+      )}
+
+      {/* Bulk Edit Modal */}
+      {showBulkEditModal && (
+        <BulkEditModal
+          selectedCount={selectedEquipmentIds.length}
+          form={bulkEditForm}
+          setForm={setBulkEditForm}
+          categories={categories}
+          subcategories={bulkEditSubcategories}
+          onCategoryChange={handleBulkEditCategoryChange}
+          submitting={bulkEditSubmitting}
+          error={bulkEditError}
+          confirming={showBulkEditConfirm}
+          onRequestSave={handleRequestBulkEditSave}
+          onConfirm={handleConfirmBulkEdit}
+          onCancelConfirm={handleCancelBulkEditConfirm}
+          onClose={handleCloseBulkEditModal}
         />
       )}
 
@@ -722,6 +882,226 @@ function RecentlyDeletedModal({ onClose, onRestored }) {
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Admin/Manager bulk edit for the multi-select equipment feature. Every field
+// defaults to "do not change" so selecting many records with differing
+// values never risks accidentally overwriting them. Category/Subcategory are
+// linked: changing Category always forces an explicit Subcategory choice
+// (either a valid subcategory or an explicit clear), matching the existing
+// single-record "Classification" edit rule in EquipmentDetail.js.
+function BulkEditModal({
+  selectedCount,
+  form,
+  setForm,
+  categories,
+  subcategories,
+  onCategoryChange,
+  submitting,
+  error,
+  confirming,
+  onRequestSave,
+  onConfirm,
+  onCancelConfirm,
+  onClose,
+}) {
+  const setField = (field, updates) => {
+    setForm(prev => ({ ...prev, [field]: { ...prev[field], ...updates } }));
+  };
+
+  const handleCategorySelect = (value) => {
+    if (!value) {
+      setForm(prev => ({
+        ...prev,
+        category_id: { action: 'unchanged', value: '' },
+        subcategory_id: { action: 'unchanged', value: '' },
+      }));
+    } else {
+      setForm(prev => ({
+        ...prev,
+        category_id: { action: 'set', value },
+        subcategory_id: { action: 'unchanged', value: '' },
+      }));
+      onCategoryChange(value);
+    }
+  };
+
+  const handleSubcategorySelect = (value) => {
+    if (value === '__clear__') {
+      setField('subcategory_id', { action: 'clear', value: '' });
+    } else if (!value) {
+      setField('subcategory_id', { action: 'unchanged', value: '' });
+    } else {
+      setField('subcategory_id', { action: 'set', value });
+    }
+  };
+
+  if (confirming) {
+    const changes = describeBulkEditChanges(form, categories, subcategories);
+    return (
+      <div className="modal-overlay" onClick={onCancelConfirm}>
+        <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header">
+            <h2 className="modal-title">Confirm Bulk Update</h2>
+            <button className="modal-close" onClick={onCancelConfirm}>×</button>
+          </div>
+          <div className="modal-body">
+            {error && <div className="alert alert-error">{error}</div>}
+            <p>
+              You are about to update <strong>{selectedCount}</strong> equipment record{selectedCount !== 1 ? 's' : ''}.
+            </p>
+            <p style={{ marginTop: '8px', marginBottom: '4px' }}><strong>Fields being changed:</strong></p>
+            <ul>
+              {changes.map((line, i) => <li key={i}>{line}</li>)}
+            </ul>
+          </div>
+          <div className="modal-footer">
+            <button className="btn btn-secondary" onClick={onCancelConfirm} disabled={submitting}>
+              Cancel
+            </button>
+            <button className="btn btn-primary" onClick={onConfirm} disabled={submitting}>
+              {submitting ? 'Updating...' : `Update ${selectedCount} Record${selectedCount !== 1 ? 's' : ''}`}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">Bulk Edit Equipment</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <p>{selectedCount} equipment record{selectedCount !== 1 ? 's' : ''} selected</p>
+          {error && <div className="alert alert-error">{error}</div>}
+
+          <div className="form-group">
+            <label className="form-label">
+              <input
+                type="checkbox"
+                checked={form.equipment_name.enabled}
+                onChange={(e) => setField('equipment_name', { enabled: e.target.checked })}
+              />
+              {' '}Update Equipment Name
+            </label>
+            {form.equipment_name.enabled && (
+              <input
+                className="form-input"
+                value={form.equipment_name.value}
+                onChange={(e) => setField('equipment_name', { value: e.target.value })}
+                placeholder="Equipment Name"
+              />
+            )}
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Description</label>
+            <select
+              className="form-select"
+              value={form.description.action}
+              onChange={(e) => setField('description', { action: e.target.value })}
+            >
+              <option value="unchanged">Do not change</option>
+              <option value="set">Set value</option>
+              <option value="clear">Clear description</option>
+            </select>
+            {form.description.action === 'set' && (
+              <textarea
+                className="form-input"
+                rows={3}
+                value={form.description.value}
+                onChange={(e) => setField('description', { value: e.target.value })}
+                placeholder="Description"
+                style={{ marginTop: '6px' }}
+              />
+            )}
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Category</label>
+            <select
+              className="form-select"
+              value={form.category_id.action === 'set' ? form.category_id.value : ''}
+              onChange={(e) => handleCategorySelect(e.target.value)}
+            >
+              <option value="">Do not change</option>
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {form.category_id.action === 'set' && (
+            <div className="form-group">
+              <label className="form-label">Subcategory</label>
+              <select
+                className="form-select"
+                value={
+                  form.subcategory_id.action === 'set' ? form.subcategory_id.value
+                    : form.subcategory_id.action === 'clear' ? '__clear__' : ''
+                }
+                onChange={(e) => handleSubcategorySelect(e.target.value)}
+              >
+                <option value="">Select a subcategory...</option>
+                {subcategories.map(sub => (
+                  <option key={sub.id} value={sub.id}>{sub.name}</option>
+                ))}
+                <option value="__clear__">Clear Subcategory</option>
+              </select>
+            </div>
+          )}
+
+          <div className="form-group">
+            <label className="form-label">
+              <input
+                type="checkbox"
+                checked={form.manufacturer.enabled}
+                onChange={(e) => setField('manufacturer', { enabled: e.target.checked })}
+              />
+              {' '}Update Manufacturer
+            </label>
+            {form.manufacturer.enabled && (
+              <input
+                className="form-input"
+                value={form.manufacturer.value}
+                onChange={(e) => setField('manufacturer', { value: e.target.value })}
+                placeholder="Manufacturer"
+              />
+            )}
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">
+              <input
+                type="checkbox"
+                checked={form.model.enabled}
+                onChange={(e) => setField('model', { enabled: e.target.checked })}
+              />
+              {' '}Update Model
+            </label>
+            {form.model.enabled && (
+              <input
+                className="form-input"
+                value={form.model.value}
+                onChange={(e) => setField('model', { value: e.target.value })}
+                placeholder="Model"
+              />
+            )}
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={onRequestSave} disabled={!hasAnyBulkEditChange(form)}>
+            Save
+          </button>
         </div>
       </div>
     </div>

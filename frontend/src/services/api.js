@@ -283,6 +283,19 @@ export const equipmentApi = {
         supabase.from('equipment').update(data).eq('id', id).select().single()
     ),
 
+    // Admin/Manager bulk edit: applies the same field changes to many records
+    // in a single atomic Postgres UPDATE (avoids partial per-record success).
+    // `data` must contain only the fields the caller explicitly wants changed.
+    bulkUpdate: async (ids, data) => {
+        const { data: rows, error } = await supabase.from('equipment')
+            .update(data)
+            .in('id', ids)
+            .is('deleted_at', null)
+            .select('id');
+        if (error) throw new Error(error.message);
+        return rows || [];
+    },
+
     // Soft-delete: hides the item everywhere but keeps its history (movements,
     // calibration records, etc.) intact. Recoverable via restore() for 30 days.
     softDelete: async (id) => {
