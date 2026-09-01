@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { equipmentApi, categoriesApi, subcategoriesApi, calibrationApi } from '../services/api';
 import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
@@ -8,6 +8,7 @@ import { Icons } from '../components/Icons';
 import AddEquipmentModal from '../components/AddEquipmentModal';
 import { getCustomFieldRule, getCustomFieldValue } from '../utils/customFields';
 import { useOperator } from '../context/OperatorContext';
+import { DEFAULT_EQUIPMENT_FILTERS, filtersToSearchParams, searchParamsToFilters } from '../utils/equipmentListState';
 import {
   createInitialBulkEditForm,
   hasAnyBulkEditChange,
@@ -24,14 +25,11 @@ function Equipment() {
   const [error, setError] = useState(null);
   const [equipment, setEquipment] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [filters, setFilters] = useState({
-    search: '',
-    status: '',
-    category_id: '',
-    is_consumable: 'false',
-    calibration_status: '',
-    channels: '',
-  });
+  // Search params are the source of truth for restoring the list after
+  // Equipment Detail -> Back (browser Back or the Detail page's Back button
+  // both just replay history, landing back on this same URL).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [filters, setFilters] = useState(() => searchParamsToFilters(searchParams));
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showDeletedModal, setShowDeletedModal] = useState(false);
@@ -56,6 +54,12 @@ function Equipment() {
 
   useEffect(() => {
     fetchEquipment();
+  }, [filters.status, filters.category_id, filters.is_consumable, filters.calibration_status, filters.channels, filters.search]); // eslint-disable-line
+
+  // Keep the URL in sync so the current filters are restored on
+  // Detail -> Back, without spamming browser history on every keystroke.
+  useEffect(() => {
+    setSearchParams(filtersToSearchParams(filters), { replace: true });
   }, [filters.status, filters.category_id, filters.is_consumable, filters.calibration_status, filters.channels, filters.search]); // eslint-disable-line
 
   const fetchCategories = async () => {
@@ -452,7 +456,7 @@ function Equipment() {
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => setFilters({ search: '', status: '', category_id: '', is_consumable: 'false', calibration_status: '', channels: '' })}
+              onClick={() => setFilters(DEFAULT_EQUIPMENT_FILTERS)}
             >
               Clear Filters
             </button>
