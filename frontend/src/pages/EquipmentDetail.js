@@ -461,7 +461,7 @@ function EquipmentDetail() {
                 </div>
                 {/* Custom fields — e.g. AMS2140 channel count */}
                 {(() => {
-                  const rule = getCustomFieldRule(equipment.equipment_name);
+                  const rule = getCustomFieldRule(equipment.equipment_name, equipment.model);
                   if (!rule) return null;
                   const currentVal = getCustomFieldValue(equipment.custom_fields, rule.field);
                   return (

@@ -152,20 +152,22 @@ function CheckOut() {
     });
   };
 
-  // Fetch custom_fields for the given equipment items and merge into state.
-  // The reports RPCs don't include custom_fields, so we pull them separately.
+  // Fetch custom_fields (and model, for AMS2140-style channel detection) for
+  // the given equipment items and merge into state. The reports RPCs don't
+  // include these columns, so we pull them separately.
   const enrichWithCustomFields = async (items) => {
     const ids = [...new Set((items || []).map(i => i.id).filter(Boolean))];
     if (ids.length === 0) return;
     const { data, error: cfErr } = await supabase
       .from('equipment')
-      .select('id, custom_fields')
+      .select('id, custom_fields, model')
       .in('id', ids);
     if (cfErr || !data) return;
-    const map = new Map(data.map(d => [d.id, d.custom_fields]));
-    setAvailableEquipment(prev => prev.map(eq => map.has(eq.id) ? { ...eq, custom_fields: map.get(eq.id) } : eq));
-    setCheckedOutEquipment(prev => prev.map(eq => map.has(eq.id) ? { ...eq, custom_fields: map.get(eq.id) } : eq));
+    const map = new Map(data.map(d => [d.id, { custom_fields: d.custom_fields, model: d.model }]));
+    setAvailableEquipment(prev => prev.map(eq => map.has(eq.id) ? { ...eq, ...map.get(eq.id) } : eq));
+    setCheckedOutEquipment(prev => prev.map(eq => map.has(eq.id) ? { ...eq, ...map.get(eq.id) } : eq));
   };
+
 
   const fetchData = async () => {
     try {
@@ -613,7 +615,7 @@ function CheckOut() {
                           </p>
                         )}
                         {(() => {
-                          const rule = getCustomFieldRule(eq.equipment_name);
+                          const rule = getCustomFieldRule(eq.equipment_name, eq.model);
                           if (!rule) return null;
                           const val = getCustomFieldValue(eq.custom_fields, rule.field);
                           return (

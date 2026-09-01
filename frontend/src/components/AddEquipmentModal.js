@@ -89,6 +89,19 @@ function AddEquipmentModal({ onClose, onSuccess }) {
     }
   }, [formData.category_id]);
 
+  // Clear any previously-entered custom field values (e.g. AMS2140 channel
+  // count) as soon as Model/Equipment Name no longer match that rule, so a
+  // stale selection can never be silently carried over/submitted.
+  useEffect(() => {
+    const rule = getCustomFieldRule(formData.equipment_name, formData.model);
+    setCustomFieldValues(prev => {
+      if (!rule) return Object.keys(prev).length > 0 ? {} : prev;
+      const keys = Object.keys(prev);
+      if (keys.length === 1 && keys[0] === rule.field) return prev;
+      return prev[rule.field] !== undefined ? { [rule.field]: prev[rule.field] } : {};
+    });
+  }, [formData.equipment_name, formData.model]);
+
   const fetchSubcategories = async (categoryId) => {
     try {
       const { data } = await subcategoriesApi.getAll(categoryId);
@@ -471,6 +484,31 @@ function AddEquipmentModal({ onClose, onSuccess }) {
               </div>
             </div>
 
+            {/* Custom fields — e.g. AMS2140 channel count, keyed off Model
+                (falls back to Equipment Name for existing AMS2140 records) */}
+            {(() => {
+              const rule = getCustomFieldRule(formData.equipment_name, formData.model);
+              if (!rule) return null;
+              return (
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">{rule.label} *</label>
+                    <select
+                      className="form-select"
+                      value={customFieldValues[rule.field] || ''}
+                      onChange={e => setCustomFieldValues(prev => ({ ...prev, [rule.field]: e.target.value }))}
+                      required
+                    >
+                      <option value="">Select {rule.label.toLowerCase()}...</option>
+                      {rule.options.map(opt => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -776,27 +814,6 @@ function AddEquipmentModal({ onClose, onSuccess }) {
                 Leave blank if the equipment isn’t currently assigned to a person.
               </span>
             </div>
-
-            {/* Custom fields — e.g. AMS2140 channel count */}
-            {(() => {
-              const rule = getCustomFieldRule(formData.equipment_name);
-              if (!rule) return null;
-              return (
-                <div className="form-group">
-                  <label className="form-label">{rule.label}</label>
-                  <select
-                    className="form-select"
-                    value={customFieldValues[rule.field] || ''}
-                    onChange={e => setCustomFieldValues(prev => ({ ...prev, [rule.field]: e.target.value }))}
-                  >
-                    <option value="">Select {rule.label.toLowerCase()}...</option>
-                    {rule.options.map(opt => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                </div>
-              );
-            })()}
 
             <div className="form-group">
               <label className="form-label">Notes</label>

@@ -387,7 +387,7 @@ function Equipment() {
                     <td>
                       {item.equipment_name}
                       {(() => {
-                        const rule = getCustomFieldRule(item.equipment_name);
+                        const rule = getCustomFieldRule(item.equipment_name, item.model);
                         if (!rule) return null;
                         const val = getCustomFieldValue(item.custom_fields, rule.field);
                         if (!val) return null;

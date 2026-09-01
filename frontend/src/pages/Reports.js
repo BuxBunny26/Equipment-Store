@@ -385,7 +385,7 @@ function CheckedOutReport({ data, formatDate }) {
         </thead>
         <tbody>
           {data.map((item) => {
-            const rule = getCustomFieldRule(item.equipment_name);
+            const rule = getCustomFieldRule(item.equipment_name, item.model);
             const channelVal = rule && item.custom_fields ? (item.custom_fields[rule.field] || null) : null;
             return (
             <tr key={item.id}>
