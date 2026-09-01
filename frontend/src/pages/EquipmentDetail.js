@@ -6,6 +6,40 @@ import { getCustomFieldRule, getCustomFieldValue } from '../utils/customFields';
 import { useOperator } from '../context/OperatorContext';
 import { pickCurrentCalibrationRecord } from '../utils/calibrationCurrent';
 
+// Formats free-typed digits into DD/MM/YYYY, auto-inserting "/" -- built
+// from the browser's own post-edit value each time, so native cursor and
+// Backspace/Delete behaviour is never fought or reconstructed.
+// Duplicated from Calibration.js (not imported) because that file mixes in
+// unrelated in-progress work -- keeping this pure/local avoids touching it.
+function formatDateInputChange(rawValue) {
+  const digits = rawValue.replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+// Converts a complete DD/MM/YYYY string to YYYY-MM-DD, or null if it's
+// incomplete or not a real calendar date (e.g. 31/04/2026, 29/02/2025).
+function displayDateToIso(displayValue) {
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(displayValue || '');
+  if (!match) return null;
+  const [, dd, mm, yyyy] = match;
+  const day = parseInt(dd, 10);
+  const month = parseInt(mm, 10);
+  const year = parseInt(yyyy, 10);
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return null;
+  }
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+// Converts a YYYY-MM-DD string to DD/MM/YYYY for display (e.g. today's default).
+function isoDateToDisplay(isoValue) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoValue || '');
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
+}
+
 function EquipmentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -26,6 +60,19 @@ function EquipmentDetail() {
   const [savingCategory, setSavingCategory] = useState(false);
   const [availableCats, setAvailableCats] = useState([]);
   const [availableSubs, setAvailableSubs] = useState([]);
+  const [showAddCalibrationModal, setShowAddCalibrationModal] = useState(false);
+  const [calibrationForm, setCalibrationForm] = useState({
+    equipment_id: '',
+    calibration_date: '',
+    expiry_date: '',
+    certificate_number: '',
+    calibration_provider: '',
+    notes: '',
+  });
+  const [calibrationFile, setCalibrationFile] = useState(null);
+  const [calibrationSubmitting, setCalibrationSubmitting] = useState(false);
+  const [calibrationAddError, setCalibrationAddError] = useState(null);
+  const [calibrationAddSuccess, setCalibrationAddSuccess] = useState(null);
 
   useEffect(() => {
     fetchEquipment();
@@ -136,6 +183,57 @@ function EquipmentDetail() {
       setCalibrationHistory(response.data);
     } catch (err) {
       console.error('Error fetching calibration history:', err);
+    }
+  };
+
+  const openAddCalibration = () => {
+    setCalibrationForm({
+      equipment_id: equipment.id,
+      calibration_date: isoDateToDisplay(new Date().toISOString().split('T')[0]),
+      expiry_date: '',
+      certificate_number: '',
+      calibration_provider: '',
+      notes: '',
+    });
+    setCalibrationFile(null);
+    setCalibrationAddError(null);
+    setShowAddCalibrationModal(true);
+  };
+
+  const handleAddCalibrationSubmit = async (e) => {
+    e.preventDefault();
+    if (calibrationFile && calibrationFile.size > 10 * 1024 * 1024) {
+      setCalibrationAddError('Certificate file must be less than 10MB');
+      return;
+    }
+    const isoCalibrationDate = displayDateToIso(calibrationForm.calibration_date);
+    if (!isoCalibrationDate) {
+      setCalibrationAddError('Calibration date must be a valid date in DD/MM/YYYY format');
+      return;
+    }
+    const isoExpiryDate = calibrationForm.expiry_date ? displayDateToIso(calibrationForm.expiry_date) : null;
+    if (calibrationForm.expiry_date && !isoExpiryDate) {
+      setCalibrationAddError('Expiry date must be a valid date in DD/MM/YYYY format');
+      return;
+    }
+    if (isoExpiryDate && isoExpiryDate < isoCalibrationDate) {
+      setCalibrationAddError('Expiry date cannot be before calibration date');
+      return;
+    }
+    setCalibrationSubmitting(true);
+    try {
+      await calibrationApi.create(
+        { ...calibrationForm, calibration_date: isoCalibrationDate, expiry_date: isoExpiryDate },
+        calibrationFile
+      );
+      setShowAddCalibrationModal(false);
+      await fetchCalibrationHistory();
+      setCalibrationAddSuccess('Calibration record added successfully!');
+      setTimeout(() => setCalibrationAddSuccess(null), 5000);
+    } catch (err) {
+      setCalibrationAddError('Error adding calibration: ' + err.message);
+    } finally {
+      setCalibrationSubmitting(false);
     }
   };
 
@@ -561,6 +659,15 @@ function EquipmentDetail() {
 
       {activeTab === 'calibration' && (
         <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h3 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+              Calibration Records
+            </h3>
+            <button className="btn btn-sm btn-primary" onClick={openAddCalibration} title="Add Calibration Record">
+              + Add Calibration
+            </button>
+          </div>
+          {calibrationAddSuccess && <div className="alert alert-success" style={{ marginBottom: '1rem' }}>{calibrationAddSuccess}</div>}
           {calibrationHistory.length === 0 ? (
             <div className="empty-state">
               <h3>No calibration records</h3>
@@ -684,6 +791,114 @@ function EquipmentDetail() {
       {activeTab === 'images' && (
         <div className="card">
           <EquipmentImageGallery equipmentId={equipment.id} editable={true} />
+        </div>
+      )}
+
+      {/* Add Calibration Modal */}
+      {showAddCalibrationModal && (
+        <div className="modal-overlay" onClick={() => setShowAddCalibrationModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Add Calibration Record</h2>
+              <button className="modal-close" onClick={() => setShowAddCalibrationModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="equipment-info" style={{ marginBottom: '1rem', padding: '1rem', background: 'var(--bg-primary)', borderRadius: '4px' }}>
+                <strong>{equipment.equipment_name}</strong>
+                <br />
+                <span style={{ color: 'var(--text-secondary)' }}>
+                  {equipment.equipment_id}{equipment.serial_number ? ` | Serial: ${equipment.serial_number}` : ''}
+                </span>
+              </div>
+
+              {calibrationAddError && <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{calibrationAddError}</div>}
+
+              <form onSubmit={handleAddCalibrationSubmit}>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Calibration Date *</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="DD/MM/YYYY"
+                      maxLength={10}
+                      className="form-input"
+                      value={calibrationForm.calibration_date}
+                      onChange={(e) => setCalibrationForm({ ...calibrationForm, calibration_date: formatDateInputChange(e.target.value) })}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Expiry Date *</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="DD/MM/YYYY"
+                      maxLength={10}
+                      className="form-input"
+                      value={calibrationForm.expiry_date}
+                      onChange={(e) => setCalibrationForm({ ...calibrationForm, expiry_date: formatDateInputChange(e.target.value) })}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Certificate Number</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g., CAL-2026-001"
+                      value={calibrationForm.certificate_number}
+                      onChange={(e) => setCalibrationForm({ ...calibrationForm, certificate_number: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Calibration Provider</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Company/Lab name"
+                      value={calibrationForm.calibration_provider}
+                      onChange={(e) => setCalibrationForm({ ...calibrationForm, calibration_provider: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Certificate File (PDF, Image)</label>
+                  <input
+                    type="file"
+                    className="form-input"
+                    accept=".pdf,.jpg,.jpeg,.png,.tiff,.doc,.docx"
+                    onChange={(e) => setCalibrationFile(e.target.files[0])}
+                  />
+                  <small style={{ color: 'var(--text-secondary)' }}>Max 10MB. Accepted: PDF, JPEG, PNG, TIFF, DOC, DOCX</small>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Notes</label>
+                  <textarea
+                    className="form-input"
+                    rows="3"
+                    placeholder="Any additional notes..."
+                    value={calibrationForm.notes}
+                    onChange={(e) => setCalibrationForm({ ...calibrationForm, notes: e.target.value })}
+                  />
+                </div>
+
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowAddCalibrationModal(false)}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={calibrationSubmitting}>
+                    {calibrationSubmitting ? 'Saving...' : 'Save Calibration Record'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         </div>
       )}
     </div>
