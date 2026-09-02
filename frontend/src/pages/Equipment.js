@@ -605,7 +605,8 @@ function Equipment() {
           onClose={() => setShowAddModal(false)}
           onSuccess={() => {
             setShowAddModal(false);
-            fetchEquipment();
+            // Reset filters so the newly added item isn't hidden by whatever was active before.
+            setFilters(DEFAULT_EQUIPMENT_FILTERS);
           }}
         />
       )}
