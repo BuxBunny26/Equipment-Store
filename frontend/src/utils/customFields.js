@@ -26,14 +26,17 @@ function normalizeForMatch(str) {
 
 // Returns the matching custom-field rule for a piece of equipment, or null.
 // `model` is checked first (e.g. Add Equipment's Model field); `equipmentName`
-// is checked as a fallback so existing equipment named e.g. "AMS2140
-// Analyzer" keeps matching even without a Model value.
+// is checked as a fallback so existing/imported equipment with no Model value
+// (or a different vendor naming, e.g. "CSI2140 Machinery Health Analyzer"
+// instead of "AMS2140") still matches via the same modelPattern, not just the
+// legacy exact-keyword list.
 export function getCustomFieldRule(equipmentName, model) {
   const normalizedModel = normalizeForMatch(model);
   const normalizedName = normalizeForMatch(equipmentName);
   return CUSTOM_FIELD_RULES.find(rule => {
-    if (normalizedModel && rule.modelPattern && rule.modelPattern.test(normalizedModel)) {
-      return true;
+    if (rule.modelPattern) {
+      if (normalizedModel && rule.modelPattern.test(normalizedModel)) return true;
+      if (normalizedName && rule.modelPattern.test(normalizedName)) return true;
     }
     if (normalizedName && rule.keywords.some(kw => normalizedName.includes(normalizeForMatch(kw)))) {
       return true;

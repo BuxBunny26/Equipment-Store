@@ -10,6 +10,15 @@ node_modules/
 .env.production.local
 backend/.env
 
+# Secrets
+SUPABASE_JWT_SIGNING_KEY.txt
+
+# Employee PII exports — never commit
+employee*.csv
+employee*.xlsx
+Employee*.csv
+Employee*.xlsx
+
 # Build outputs
 frontend/build/
 dist/
@@ -45,3 +54,6 @@ coverage/
 *.pid
 *.seed
 *.pid.lock
+
+# Local Netlify folder
+.netlify

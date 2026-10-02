@@ -30,6 +30,16 @@ describe('getCustomFieldRule — AMS2140 model/name detection', () => {
   });
 
   test.each([
+    ['CSI2140 Machinery Health Analyzer', undefined],
+    ['CSI2140 Machinery Health Analyzer', ''],
+    ['CSI 2140 Machinery Health Analyzer', null],
+  ])('matches other vendor naming via equipment_name="%s" with no Model set', (name, model) => {
+    const rule = getCustomFieldRule(name, model);
+    expect(rule).not.toBeNull();
+    expect(rule.field).toBe('channels');
+  });
+
+  test.each([
     ['CMXA 80'],
     ['Fluke Ti480'],
     ['21400'], // 2140 embedded in a different/larger number must not match
