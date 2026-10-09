@@ -28,6 +28,7 @@ jest.mock('../services/api', () => ({
   },
   categoriesApi: { getAll: jest.fn() },
   subcategoriesApi: { getAll: jest.fn() },
+  personnelApi: { getAll: jest.fn() },
 }));
 
 jest.mock('../context/OperatorContext', () => ({

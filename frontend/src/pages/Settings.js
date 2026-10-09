@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { categoriesApi, subcategoriesApi, locationsApi, personnelApi } from '../services/api';
+import { categoriesApi, subcategoriesApi, locationsApi, personnelApi, customersApi } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 import { useOperator } from '../context/OperatorContext';
+import { uniqueCountries, normalizeCountry } from '../utils/provinces';
 
 function Settings() {
   const [activeTab, setActiveTab] = useState('categories');
@@ -36,6 +37,12 @@ function Settings() {
           Locations
         </button>
         <button
+          className={`tab ${activeTab === 'customer-sites' ? 'active' : ''}`}
+          onClick={() => setActiveTab('customer-sites')}
+        >
+          Customer Sites
+        </button>
+        <button
           className={`tab ${activeTab === 'personnel' ? 'active' : ''}`}
           onClick={() => setActiveTab('personnel')}
         >
@@ -60,6 +67,7 @@ function Settings() {
         {activeTab === 'categories' && <CategoriesSettings />}
         {activeTab === 'subcategories' && <SubcategoriesSettings />}
         {activeTab === 'locations' && <LocationsSettings />}
+        {activeTab === 'customer-sites' && <CustomerSitesSettings />}
         {activeTab === 'personnel' && <PersonnelSettings />}
         {activeTab === 'assets' && <AssetsSettings />}
         {activeTab === 'appearance' && <AppearanceSettings />}
@@ -833,6 +841,282 @@ function LocationsSettings() {
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary">Create</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Customer Sites Settings -- manages `customers` rows used as checkout
+// destinations (destination_type='customer' in Check Out), e.g. the
+// existing SBM Offshore vessels in Angola. Distinct from the Locations tab
+// above, which manages WearCheck's own internal sites. Viewing is open to
+// everyone (consistent with the other tabs); adding a new site is
+// restricted to admins only.
+function CustomerSitesSettings() {
+  const { operatorRole } = useOperator();
+  const isAdmin = !!operatorRole && operatorRole.toLowerCase() === 'admin';
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [sites, setSites] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [formData, setFormData] = useState({ name: '', country: '', city: '', email: '' });
+  const [formError, setFormError] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [expandedCountries, setExpandedCountries] = useState({});
+
+  useEffect(() => {
+    fetchSites();
+  }, []);
+
+  const fetchSites = async () => {
+    try {
+      setLoading(true);
+      const response = await customersApi.getAll({ active_only: 'false' });
+      setSites(response.data || []);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openAddModal = () => {
+    setFormError(null);
+    setFormData({ name: '', country: '', city: '', email: '' });
+    setShowModal(true);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setFormError(null);
+
+    const name = formData.name.trim();
+    const country = formData.country.trim();
+    if (!name) {
+      setFormError('Site name is required');
+      return;
+    }
+    if (!country) {
+      setFormError('Country is required');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // Admins add a site by name only -- derive a unique customer_number
+      // from it (the table's required identifier) so nobody has to think
+      // about internal numbering. Mirrors the convention already used for
+      // the existing SBM vessel site entries (e.g. "SBM-MONDO").
+      const base = name.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'SITE';
+      const existingNumbers = new Set(sites.map(s => s.customer_number));
+      let customerNumber = base;
+      let suffix = 2;
+      while (existingNumbers.has(customerNumber)) {
+        customerNumber = `${base}-${suffix++}`;
+      }
+
+      const city = formData.city.trim() || null;
+      await customersApi.create({
+        customer_number: customerNumber,
+        display_name: name,
+        billing_country: country,
+        shipping_country: country,
+        billing_city: city,
+        shipping_city: city,
+        email: formData.email.trim() || null,
+      });
+      setShowModal(false);
+      setFormData({ name: '', country: '', city: '', email: '' });
+      fetchSites();
+    } catch (err) {
+      setFormError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleCountry = (country) => {
+    setExpandedCountries(prev => ({ ...prev, [country]: !prev[country] }));
+  };
+
+  const filteredSites = sites.filter(s => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return s.display_name?.toLowerCase().includes(term) ||
+           s.customer_number?.toLowerCase().includes(term) ||
+           s.billing_country?.toLowerCase().includes(term);
+  });
+
+  // Group sites by (normalised) country, South Africa first like Locations.
+  const groupedSites = filteredSites.reduce((acc, s) => {
+    const country = normalizeCountry(s.billing_country) || 'Other';
+    if (!acc[country]) acc[country] = [];
+    acc[country].push(s);
+    return acc;
+  }, {});
+
+  const sortedCountries = Object.keys(groupedSites).sort((a, b) => {
+    if (a === 'South Africa') return -1;
+    if (b === 'South Africa') return 1;
+    return a.localeCompare(b);
+  });
+
+  const countrySuggestions = uniqueCountries(sites);
+
+  if (loading) {
+    return <div className="loading"><div className="spinner"></div> Loading...</div>;
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <h3>Customer Sites ({sites.length})</h3>
+        {isAdmin && (
+          <button className="btn btn-primary" onClick={openAddModal}>
+            + Add Site
+          </button>
+        )}
+      </div>
+
+      <div className="form-group" style={{ maxWidth: '320px' }}>
+        <input
+          type="text"
+          className="form-input"
+          placeholder="Search sites..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+
+      {error && <div className="alert alert-error">{error}</div>}
+
+      {sortedCountries.length === 0 && (
+        <p style={{ color: 'var(--text-secondary)' }}>No sites found.</p>
+      )}
+
+      {sortedCountries.map(country => {
+        const isExpanded = expandedCountries[country] !== false;
+        const countrySites = groupedSites[country];
+        return (
+          <div key={country} style={{ marginBottom: '1rem' }}>
+            <div
+              onClick={() => toggleCountry(country)}
+              style={{
+                cursor: 'pointer',
+                padding: '0.5rem 0.75rem',
+                background: 'var(--bg-secondary)',
+                borderRadius: '6px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                fontWeight: 500,
+              }}
+            >
+              <span>{country === 'South Africa' ? '🇿🇦' : '🌍'} {isExpanded ? '▼' : '▶'} {country}</span>
+              <span className="badge">{countrySites.length}</span>
+            </div>
+
+            {isExpanded && (
+              <div style={{ marginTop: '0.5rem', marginLeft: '1rem' }}>
+                {countrySites.map(site => (
+                  <div
+                    key={site.id}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '0.5rem 0.75rem',
+                      borderBottom: '1px solid var(--border-color)',
+                    }}
+                  >
+                    <div>
+                      <span style={{ fontWeight: 500 }}>{site.display_name}</span>
+                      {site.billing_city && (
+                        <span style={{ marginLeft: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                          - {site.billing_city}
+                        </span>
+                      )}
+                    </div>
+                    <span className={`badge ${site.is_active ? 'badge-available' : ''}`}>
+                      {site.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {showModal && (
+        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Add Site</h2>
+              <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
+            </div>
+            <form onSubmit={handleSubmit}>
+              <div className="modal-body">
+                {formError && <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{formError}</div>}
+                <div className="form-group">
+                  <label className="form-label">Site Name *</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g., Bumi Armada"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Country *</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    list="customer-site-countries"
+                    value={formData.country}
+                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                    placeholder="e.g., Angola"
+                    required
+                  />
+                  <datalist id="customer-site-countries">
+                    {countrySuggestions.map(c => <option key={c} value={c} />)}
+                  </datalist>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">City (optional)</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={formData.city}
+                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Email (optional)</label>
+                  <input
+                    type="email"
+                    className="form-input"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>
+                  {saving ? 'Saving...' : 'Create'}
+                </button>
               </div>
             </form>
           </div>

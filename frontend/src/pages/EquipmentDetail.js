@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { equipmentApi, calibrationApi, categoriesApi, subcategoriesApi } from '../services/api';
+import { equipmentApi, calibrationApi, categoriesApi, subcategoriesApi, personnelApi } from '../services/api';
 import EquipmentImageGallery from '../components/EquipmentImageGallery';
 import { getCustomFieldRule, getCustomFieldValue } from '../utils/customFields';
 import { useOperator } from '../context/OperatorContext';
@@ -43,7 +43,7 @@ function isoDateToDisplay(isoValue) {
 function EquipmentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { operatorRole } = useOperator();
+  const { operator, operatorRole } = useOperator();
   const isAdmin = operatorRole && ['admin', 'manager'].includes(operatorRole.toLowerCase());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -60,11 +60,20 @@ function EquipmentDetail() {
   const [savingCategory, setSavingCategory] = useState(false);
   const [availableCats, setAvailableCats] = useState([]);
   const [availableSubs, setAvailableSubs] = useState([]);
+  const [editingHolder, setEditingHolder] = useState(false);
+  const [holderEditPersonnelId, setHolderEditPersonnelId] = useState('');
+  const [savingHolder, setSavingHolder] = useState(false);
+  const [holderEditError, setHolderEditError] = useState(null);
+  const [availablePersonnel, setAvailablePersonnel] = useState([]);
   const [editingBasicInfo, setEditingBasicInfo] = useState(false);
   const [basicInfoName, setBasicInfoName] = useState('');
   const [basicInfoDescription, setBasicInfoDescription] = useState('');
   const [savingBasicInfo, setSavingBasicInfo] = useState(false);
   const [basicInfoEditError, setBasicInfoEditError] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deletingCalibration, setDeletingCalibration] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
   const [showAddCalibrationModal, setShowAddCalibrationModal] = useState(false);
   const [calibrationForm, setCalibrationForm] = useState({
     equipment_id: '',
@@ -153,6 +162,49 @@ function EquipmentDetail() {
       console.error('Failed to save category:', err);
     } finally {
       setSavingCategory(false);
+    }
+  };
+
+  // Admin-only: reassign the current holder directly, bypassing the
+  // check-in/check-out flow entirely. This is a plain column update on
+  // `equipment.current_holder_id` -- it does not touch current_location_id,
+  // current_customer_id, status, or quantities, and it does not create an
+  // equipment_movements record, so the equipment's site/status are left
+  // exactly as they were. The change is still captured by the generic
+  // audit_log trigger on the equipment table (same as category reassignment).
+  const openHolderEdit = async () => {
+    setHolderEditError(null);
+    try {
+      const { data } = await personnelApi.getAll();
+      setAvailablePersonnel(data || []);
+      setHolderEditPersonnelId(equipment.current_holder_id?.toString() || '');
+      setEditingHolder(true);
+    } catch (err) {
+      console.error('Failed to load personnel:', err);
+    }
+  };
+
+  const handleSaveHolder = async () => {
+    if (!holderEditPersonnelId) {
+      setHolderEditError('Please select a holder');
+      return;
+    }
+    setSavingHolder(true);
+    setHolderEditError(null);
+    try {
+      const newHolderId = parseInt(holderEditPersonnelId);
+      await equipmentApi.update(equipment.id, { current_holder_id: newHolderId });
+      const selectedPersonnel = availablePersonnel.find(p => p.id.toString() === holderEditPersonnelId);
+      setEquipment(prev => ({
+        ...prev,
+        current_holder_id: newHolderId,
+        current_holder: selectedPersonnel?.full_name || prev.current_holder,
+      }));
+      setEditingHolder(false);
+    } catch (err) {
+      setHolderEditError('Error saving changes: ' + err.message);
+    } finally {
+      setSavingHolder(false);
     }
   };
 
@@ -283,6 +335,34 @@ function EquipmentDetail() {
     }
   };
 
+  const handleRequestDeleteCalibration = (record) => {
+    setDeleteTarget(record);
+    setDeleteReason('');
+  };
+
+  const handleCancelDeleteCalibration = () => {
+    setDeleteTarget(null);
+    setDeleteReason('');
+  };
+
+  const handleConfirmDeleteCalibration = async () => {
+    if (!deleteTarget) return;
+    setDeletingCalibration(true);
+    try {
+      // deletedBy is no longer sent -- the RPC derives the acting personnel_id from the
+      // caller's verified JWT server-side, never from a client-supplied value.
+      await calibrationApi.softDelete(deleteTarget.id, { reason: deleteReason });
+      setDeleteTarget(null);
+      setDeleteReason('');
+      setDeleteError(null);
+      await fetchCalibrationHistory();
+    } catch (err) {
+      setDeleteError('Error deleting calibration record: ' + err.message);
+    } finally {
+      setDeletingCalibration(false);
+    }
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleString('en-ZA', {
@@ -407,8 +487,60 @@ function EquipmentDetail() {
 
           {equipment.status === 'Checked Out' && (
             <div>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Checked Out To</p>
-              <p style={{ fontWeight: 500 }}>{equipment.current_holder || '-'}</p>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                Checked Out To
+                {isAdmin && !editingHolder && (
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    onClick={openHolderEdit}
+                    style={{ fontSize: '0.7rem', padding: '1px 6px' }}
+                    title="Reassign holder"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11" style={{ display: 'inline', marginRight: 3 }}>
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                    Reassign
+                  </button>
+                )}
+              </p>
+              {editingHolder ? (
+                <div style={{ display: 'grid', gap: '8px', minWidth: '200px' }}>
+                  <select
+                    className="form-select"
+                    value={holderEditPersonnelId}
+                    onChange={e => setHolderEditPersonnelId(e.target.value)}
+                    style={{ fontSize: '0.85rem' }}
+                  >
+                    <option value="">Select holder...</option>
+                    {availablePersonnel.map(p => (
+                      <option key={p.id} value={p.id}>{p.full_name}</option>
+                    ))}
+                  </select>
+                  {holderEditError && (
+                    <p style={{ color: 'var(--error-color)', fontSize: '0.75rem', margin: 0 }}>{holderEditError}</p>
+                  )}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={handleSaveHolder}
+                      disabled={!holderEditPersonnelId || savingHolder}
+                      style={{ fontSize: '0.78rem' }}
+                    >
+                      {savingHolder ? 'Saving...' : 'Save'}
+                    </button>
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      onClick={() => { setEditingHolder(false); setHolderEditError(null); }}
+                      style={{ fontSize: '0.78rem' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p style={{ fontWeight: 500 }}>{equipment.current_holder || '-'}</p>
+              )}
             </div>
           )}
 
@@ -772,6 +904,7 @@ function EquipmentDetail() {
             </button>
           </div>
           {calibrationAddSuccess && <div className="alert alert-success" style={{ marginBottom: '1rem' }}>{calibrationAddSuccess}</div>}
+          {deleteError && <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{deleteError}</div>}
           {calibrationHistory.length === 0 ? (
             <div className="empty-state">
               <h3>No calibration records</h3>
@@ -788,6 +921,7 @@ function EquipmentDetail() {
                     <th>Status</th>
                     <th>Certificate #</th>
                     <th>Certificate</th>
+                    {isAdmin && <th>Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -813,6 +947,17 @@ function EquipmentDetail() {
                             <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>No file</span>
                           )}
                         </td>
+                        {isAdmin && (
+                          <td>
+                            <button
+                              className="btn btn-sm btn-danger"
+                              onClick={() => handleRequestDeleteCalibration(record)}
+                              title="Delete this calibration record"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ));
                   })()}
@@ -1001,6 +1146,55 @@ function EquipmentDetail() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Calibration Confirmation Modal */}
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={handleCancelDeleteCalibration}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Delete Calibration Record</h2>
+              <button className="modal-close" onClick={handleCancelDeleteCalibration}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="equipment-info" style={{ marginBottom: '1rem', padding: '1rem', background: 'var(--bg-primary)', borderRadius: '4px' }}>
+                <strong>{equipment.equipment_name}</strong>
+                <br />
+                <span style={{ color: 'var(--text-secondary)' }}>
+                  Calibration Date: {formatDateOnly(deleteTarget.calibration_date)} | Expiry: {formatDateOnly(deleteTarget.expiry_date)}
+                  {deleteTarget.certificate_number ? ` | Certificate: ${deleteTarget.certificate_number}` : ''}
+                </span>
+              </div>
+              <div className="alert alert-error" style={{ marginBottom: '1rem' }}>
+                This will remove the record from the calibration history and status calculations.
+                It is not permanently erased — it stays recoverable in the audit trail — but this
+                action cannot be undone from this screen. Only use this to correct a mistaken entry.
+              </div>
+              <div className="form-group">
+                <label className="form-label">Reason for deletion *</label>
+                <textarea
+                  className="form-input"
+                  rows="3"
+                  placeholder="e.g., Entered against the wrong equipment / duplicate entry"
+                  value={deleteReason}
+                  onChange={(e) => setDeleteReason(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={handleCancelDeleteCalibration} disabled={deletingCalibration}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={handleConfirmDeleteCalibration}
+                disabled={deletingCalibration || !deleteReason.trim()}
+              >
+                {deletingCalibration ? 'Deleting...' : 'Delete Calibration'}
+              </button>
             </div>
           </div>
         </div>
