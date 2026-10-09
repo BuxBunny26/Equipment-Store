@@ -34,7 +34,7 @@ function Settings() {
           className={`tab ${activeTab === 'locations' ? 'active' : ''}`}
           onClick={() => setActiveTab('locations')}
         >
-          Locations
+          Locations (Internal)
         </button>
         <button
           className={`tab ${activeTab === 'customer-sites' ? 'active' : ''}`}
@@ -608,12 +608,16 @@ function SubcategoriesSettings() {
 
 // Locations Settings
 function LocationsSettings() {
+  const { operatorRole } = useOperator();
+  const isAdmin = !!operatorRole && operatorRole.toLowerCase() === 'admin';
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [locations, setLocations] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({ name: '', description: '', region: '', country: 'South Africa' });
   const [expandedRegions, setExpandedRegions] = useState({});
+  const [togglingId, setTogglingId] = useState(null);
 
   useEffect(() => {
     fetchLocations();
@@ -655,6 +659,18 @@ function LocationsSettings() {
     setExpandedRegions(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const handleToggleActive = async (loc) => {
+    setTogglingId(loc.id);
+    try {
+      await locationsApi.update(loc.id, { is_active: !loc.is_active });
+      await fetchLocations();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
   // Group locations by country then region
   const groupedLocations = locations.reduce((acc, loc) => {
     const country = loc.country || 'Other';
@@ -683,6 +699,13 @@ function LocationsSettings() {
         <button className="btn btn-primary" onClick={() => setShowModal(true)}>
           + Add Location
         </button>
+      </div>
+
+      <div className="alert alert-info" style={{ marginBottom: '16px' }}>
+        These are our own internal branches/sites (e.g. "WearCheck - Longmeadow"). They power
+        the "Internal Location (Branch)" destination in Check Out. To add a <strong>customer</strong>{' '}
+        destination (e.g. "Weir Minerals") so it shows up under "Customer Site" in Check Out,
+        use the <strong>Customer Sites</strong> tab instead.
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
@@ -749,9 +772,21 @@ function LocationsSettings() {
                             </span>
                           )}
                         </div>
-                        <span className={`badge ${loc.is_active ? 'badge-available' : ''}`}>
-                          {loc.is_active ? 'Active' : 'Inactive'}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span className={`badge ${loc.is_active ? 'badge-available' : ''}`}>
+                            {loc.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-secondary"
+                              disabled={togglingId === loc.id}
+                              onClick={() => handleToggleActive(loc)}
+                            >
+                              {togglingId === loc.id ? '...' : loc.is_active ? 'Deactivate' : 'Activate'}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -869,6 +904,7 @@ function CustomerSitesSettings() {
   const [formError, setFormError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [expandedCountries, setExpandedCountries] = useState({});
+  const [togglingId, setTogglingId] = useState(null);
 
   useEffect(() => {
     fetchSites();
@@ -946,6 +982,18 @@ function CustomerSitesSettings() {
     setExpandedCountries(prev => ({ ...prev, [country]: !prev[country] }));
   };
 
+  const handleToggleActive = async (site) => {
+    setTogglingId(site.id);
+    try {
+      await customersApi.update(site.id, { is_active: !site.is_active });
+      await fetchSites();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
   const filteredSites = sites.filter(s => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
@@ -983,6 +1031,12 @@ function CustomerSitesSettings() {
             + Add Site
           </button>
         )}
+      </div>
+
+      <div className="alert alert-info" style={{ marginBottom: '16px' }}>
+        These are customer/third-party destinations (e.g. "Weir Minerals", SBM vessels). They
+        power the "Customer Site" destination in Check Out. For WearCheck's own internal
+        branches, use the <strong>Locations (Internal)</strong> tab instead.
       </div>
 
       <div className="form-group" style={{ maxWidth: '320px' }}>
@@ -1044,9 +1098,21 @@ function CustomerSitesSettings() {
                         </span>
                       )}
                     </div>
-                    <span className={`badge ${site.is_active ? 'badge-available' : ''}`}>
-                      {site.is_active ? 'Active' : 'Inactive'}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span className={`badge ${site.is_active ? 'badge-available' : ''}`}>
+                        {site.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-secondary"
+                          disabled={togglingId === site.id}
+                          onClick={() => handleToggleActive(site)}
+                        >
+                          {togglingId === site.id ? '...' : site.is_active ? 'Deactivate' : 'Activate'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

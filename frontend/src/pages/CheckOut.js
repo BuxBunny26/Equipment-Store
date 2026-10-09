@@ -826,13 +826,11 @@ function CheckOut() {
                   required
                 >
                   <option value="">Select branch location...</option>
-                  {locations
-                    .filter(loc => loc.name.startsWith('WearCheck'))
-                    .map((loc) => (
-                      <option key={loc.id} value={loc.id}>
-                        {loc.name}
-                      </option>
-                    ))}
+                  {locations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             ) : formData.destination_type === 'customer' ? (
