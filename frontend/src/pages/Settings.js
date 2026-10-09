@@ -2,7 +2,7 @@
 import { categoriesApi, subcategoriesApi, locationsApi, personnelApi, customersApi } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 import { useOperator } from '../context/OperatorContext';
-import { uniqueCountries, normalizeCountry } from '../utils/provinces';
+import { uniqueCountries, normalizeCountry, SA_PROVINCES } from '../utils/provinces';
 
 function Settings() {
   const [activeTab, setActiveTab] = useState('categories');
@@ -617,7 +617,7 @@ function LocationsSettings() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
-    type: 'internal', name: '', description: '', region: '', country: 'South Africa', city: '', email: '',
+    type: 'internal', name: '', description: '', region: '', country: 'South Africa',
   });
   const [formError, setFormError] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -647,7 +647,7 @@ function LocationsSettings() {
 
   const openAddModal = () => {
     setFormError(null);
-    setFormData({ type: 'internal', name: '', description: '', region: '', country: 'South Africa', city: '', email: '' });
+    setFormData({ type: 'internal', name: '', description: '', region: '', country: 'South Africa' });
     setShowModal(true);
   };
 
@@ -684,15 +684,14 @@ function LocationsSettings() {
         while (existingNumbers.has(customerNumber)) {
           customerNumber = `${base}-${suffix++}`;
         }
-        const city = formData.city.trim() || null;
+        const province = formData.region.trim() || null;
         await customersApi.create({
           customer_number: customerNumber,
           display_name: name,
           billing_country: country,
           shipping_country: country,
-          billing_city: city,
-          shipping_city: city,
-          email: formData.email.trim() || null,
+          billing_state: province,
+          shipping_state: province,
         });
       } else {
         await locationsApi.create({
@@ -754,7 +753,7 @@ function LocationsSettings() {
     if (!acc[country]) acc[country] = [];
     acc[country].push({
       key: `customer-${site.id}`, id: site.id, kind: 'customer',
-      name: site.display_name, subtitle: site.billing_city, is_active: site.is_active,
+      name: site.display_name, subtitle: site.billing_state || site.billing_city, is_active: site.is_active,
     });
     return acc;
   }, {});
@@ -1028,22 +1027,25 @@ function LocationsSettings() {
                       </datalist>
                     </div>
                     <div className="form-group">
-                      <label className="form-label">City (optional)</label>
-                      <input
-                        type="text"
-                        className="form-input"
-                        value={formData.city}
-                        onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Email (optional)</label>
-                      <input
-                        type="email"
-                        className="form-input"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      />
+                      <label className="form-label">Province (optional)</label>
+                      {formData.country.trim().toLowerCase() === 'south africa' ? (
+                        <select
+                          className="form-input"
+                          value={formData.region}
+                          onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                        >
+                          <option value="">Select Province</option>
+                          {SA_PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={formData.region}
+                          onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                          placeholder="Region name"
+                        />
+                      )}
                     </div>
                   </>
                 ) : (
