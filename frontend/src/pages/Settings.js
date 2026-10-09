@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { categoriesApi, subcategoriesApi, locationsApi, personnelApi, customersApi } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 import { useOperator } from '../context/OperatorContext';
@@ -34,13 +34,7 @@ function Settings() {
           className={`tab ${activeTab === 'locations' ? 'active' : ''}`}
           onClick={() => setActiveTab('locations')}
         >
-          Locations (Internal)
-        </button>
-        <button
-          className={`tab ${activeTab === 'customer-sites' ? 'active' : ''}`}
-          onClick={() => setActiveTab('customer-sites')}
-        >
-          Customer Sites
+          Locations
         </button>
         <button
           className={`tab ${activeTab === 'personnel' ? 'active' : ''}`}
@@ -67,7 +61,6 @@ function Settings() {
         {activeTab === 'categories' && <CategoriesSettings />}
         {activeTab === 'subcategories' && <SubcategoriesSettings />}
         {activeTab === 'locations' && <LocationsSettings />}
-        {activeTab === 'customer-sites' && <CustomerSitesSettings />}
         {activeTab === 'personnel' && <PersonnelSettings />}
         {activeTab === 'assets' && <AssetsSettings />}
         {activeTab === 'appearance' && <AppearanceSettings />}
@@ -262,7 +255,7 @@ function CategoriesSettings() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">{editingId ? 'Edit Category' : 'Add Category'}</h2>
-              <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
+              <button className="modal-close" onClick={() => setShowModal(false)}>Ã—</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="modal-body">
@@ -313,7 +306,7 @@ function CategoriesSettings() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Reassign "{reassign.source.name}"</h2>
-              <button className="modal-close" onClick={() => setReassign(null)} disabled={reassign.busy}>×</button>
+              <button className="modal-close" onClick={() => setReassign(null)} disabled={reassign.busy}>Ã—</button>
             </div>
             <div className="modal-body">
               {reassign.message && <div className="alert alert-warning" style={{ marginBottom: '12px' }}>{reassign.message}</div>}
@@ -522,7 +515,7 @@ function SubcategoriesSettings() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">{editingId ? 'Edit Subcategory' : 'Add Subcategory'}</h2>
-              <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
+              <button className="modal-close" onClick={() => setShowModal(false)}>Ã—</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="modal-body">
@@ -567,7 +560,7 @@ function SubcategoriesSettings() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Reassign "{reassign.source.name}"</h2>
-              <button className="modal-close" onClick={() => setReassign(null)} disabled={reassign.busy}>×</button>
+              <button className="modal-close" onClick={() => setReassign(null)} disabled={reassign.busy}>Ã—</button>
             </div>
             <div className="modal-body">
               {reassign.message && <div className="alert alert-warning" style={{ marginBottom: '12px' }}>{reassign.message}</div>}
@@ -606,7 +599,13 @@ function SubcategoriesSettings() {
   );
 }
 
-// Locations Settings
+// Locations Settings -- unified management of both WearCheck's own internal
+// branches (stored in `locations`, powering the "Internal Location (Branch)"
+// destination in Check Out) and customer/third-party destinations (stored in
+// `customers`, e.g. "Weir Minerals", powering the "Customer Site"
+// destination in Check Out). Viewing is open to everyone; adding an Internal
+// Branch remains open to everyone (matching prior behaviour), but adding a
+// Customer Site is admin-only (matching the prior Customer Sites tab).
 function LocationsSettings() {
   const { operatorRole } = useOperator();
   const isAdmin = !!operatorRole && operatorRole.toLowerCase() === 'admin';
@@ -614,307 +613,30 @@ function LocationsSettings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [locations, setLocations] = useState([]);
-  const [showModal, setShowModal] = useState(false);
-  const [formData, setFormData] = useState({ name: '', description: '', region: '', country: 'South Africa' });
-  const [expandedRegions, setExpandedRegions] = useState({});
-  const [togglingId, setTogglingId] = useState(null);
-
-  useEffect(() => {
-    fetchLocations();
-  }, []);
-
-  const fetchLocations = async () => {
-    try {
-      setLoading(true);
-      const response = await locationsApi.getAll(false);
-      setLocations(response.data);
-      // Expand all regions by default
-      const regions = {};
-      response.data.forEach(loc => {
-        const key = `${loc.country || 'Other'}-${loc.region || 'Unassigned'}`;
-        regions[key] = true;
-      });
-      setExpandedRegions(regions);
-      setError(null);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      await locationsApi.create(formData);
-      setShowModal(false);
-      setFormData({ name: '', description: '', region: '', country: 'South Africa' });
-      fetchLocations();
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const toggleRegion = (key) => {
-    setExpandedRegions(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const handleToggleActive = async (loc) => {
-    setTogglingId(loc.id);
-    try {
-      await locationsApi.update(loc.id, { is_active: !loc.is_active });
-      await fetchLocations();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setTogglingId(null);
-    }
-  };
-
-  // Group locations by country then region
-  const groupedLocations = locations.reduce((acc, loc) => {
-    const country = loc.country || 'Other';
-    const region = loc.region || 'Unassigned';
-    if (!acc[country]) acc[country] = {};
-    if (!acc[country][region]) acc[country][region] = [];
-    acc[country][region].push(loc);
-    return acc;
-  }, {});
-
-  // Sort countries with South Africa first, then alphabetical
-  const sortedCountries = Object.keys(groupedLocations).sort((a, b) => {
-    if (a === 'South Africa') return -1;
-    if (b === 'South Africa') return 1;
-    return a.localeCompare(b);
-  });
-
-  if (loading) {
-    return <div className="loading"><div className="spinner"></div> Loading...</div>;
-  }
-
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-        <h3>Locations ({locations.length})</h3>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-          + Add Location
-        </button>
-      </div>
-
-      <div className="alert alert-info" style={{ marginBottom: '16px' }}>
-        These are our own internal branches/sites (e.g. "WearCheck - Longmeadow"). They power
-        the "Internal Location (Branch)" destination in Check Out. To add a <strong>customer</strong>{' '}
-        destination (e.g. "Weir Minerals") so it shows up under "Customer Site" in Check Out,
-        use the <strong>Customer Sites</strong> tab instead.
-      </div>
-
-      {error && <div className="alert alert-error">{error}</div>}
-
-      {sortedCountries.map(country => (
-        <div key={country} style={{ marginBottom: '1.5rem' }}>
-          <h4 style={{ 
-            borderBottom: '2px solid var(--primary-color)', 
-            paddingBottom: '0.5rem', 
-            marginBottom: '1rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem'
-          }}>
-            {country === 'South Africa' ? '🇿🇦' : '🌍'} {country}
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 'normal' }}>
-              ({Object.values(groupedLocations[country]).flat().length} locations)
-            </span>
-          </h4>
-          
-          {Object.keys(groupedLocations[country]).sort().map(region => {
-            const regionKey = `${country}-${region}`;
-            const isExpanded = expandedRegions[regionKey] !== false;
-            const regionLocations = groupedLocations[country][region];
-            
-            return (
-              <div key={regionKey} style={{ marginBottom: '0.75rem', marginLeft: '1rem' }}>
-                <div 
-                  onClick={() => toggleRegion(regionKey)}
-                  style={{ 
-                    cursor: 'pointer', 
-                    padding: '0.5rem',
-                    background: 'var(--bg-secondary)',
-                    borderRadius: '6px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}
-                >
-                  <span style={{ fontWeight: 500 }}>
-                    {isExpanded ? '▼' : '▶'} {region}
-                  </span>
-                  <span className="badge">{regionLocations.length}</span>
-                </div>
-                
-                {isExpanded && (
-                  <div style={{ marginTop: '0.5rem', marginLeft: '1.5rem' }}>
-                    {regionLocations.map(loc => (
-                      <div 
-                        key={loc.id}
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          padding: '0.5rem 0.75rem',
-                          borderBottom: '1px solid var(--border-color)'
-                        }}
-                      >
-                        <div>
-                          <span style={{ fontWeight: 500 }}>{loc.name}</span>
-                          {loc.description && (
-                            <span style={{ marginLeft: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                              - {loc.description}
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span className={`badge ${loc.is_active ? 'badge-available' : ''}`}>
-                            {loc.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                          {isAdmin && (
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-secondary"
-                              disabled={togglingId === loc.id}
-                              onClick={() => handleToggleActive(loc)}
-                            >
-                              {togglingId === loc.id ? '...' : loc.is_active ? 'Deactivate' : 'Activate'}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      ))}
-
-      {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">Add Location</h2>
-              <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
-            </div>
-            <form onSubmit={handleSubmit}>
-              <div className="modal-body">
-                <div className="form-group">
-                  <label className="form-label">Name *</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Country</label>
-                  <select
-                    className="form-input"
-                    value={formData.country}
-                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                  >
-                    <option value="South Africa">South Africa</option>
-                    <option value="Mozambique">Mozambique</option>
-                    <option value="Namibia">Namibia</option>
-                    <option value="Botswana">Botswana</option>
-                    <option value="Zimbabwe">Zimbabwe</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Region/Province</label>
-                  {formData.country === 'South Africa' ? (
-                    <select
-                      className="form-input"
-                      value={formData.region}
-                      onChange={(e) => setFormData({ ...formData, region: e.target.value })}
-                    >
-                      <option value="">Select Province</option>
-                      <option value="Gauteng">Gauteng</option>
-                      <option value="KwaZulu Natal">KwaZulu Natal</option>
-                      <option value="Limpopo">Limpopo</option>
-                      <option value="Mpumalanga">Mpumalanga</option>
-                      <option value="North West">North West</option>
-                      <option value="Northern Cape">Northern Cape</option>
-                      <option value="Western Cape">Western Cape</option>
-                      <option value="Eastern Cape">Eastern Cape</option>
-                      <option value="Free State">Free State</option>
-                      <option value="Remote">Remote</option>
-                    </select>
-                  ) : (
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={formData.region}
-                      onChange={(e) => setFormData({ ...formData, region: e.target.value })}
-                      placeholder="Region name"
-                    />
-                  )}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Description</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  />
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">Create</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Customer Sites Settings -- manages `customers` rows used as checkout
-// destinations (destination_type='customer' in Check Out), e.g. the
-// existing SBM Offshore vessels in Angola. Distinct from the Locations tab
-// above, which manages WearCheck's own internal sites. Viewing is open to
-// everyone (consistent with the other tabs); adding a new site is
-// restricted to admins only.
-function CustomerSitesSettings() {
-  const { operatorRole } = useOperator();
-  const isAdmin = !!operatorRole && operatorRole.toLowerCase() === 'admin';
-
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [sites, setSites] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const [formData, setFormData] = useState({ name: '', country: '', city: '', email: '' });
+  const [formData, setFormData] = useState({
+    type: 'internal', name: '', description: '', region: '', country: 'South Africa', city: '', email: '',
+  });
   const [formError, setFormError] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [expandedCountries, setExpandedCountries] = useState({});
-  const [togglingId, setTogglingId] = useState(null);
+  const [expandedGroups, setExpandedGroups] = useState({});
+  const [togglingKey, setTogglingKey] = useState(null);
 
   useEffect(() => {
-    fetchSites();
+    fetchAll();
   }, []);
 
-  const fetchSites = async () => {
+  const fetchAll = async () => {
     try {
       setLoading(true);
-      const response = await customersApi.getAll({ active_only: 'false' });
-      setSites(response.data || []);
+      const [locationsRes, sitesRes] = await Promise.all([
+        locationsApi.getAll(false),
+        customersApi.getAll({ active_only: 'false' }),
+      ]);
+      setLocations(locationsRes.data || []);
+      setSites(sitesRes.data || []);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -925,7 +647,7 @@ function CustomerSitesSettings() {
 
   const openAddModal = () => {
     setFormError(null);
-    setFormData({ name: '', country: '', city: '', email: '' });
+    setFormData({ type: 'internal', name: '', description: '', region: '', country: 'South Africa', city: '', email: '' });
     setShowModal(true);
   };
 
@@ -934,43 +656,54 @@ function CustomerSitesSettings() {
     setFormError(null);
 
     const name = formData.name.trim();
-    const country = formData.country.trim();
     if (!name) {
-      setFormError('Site name is required');
+      setFormError('Name is required');
       return;
     }
-    if (!country) {
+    if (formData.type === 'customer' && !isAdmin) {
+      setFormError('Only admins can add customer sites');
+      return;
+    }
+    const country = formData.country.trim();
+    if (formData.type === 'customer' && !country) {
       setFormError('Country is required');
       return;
     }
 
     setSaving(true);
     try {
-      // Admins add a site by name only -- derive a unique customer_number
-      // from it (the table's required identifier) so nobody has to think
-      // about internal numbering. Mirrors the convention already used for
-      // the existing SBM vessel site entries (e.g. "SBM-MONDO").
-      const base = name.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'SITE';
-      const existingNumbers = new Set(sites.map(s => s.customer_number));
-      let customerNumber = base;
-      let suffix = 2;
-      while (existingNumbers.has(customerNumber)) {
-        customerNumber = `${base}-${suffix++}`;
+      if (formData.type === 'customer') {
+        // Admins add a site by name only -- derive a unique customer_number
+        // from it (the table's required identifier) so nobody has to think
+        // about internal numbering. Mirrors the convention already used for
+        // the existing SBM vessel site entries (e.g. "SBM-MONDO").
+        const base = name.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'SITE';
+        const existingNumbers = new Set(sites.map(s => s.customer_number));
+        let customerNumber = base;
+        let suffix = 2;
+        while (existingNumbers.has(customerNumber)) {
+          customerNumber = `${base}-${suffix++}`;
+        }
+        const city = formData.city.trim() || null;
+        await customersApi.create({
+          customer_number: customerNumber,
+          display_name: name,
+          billing_country: country,
+          shipping_country: country,
+          billing_city: city,
+          shipping_city: city,
+          email: formData.email.trim() || null,
+        });
+      } else {
+        await locationsApi.create({
+          name,
+          description: formData.description,
+          region: formData.region,
+          country: formData.country,
+        });
       }
-
-      const city = formData.city.trim() || null;
-      await customersApi.create({
-        customer_number: customerNumber,
-        display_name: name,
-        billing_country: country,
-        shipping_country: country,
-        billing_city: city,
-        shipping_city: city,
-        email: formData.email.trim() || null,
-      });
       setShowModal(false);
-      setFormData({ name: '', country: '', city: '', email: '' });
-      fetchSites();
+      fetchAll();
     } catch (err) {
       setFormError(err.message);
     } finally {
@@ -978,45 +711,63 @@ function CustomerSitesSettings() {
     }
   };
 
-  const toggleCountry = (country) => {
-    setExpandedCountries(prev => ({ ...prev, [country]: !prev[country] }));
+  const toggleGroup = (key) => {
+    setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handleToggleActive = async (site) => {
-    setTogglingId(site.id);
+  const handleToggleActive = async (entry) => {
+    setTogglingKey(entry.key);
     try {
-      await customersApi.update(site.id, { is_active: !site.is_active });
-      await fetchSites();
+      if (entry.kind === 'internal') {
+        await locationsApi.update(entry.id, { is_active: !entry.is_active });
+      } else {
+        await customersApi.update(entry.id, { is_active: !entry.is_active });
+      }
+      await fetchAll();
     } catch (err) {
       setError(err.message);
     } finally {
-      setTogglingId(null);
+      setTogglingKey(null);
     }
   };
 
-  const filteredSites = sites.filter(s => {
-    if (!searchTerm) return true;
-    const term = searchTerm.toLowerCase();
-    return s.display_name?.toLowerCase().includes(term) ||
-           s.customer_number?.toLowerCase().includes(term) ||
-           s.billing_country?.toLowerCase().includes(term);
-  });
+  const term = searchTerm.trim().toLowerCase();
+  const filteredLocations = locations.filter(loc => !term || loc.name.toLowerCase().includes(term));
+  const filteredSites = sites.filter(s => !term || s.display_name?.toLowerCase().includes(term));
 
-  // Group sites by (normalised) country, South Africa first like Locations.
-  const groupedSites = filteredSites.reduce((acc, s) => {
-    const country = normalizeCountry(s.billing_country) || 'Other';
-    if (!acc[country]) acc[country] = [];
-    acc[country].push(s);
+  // Internal branches, grouped by country then region (as before).
+  const internalByCountry = filteredLocations.reduce((acc, loc) => {
+    const country = loc.country || 'Other';
+    const region = loc.region || 'Unassigned';
+    if (!acc[country]) acc[country] = {};
+    if (!acc[country][region]) acc[country][region] = [];
+    acc[country][region].push({
+      key: `internal-${loc.id}`, id: loc.id, kind: 'internal',
+      name: loc.name, subtitle: loc.description, is_active: loc.is_active,
+    });
     return acc;
   }, {});
 
-  const sortedCountries = Object.keys(groupedSites).sort((a, b) => {
+  // Customer sites, grouped by (normalised) country only (as before).
+  const customerByCountry = filteredSites.reduce((acc, site) => {
+    const country = normalizeCountry(site.billing_country) || 'Other';
+    if (!acc[country]) acc[country] = [];
+    acc[country].push({
+      key: `customer-${site.id}`, id: site.id, kind: 'customer',
+      name: site.display_name, subtitle: site.billing_city, is_active: site.is_active,
+    });
+    return acc;
+  }, {});
+
+  const allCountries = new Set([...Object.keys(internalByCountry), ...Object.keys(customerByCountry)]);
+  const sortedCountries = Array.from(allCountries).sort((a, b) => {
     if (a === 'South Africa') return -1;
     if (b === 'South Africa') return 1;
     return a.localeCompare(b);
   });
 
   const countrySuggestions = uniqueCountries(sites);
+  const totalCount = locations.length + sites.length;
 
   if (loading) {
     return <div className="loading"><div className="spinner"></div> Loading...</div>;
@@ -1024,26 +775,26 @@ function CustomerSitesSettings() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <h3>Customer Sites ({sites.length})</h3>
-        {isAdmin && (
-          <button className="btn btn-primary" onClick={openAddModal}>
-            + Add Site
-          </button>
-        )}
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+        <h3>Locations ({totalCount})</h3>
+        <button className="btn btn-primary" onClick={openAddModal}>
+          + Add Location
+        </button>
       </div>
 
       <div className="alert alert-info" style={{ marginBottom: '16px' }}>
-        These are customer/third-party destinations (e.g. "Weir Minerals", SBM vessels). They
-        power the "Customer Site" destination in Check Out. For WearCheck's own internal
-        branches, use the <strong>Locations (Internal)</strong> tab instead.
+        <strong>Internal Branches</strong> are WearCheck's own sites (e.g. "WearCheck - Longmeadow")
+        and power the "Internal Location (Branch)" destination in Check Out.{' '}
+        <strong>Customer Sites</strong> are third-party destinations (e.g. "Weir Minerals") and
+        power the "Customer Site" destination in Check Out. Pick the type when adding a location
+        below.
       </div>
 
       <div className="form-group" style={{ maxWidth: '320px' }}>
         <input
           type="text"
           className="form-input"
-          placeholder="Search sites..."
+          placeholder="Search locations..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
@@ -1052,69 +803,172 @@ function CustomerSitesSettings() {
       {error && <div className="alert alert-error">{error}</div>}
 
       {sortedCountries.length === 0 && (
-        <p style={{ color: 'var(--text-secondary)' }}>No sites found.</p>
+        <p style={{ color: 'var(--text-secondary)' }}>No locations found.</p>
       )}
 
       {sortedCountries.map(country => {
-        const isExpanded = expandedCountries[country] !== false;
-        const countrySites = groupedSites[country];
-        return (
-          <div key={country} style={{ marginBottom: '1rem' }}>
-            <div
-              onClick={() => toggleCountry(country)}
-              style={{
-                cursor: 'pointer',
-                padding: '0.5rem 0.75rem',
-                background: 'var(--bg-secondary)',
-                borderRadius: '6px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                fontWeight: 500,
-              }}
-            >
-              <span>{country === 'South Africa' ? '🇿🇦' : '🌍'} {isExpanded ? '▼' : '▶'} {country}</span>
-              <span className="badge">{countrySites.length}</span>
-            </div>
+        const regions = internalByCountry[country] || {};
+        const customerEntries = customerByCountry[country] || [];
+        const internalCount = Object.values(regions).flat().length;
+        const customerCount = customerEntries.length;
+        const customerGroupKey = `customer-group-${country}`;
+        const isCustomerExpanded = expandedGroups[customerGroupKey] !== false;
 
-            {isExpanded && (
-              <div style={{ marginTop: '0.5rem', marginLeft: '1rem' }}>
-                {countrySites.map(site => (
-                  <div
-                    key={site.id}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '0.5rem 0.75rem',
-                      borderBottom: '1px solid var(--border-color)',
-                    }}
-                  >
-                    <div>
-                      <span style={{ fontWeight: 500 }}>{site.display_name}</span>
-                      {site.billing_city && (
-                        <span style={{ marginLeft: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                          - {site.billing_city}
+        return (
+          <div key={country} style={{ marginBottom: '1.5rem' }}>
+            <h4 style={{
+              borderBottom: '2px solid var(--primary-color)',
+              paddingBottom: '0.5rem',
+              marginBottom: '1rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}>
+              {country === 'South Africa' ? 'ðŸ‡¿ðŸ‡¦' : 'ðŸŒ'} {country}
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 'normal' }}>
+                ({internalCount + customerCount} locations)
+              </span>
+            </h4>
+
+            {internalCount > 0 && (
+              <div style={{ marginBottom: '0.75rem' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: '0.5rem', marginLeft: '1rem' }}>
+                  INTERNAL BRANCHES
+                </div>
+                {Object.keys(regions).sort().map(region => {
+                  const regionKey = `internal-group-${country}-${region}`;
+                  const isExpanded = expandedGroups[regionKey] !== false;
+                  const regionLocations = regions[region];
+
+                  return (
+                    <div key={regionKey} style={{ marginBottom: '0.75rem', marginLeft: '1rem' }}>
+                      <div
+                        onClick={() => toggleGroup(regionKey)}
+                        style={{
+                          cursor: 'pointer',
+                          padding: '0.5rem',
+                          background: 'var(--bg-secondary)',
+                          borderRadius: '6px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <span style={{ fontWeight: 500 }}>
+                          {isExpanded ? 'â–¼' : 'â–¶'} {region}
                         </span>
+                        <span className="badge">{regionLocations.length}</span>
+                      </div>
+
+                      {isExpanded && (
+                        <div style={{ marginTop: '0.5rem', marginLeft: '1.5rem' }}>
+                          {regionLocations.map(entry => (
+                            <div
+                              key={entry.key}
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                padding: '0.5rem 0.75rem',
+                                borderBottom: '1px solid var(--border-color)'
+                              }}
+                            >
+                              <div>
+                                <span style={{ fontWeight: 500 }}>{entry.name}</span>
+                                {entry.subtitle && (
+                                  <span style={{ marginLeft: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                    - {entry.subtitle}
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <span className={`badge ${entry.is_active ? 'badge-available' : ''}`}>
+                                  {entry.is_active ? 'Active' : 'Inactive'}
+                                </span>
+                                {isAdmin && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-secondary"
+                                    disabled={togglingKey === entry.key}
+                                    onClick={() => handleToggleActive(entry)}
+                                  >
+                                    {togglingKey === entry.key ? '...' : entry.is_active ? 'Deactivate' : 'Activate'}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span className={`badge ${site.is_active ? 'badge-available' : ''}`}>
-                        {site.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-secondary"
-                          disabled={togglingId === site.id}
-                          onClick={() => handleToggleActive(site)}
-                        >
-                          {togglingId === site.id ? '...' : site.is_active ? 'Deactivate' : 'Activate'}
-                        </button>
-                      )}
-                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {customerCount > 0 && (
+              <div style={{ marginLeft: '1rem' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                  CUSTOMER SITES
+                </div>
+                <div
+                  onClick={() => toggleGroup(customerGroupKey)}
+                  style={{
+                    cursor: 'pointer',
+                    padding: '0.5rem',
+                    background: 'var(--bg-secondary)',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}
+                >
+                  <span style={{ fontWeight: 500 }}>
+                    {isCustomerExpanded ? 'â–¼' : 'â–¶'} Customer Sites
+                  </span>
+                  <span className="badge">{customerCount}</span>
+                </div>
+
+                {isCustomerExpanded && (
+                  <div style={{ marginTop: '0.5rem', marginLeft: '1.5rem' }}>
+                    {customerEntries.map(entry => (
+                      <div
+                        key={entry.key}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '0.5rem 0.75rem',
+                          borderBottom: '1px solid var(--border-color)'
+                        }}
+                      >
+                        <div>
+                          <span style={{ fontWeight: 500 }}>{entry.name}</span>
+                          {entry.subtitle && (
+                            <span style={{ marginLeft: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                              - {entry.subtitle}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span className={`badge ${entry.is_active ? 'badge-available' : ''}`}>
+                            {entry.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-secondary"
+                              disabled={togglingKey === entry.key}
+                              onClick={() => handleToggleActive(entry)}
+                            >
+                              {togglingKey === entry.key ? '...' : entry.is_active ? 'Deactivate' : 'Activate'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
             )}
           </div>
@@ -1125,56 +979,131 @@ function CustomerSitesSettings() {
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 className="modal-title">Add Site</h2>
-              <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
+              <h2 className="modal-title">Add Location</h2>
+              <button className="modal-close" onClick={() => setShowModal(false)}>Ã—</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="modal-body">
                 {formError && <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{formError}</div>}
+                {isAdmin && (
+                  <div className="form-group">
+                    <label className="form-label">Type *</label>
+                    <select
+                      className="form-input"
+                      value={formData.type}
+                      onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    >
+                      <option value="internal">Internal Branch (WearCheck site)</option>
+                      <option value="customer">Customer Site</option>
+                    </select>
+                  </div>
+                )}
                 <div className="form-group">
-                  <label className="form-label">Site Name *</label>
+                  <label className="form-label">Name *</label>
                   <input
                     type="text"
                     className="form-input"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g., Bumi Armada"
+                    placeholder={formData.type === 'customer' ? 'e.g., Weir Minerals' : 'e.g., WearCheck - Polokwane'}
                     required
                   />
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Country *</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    list="customer-site-countries"
-                    value={formData.country}
-                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                    placeholder="e.g., Angola"
-                    required
-                  />
-                  <datalist id="customer-site-countries">
-                    {countrySuggestions.map(c => <option key={c} value={c} />)}
-                  </datalist>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">City (optional)</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={formData.city}
-                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Email (optional)</label>
-                  <input
-                    type="email"
-                    className="form-input"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  />
-                </div>
+
+                {formData.type === 'customer' ? (
+                  <>
+                    <div className="form-group">
+                      <label className="form-label">Country *</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        list="customer-site-countries"
+                        value={formData.country}
+                        onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                        placeholder="e.g., South Africa"
+                        required
+                      />
+                      <datalist id="customer-site-countries">
+                        {countrySuggestions.map(c => <option key={c} value={c} />)}
+                      </datalist>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">City (optional)</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={formData.city}
+                        onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Email (optional)</label>
+                      <input
+                        type="email"
+                        className="form-input"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="form-group">
+                      <label className="form-label">Country</label>
+                      <select
+                        className="form-input"
+                        value={formData.country}
+                        onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                      >
+                        <option value="South Africa">South Africa</option>
+                        <option value="Mozambique">Mozambique</option>
+                        <option value="Namibia">Namibia</option>
+                        <option value="Botswana">Botswana</option>
+                        <option value="Zimbabwe">Zimbabwe</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Region/Province</label>
+                      {formData.country === 'South Africa' ? (
+                        <select
+                          className="form-input"
+                          value={formData.region}
+                          onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                        >
+                          <option value="">Select Province</option>
+                          <option value="Gauteng">Gauteng</option>
+                          <option value="KwaZulu Natal">KwaZulu Natal</option>
+                          <option value="Limpopo">Limpopo</option>
+                          <option value="Mpumalanga">Mpumalanga</option>
+                          <option value="North West">North West</option>
+                          <option value="Northern Cape">Northern Cape</option>
+                          <option value="Western Cape">Western Cape</option>
+                          <option value="Eastern Cape">Eastern Cape</option>
+                          <option value="Free State">Free State</option>
+                          <option value="Remote">Remote</option>
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={formData.region}
+                          onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                          placeholder="Region name"
+                        />
+                      )}
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Description</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
@@ -1341,7 +1270,7 @@ function PersonnelSettings() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Add Person</h2>
-              <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
+              <button className="modal-close" onClick={() => setShowModal(false)}>Ã—</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="modal-body">
@@ -1402,7 +1331,7 @@ function PersonnelSettings() {
   );
 }
 
-// Assets Settings — manage dropdown options for asset forms
+// Assets Settings â€” manage dropdown options for asset forms
 const ASSET_CONFIG_KEY = 'equipment_store_asset_config';
 
 const DEFAULT_ASSET_CONFIG = {
@@ -1490,7 +1419,7 @@ function EditableListSection({ title, items, onUpdate }) {
               }}
               title="Remove"
             >
-              ×
+              Ã—
             </button>
           </span>
         ))}
