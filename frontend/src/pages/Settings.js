@@ -255,7 +255,7 @@ function CategoriesSettings() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">{editingId ? 'Edit Category' : 'Add Category'}</h2>
-              <button className="modal-close" onClick={() => setShowModal(false)}>Ã—</button>
+              <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="modal-body">
@@ -306,7 +306,7 @@ function CategoriesSettings() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Reassign "{reassign.source.name}"</h2>
-              <button className="modal-close" onClick={() => setReassign(null)} disabled={reassign.busy}>Ã—</button>
+              <button className="modal-close" onClick={() => setReassign(null)} disabled={reassign.busy}>×</button>
             </div>
             <div className="modal-body">
               {reassign.message && <div className="alert alert-warning" style={{ marginBottom: '12px' }}>{reassign.message}</div>}
@@ -515,7 +515,7 @@ function SubcategoriesSettings() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">{editingId ? 'Edit Subcategory' : 'Add Subcategory'}</h2>
-              <button className="modal-close" onClick={() => setShowModal(false)}>Ã—</button>
+              <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="modal-body">
@@ -560,7 +560,7 @@ function SubcategoriesSettings() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Reassign "{reassign.source.name}"</h2>
-              <button className="modal-close" onClick={() => setReassign(null)} disabled={reassign.busy}>Ã—</button>
+              <button className="modal-close" onClick={() => setReassign(null)} disabled={reassign.busy}>×</button>
             </div>
             <div className="modal-body">
               {reassign.message && <div className="alert alert-warning" style={{ marginBottom: '12px' }}>{reassign.message}</div>}
@@ -824,7 +824,7 @@ function LocationsSettings() {
               alignItems: 'center',
               gap: '0.5rem'
             }}>
-              {country === 'South Africa' ? 'ðŸ‡¿ðŸ‡¦' : 'ðŸŒ'} {country}
+              {country === 'South Africa' ? '🇿🇦' : '🌍'} {country}
               <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 'normal' }}>
                 ({internalCount + customerCount} locations)
               </span>
@@ -855,7 +855,7 @@ function LocationsSettings() {
                         }}
                       >
                         <span style={{ fontWeight: 500 }}>
-                          {isExpanded ? 'â–¼' : 'â–¶'} {region}
+                          {isExpanded ? '▼' : '▶'} {region}
                         </span>
                         <span className="badge">{regionLocations.length}</span>
                       </div>
@@ -924,7 +924,7 @@ function LocationsSettings() {
                   }}
                 >
                   <span style={{ fontWeight: 500 }}>
-                    {isCustomerExpanded ? 'â–¼' : 'â–¶'} Customer Sites
+                    {isCustomerExpanded ? '▼' : '▶'} Customer Sites
                   </span>
                   <span className="badge">{customerCount}</span>
                 </div>
@@ -980,7 +980,7 @@ function LocationsSettings() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Add Location</h2>
-              <button className="modal-close" onClick={() => setShowModal(false)}>Ã—</button>
+              <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="modal-body">
@@ -1270,7 +1270,7 @@ function PersonnelSettings() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Add Person</h2>
-              <button className="modal-close" onClick={() => setShowModal(false)}>Ã—</button>
+              <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="modal-body">
@@ -1331,7 +1331,7 @@ function PersonnelSettings() {
   );
 }
 
-// Assets Settings â€” manage dropdown options for asset forms
+// Assets Settings — manage dropdown options for asset forms
 const ASSET_CONFIG_KEY = 'equipment_store_asset_config';
 
 const DEFAULT_ASSET_CONFIG = {
@@ -1419,7 +1419,7 @@ function EditableListSection({ title, items, onUpdate }) {
               }}
               title="Remove"
             >
-              Ã—
+              ×
             </button>
           </span>
         ))}
