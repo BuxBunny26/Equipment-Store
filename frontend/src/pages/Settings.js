@@ -2,7 +2,7 @@
 import { categoriesApi, subcategoriesApi, locationsApi, personnelApi, customersApi } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 import { useOperator } from '../context/OperatorContext';
-import { uniqueCountries, normalizeCountry, SA_PROVINCES } from '../utils/provinces';
+import { normalizeCountry, SA_PROVINCES } from '../utils/provinces';
 
 function Settings() {
   const [activeTab, setActiveTab] = useState('categories');
@@ -765,7 +765,26 @@ function LocationsSettings() {
     return a.localeCompare(b);
   });
 
-  const countrySuggestions = uniqueCountries(sites);
+  // Country/Province suggestions pooled from everything already in use
+  // across both Internal Branches and Customer Sites, plus a small sensible
+  // seed list, so the Add Location form reflects the real set of
+  // countries/regions WearCheck operates in rather than a stale hardcoded
+  // list that was missing most actual customer-site countries.
+  const FALLBACK_COUNTRIES = ['South Africa', 'Mozambique', 'Namibia', 'Botswana', 'Zimbabwe'];
+  const countryOptions = Array.from(new Set([
+    ...FALLBACK_COUNTRIES,
+    ...locations.map(l => l.country).filter(Boolean),
+    ...sites.map(s => normalizeCountry(s.billing_country)).filter(Boolean),
+  ])).sort((a, b) => {
+    if (a === 'South Africa') return -1;
+    if (b === 'South Africa') return 1;
+    return a.localeCompare(b);
+  });
+  const regionOptions = Array.from(new Set([
+    ...locations.map(l => l.region).filter(Boolean),
+    ...sites.map(s => s.billing_state).filter(Boolean),
+  ])).sort();
+
   const totalCount = locations.length + sites.length;
 
   if (loading) {
@@ -1016,14 +1035,14 @@ function LocationsSettings() {
                       <input
                         type="text"
                         className="form-input"
-                        list="customer-site-countries"
+                        list="location-countries"
                         value={formData.country}
                         onChange={(e) => setFormData({ ...formData, country: e.target.value })}
                         placeholder="e.g., South Africa"
                         required
                       />
-                      <datalist id="customer-site-countries">
-                        {countrySuggestions.map(c => <option key={c} value={c} />)}
+                      <datalist id="location-countries">
+                        {countryOptions.map(c => <option key={c} value={c} />)}
                       </datalist>
                     </div>
                     <div className="form-group">
@@ -1038,13 +1057,19 @@ function LocationsSettings() {
                           {SA_PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
                         </select>
                       ) : (
-                        <input
-                          type="text"
-                          className="form-input"
-                          value={formData.region}
-                          onChange={(e) => setFormData({ ...formData, region: e.target.value })}
-                          placeholder="Region name"
-                        />
+                        <>
+                          <input
+                            type="text"
+                            className="form-input"
+                            list="location-regions"
+                            value={formData.region}
+                            onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                            placeholder="Region name"
+                          />
+                          <datalist id="location-regions">
+                            {regionOptions.map(r => <option key={r} value={r} />)}
+                          </datalist>
+                        </>
                       )}
                     </div>
                   </>
@@ -1052,47 +1077,44 @@ function LocationsSettings() {
                   <>
                     <div className="form-group">
                       <label className="form-label">Country</label>
-                      <select
+                      <input
+                        type="text"
                         className="form-input"
+                        list="location-countries"
                         value={formData.country}
                         onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                      >
-                        <option value="South Africa">South Africa</option>
-                        <option value="Mozambique">Mozambique</option>
-                        <option value="Namibia">Namibia</option>
-                        <option value="Botswana">Botswana</option>
-                        <option value="Zimbabwe">Zimbabwe</option>
-                        <option value="Other">Other</option>
-                      </select>
+                        placeholder="e.g., South Africa"
+                      />
+                      <datalist id="location-countries">
+                        {countryOptions.map(c => <option key={c} value={c} />)}
+                      </datalist>
                     </div>
                     <div className="form-group">
                       <label className="form-label">Region/Province</label>
-                      {formData.country === 'South Africa' ? (
+                      {formData.country.trim().toLowerCase() === 'south africa' ? (
                         <select
                           className="form-input"
                           value={formData.region}
                           onChange={(e) => setFormData({ ...formData, region: e.target.value })}
                         >
                           <option value="">Select Province</option>
-                          <option value="Gauteng">Gauteng</option>
-                          <option value="KwaZulu Natal">KwaZulu Natal</option>
-                          <option value="Limpopo">Limpopo</option>
-                          <option value="Mpumalanga">Mpumalanga</option>
-                          <option value="North West">North West</option>
-                          <option value="Northern Cape">Northern Cape</option>
-                          <option value="Western Cape">Western Cape</option>
-                          <option value="Eastern Cape">Eastern Cape</option>
-                          <option value="Free State">Free State</option>
+                          {SA_PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
                           <option value="Remote">Remote</option>
                         </select>
                       ) : (
-                        <input
-                          type="text"
-                          className="form-input"
-                          value={formData.region}
-                          onChange={(e) => setFormData({ ...formData, region: e.target.value })}
-                          placeholder="Region name"
-                        />
+                        <>
+                          <input
+                            type="text"
+                            className="form-input"
+                            list="location-regions"
+                            value={formData.region}
+                            onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                            placeholder="Region name"
+                          />
+                          <datalist id="location-regions">
+                            {regionOptions.map(r => <option key={r} value={r} />)}
+                          </datalist>
+                        </>
                       )}
                     </div>
                     <div className="form-group">
