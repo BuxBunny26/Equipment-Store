@@ -336,7 +336,7 @@ function Calibration() {
                 onChange={(e) => setFilters({ ...filters, category: e.target.value })}
               >
                 <option value="">All Categories</option>
-                {categories.filter(c => c.requires_calibration).map((category) => (
+                {categories.map((category) => (
                   <option key={category.id} value={category.name}>
                     {category.name}
                   </option>
