@@ -166,6 +166,21 @@ function OperatorModal({ onClose }) {
     }
   };
 
+  const handleMfaCodePaste = (e) => {
+    e.preventDefault();
+    const digits = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6).split('');
+    if (digits.length === 0) return;
+    const newCode = ['', '', '', '', '', ''];
+    digits.forEach((d, i) => { newCode[i] = d; });
+    setMfaCode(newCode);
+    setMfaError('');
+    if (digits.length === 6) {
+      handleMfaSubmit(digits.join(''));
+    } else {
+      mfaRefs[digits.length]?.current?.focus();
+    }
+  };
+
   const handleMfaSubmit = async (code) => {
     setMfaLoading(true);
     setMfaError('');
@@ -239,8 +254,9 @@ function OperatorModal({ onClose }) {
                   value={digit}
                   onChange={(e) => handleMfaCodeChange(i, e.target.value)}
                   onKeyDown={(e) => handleMfaCodeKeyDown(i, e)}
+                  onPaste={handleMfaCodePaste}
                   className={`operator-pin-digit ${mfaError ? 'error' : ''}`}
-                  autoComplete="off"
+                  autoComplete="one-time-code"
                   disabled={mfaLoading}
                 />
               ))}
