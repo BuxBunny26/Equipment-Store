@@ -1,5 +1,19 @@
 # Equipment Store App Documentation
 
+## ⚠️ CRITICAL: Commit & Push Before Ending Any Session
+Netlify deploys **only** from what's pushed to `origin/main` on GitHub — it never reads
+anything from a local working directory. On 2026-11-17 it was discovered that ~6 days of
+completed work (multiple features, several bug fixes) existed only as uncommitted local
+changes: every "Trigger Deploy" on Netlify during that window silently rebuilt the same stale
+old commit, no matter how many times SQL was run or the site was redeployed.
+
+**Before ending any work session in this repo (human or AI assistant):**
+1. Run `git status` — if it isn't `nothing to commit, working tree clean`, the work is NOT
+   saved anywhere Netlify (or anyone else) can see it.
+2. `git add -A && git commit -m "<description>" && git push origin main`.
+3. Only report a task/deploy as "done" once `git status` is clean AND the push has
+   succeeded — a successful local build/test run is NOT evidence the change is live.
+
 ## Overview
 The Equipment Store app is a full-stack solution for managing equipment, consumables, calibration, maintenance, and reservations. It features robust audit logging, secure authentication, input validation, and a user-friendly React frontend.
 
