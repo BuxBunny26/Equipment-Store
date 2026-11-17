@@ -98,4 +98,22 @@ test('classifyCalibrationStatus: null expiry_date on the latest record -> N/A (n
     assert.strictEqual(classifyCalibrationStatus(record, TODAY), 'N/A');
 });
 
+test('I. Record marked failed -> Failed, even with a far-future expiry date', () => {
+    const records = [{ id: 1, calibration_date: '2026-08-01', created_at: '2026-08-01T00:00:00Z', expiry_date: '2027-08-01', failed: true }];
+    assert.strictEqual(getCurrentCalibrationStatus(records, TODAY), 'Failed');
+});
+
+test('J. Newer passing record supersedes an older failed record -> Valid, not Failed', () => {
+    const records = [
+        { id: 1, calibration_date: '2026-01-01', created_at: '2026-01-01T00:00:00Z', expiry_date: '2027-01-01', failed: true },
+        { id: 2, calibration_date: '2026-08-01', created_at: '2026-08-01T00:00:00Z', expiry_date: '2027-08-01', failed: false },
+    ];
+    assert.strictEqual(getCurrentCalibrationStatus(records, TODAY), 'Valid');
+});
+
+test('equipmentListBadgeLabel: Failed must render as its own distinct badge, not folded into Expired/Calibrated', () => {
+    assert.strictEqual(equipmentListBadgeLabel('Failed'), 'Failed');
+    assert.notStrictEqual(equipmentListBadgeLabel('Failed'), 'Calibrated');
+});
+
 console.log(`\n${passed} test(s) passed.\n`);

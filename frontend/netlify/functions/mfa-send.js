@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
+const { isTestBypassPersonnel, isBypassFeatureEnabled } = require('../../../backend/database/mfa_test_bypass');
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -71,6 +72,46 @@ exports.handler = async (event) => {
   if (insertError) {
     console.error('Token insert error:', insertError.message);
     return { statusCode: 500, body: JSON.stringify({ error: 'Failed to generate verification code' }) };
+  }
+
+  // TEST-ACCOUNT-ONLY MFA bypass: the OTP above was already generated,
+  // hashed and stored exactly as for a real employee — mfa-verify.js is
+  // completely unmodified and will check it the same way for anyone. The
+  // ONLY thing that changes here is DELIVERY: instead of emailing it via
+  // Resend, an allowlisted personnel_id gets it back directly in this
+  // response. Controlled by TWO independent, server-side, non-REACT_APP_
+  // env vars — both must be set or this branch never runs:
+  //   ALLOW_TEST_MFA_BYPASS=true               (feature on/off switch)
+  //   TEST_ACCOUNT_MFA_BYPASS_PERSONNEL_IDS     (the actual allowlist)
+  // See backend/database/mfa_test_bypass.js for the fail-closed parsing.
+  //
+  // CORRECTED 2026-08-21: an earlier version of this guard also checked
+  // Netlify's `CONTEXT` env var, on the assumption it would read
+  // 'production' on the real production site. That assumption was WRONG
+  // and has been removed — verified against Netlify's own docs
+  // (docs.netlify.com/build/functions/environment-variables/, "Netlify
+  // read-only variables"): only URL, SITE_NAME and SITE_ID are exposed to
+  // a deployed Function at RUNTIME. CONTEXT is a build-time-only variable
+  // and would have read as `undefined` inside this very function on
+  // Netlify, silently defaulting to "not production" via the old
+  // `|| 'dev'` fallback regardless of which site it actually ran on — i.e.
+  // it provided no real protection at all. ALLOW_TEST_MFA_BYPASS is the
+  // correct mechanism instead: set it via Netlify's own per-deploy-context
+  // environment variable scoping (Production vs. Branch deploys/Deploy
+  // Previews) so it is never 'true' on the production site, or simply
+  // never set it there at all if staging is a separate Netlify site.
+  const bypassFeatureOn = isBypassFeatureEnabled(process.env.ALLOW_TEST_MFA_BYPASS);
+  if (bypassFeatureOn && isTestBypassPersonnel(personnel_id, process.env.TEST_ACCOUNT_MFA_BYPASS_PERSONNEL_IDS)) {
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        success: true,
+        masked_email: 'TEST ACCOUNT — email skipped (allowlisted for testing)',
+        test_mode: true,
+        test_otp: otp,
+      }),
+    };
   }
 
   const emailHtml = `

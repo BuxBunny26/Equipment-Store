@@ -4,6 +4,7 @@ import { act } from 'react-dom/test-utils';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import Calibration from './Calibration';
 import { calibrationApi, categoriesApi } from '../services/api';
+import { OperatorProvider } from '../context/OperatorContext';
 
 global.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -29,7 +30,9 @@ async function renderAtPath(path) {
   await act(async () => {
     root.render(
       <MemoryRouter initialEntries={[path]}>
-        <Calibration />
+        <OperatorProvider>
+          <Calibration />
+        </OperatorProvider>
       </MemoryRouter>
     );
   });
@@ -53,8 +56,10 @@ async function renderWithNavigation(path) {
   await act(async () => {
     root.render(
       <MemoryRouter initialEntries={[path]}>
-        <NavigateProbe />
-        <Calibration />
+        <OperatorProvider>
+          <NavigateProbe />
+          <Calibration />
+        </OperatorProvider>
       </MemoryRouter>
     );
   });

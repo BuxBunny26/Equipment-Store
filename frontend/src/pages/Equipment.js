@@ -8,6 +8,7 @@ import { Icons } from '../components/Icons';
 import AddEquipmentModal from '../components/AddEquipmentModal';
 import { getCustomFieldRule, getCustomFieldValue } from '../utils/customFields';
 import { useOperator } from '../context/OperatorContext';
+import { getEffectivePermissions, filterEquipmentForOperator } from '../utils/permissions';
 import { DEFAULT_EQUIPMENT_FILTERS, filtersToSearchParams, searchParamsToFilters } from '../utils/equipmentListState';
 import {
   createInitialBulkEditForm,
@@ -18,8 +19,9 @@ import {
 } from '../utils/bulkEditEquipment';
 
 function Equipment() {
-  const { operatorRole } = useOperator();
+  const { operator, operatorRole } = useOperator();
   const isManager = !!operatorRole && ['admin', 'manager'].includes(operatorRole.toLowerCase());
+  const permissions = getEffectivePermissions(operator, operatorRole);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -120,10 +122,10 @@ function Equipment() {
       }
 
       // Apply calibration filter client-side
+      // 'Not Calibrated' means it DOES need calibration but has no record yet, distinct from
+      // 'N/A' (never needs calibration -- category/subcategory/equipment exemption).
       if (filters.calibration_status) {
-        if (filters.calibration_status === 'Not Calibrated') {
-          items = items.filter(e => e.calibration_status === 'Not Calibrated' || e.calibration_status === 'N/A');
-        } else if (filters.calibration_status === 'Calibrated') {
+        if (filters.calibration_status === 'Calibrated') {
           items = items.filter(e => e.calibration_status === 'Valid');
         } else {
           items = items.filter(e => e.calibration_status === filters.calibration_status);
@@ -137,6 +139,9 @@ function Equipment() {
           return val === filters.channels;
         });
       }
+
+      // Restricted AFS employees may only see equipment currently allocated to them
+      items = filterEquipmentForOperator(items, operator, operatorRole);
 
       setEquipment(items);
       setError(null);
@@ -266,6 +271,13 @@ function Equipment() {
     if (item.calibration_status === 'Not Calibrated') {
       return <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Not Calibrated</span>;
     }
+    if (item.calibration_status === 'Failed') {
+      // No badge-danger class here -- it sets color: var(--error-color) (dark red text),
+      // which is invisible against this same solid red background. The other statuses below
+      // use plain "badge" (no class-level color), so their default/inherited text already
+      // contrasts fine against their solid backgrounds.
+      return <span className="badge" style={{ background: 'var(--error-color)', color: '#fff' }}>Failed</span>;
+    }
     if (item.calibration_status === 'Expired') {
       return <span className="badge" style={{ background: 'var(--error-color)' }}>Expired</span>;
     }
@@ -374,9 +386,11 @@ function Equipment() {
               Recently Deleted
             </button>
           )}
-          <button className="btn btn-secondary" onClick={() => { setShowImportModal(true); setImportData(null); setImportResults(null); }}>
-            <Icons.Upload size={16} /> Import
-          </button>
+          {permissions.canAddSerialNumber && (
+            <button className="btn btn-secondary" onClick={() => { setShowImportModal(true); setImportData(null); setImportResults(null); }}>
+              <Icons.Upload size={16} /> Import
+            </button>
+          )}
           <input
             ref={fileInputRef}
             type="file"
@@ -384,9 +398,11 @@ function Equipment() {
             onChange={handleFileSelect}
             style={{ display: 'none' }}
           />
-          <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-            <Icons.Plus size={16} /> Add Equipment
-          </button>
+          {permissions.canAddSerialNumber && (
+            <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+              <Icons.Plus size={16} /> Add Equipment
+            </button>
+          )}
         </div>
       </div>
 
@@ -439,7 +455,9 @@ function Equipment() {
               <option value="Calibrated">Calibrated (Valid)</option>
               <option value="Due Soon">Due Soon</option>
               <option value="Expired">Expired</option>
+              <option value="Failed">Failed</option>
               <option value="Not Calibrated">Not Calibrated</option>
+              <option value="N/A">N/A (Not Required)</option>
             </select>
 
             <select
@@ -574,7 +592,7 @@ function Equipment() {
                         <Link to={`/equipment/${item.id}`} className="btn btn-sm btn-secondary">
                           View
                         </Link>
-                        {item.status === 'Available' && item.is_checkout_allowed && !item.is_consumable && (
+                        {permissions.canCheckout && item.status === 'Available' && item.is_checkout_allowed && !item.is_consumable && (
                           <Link to={`/check-out?equipment=${item.id}`} className="btn btn-sm btn-primary">
                             Check Out
                           </Link>

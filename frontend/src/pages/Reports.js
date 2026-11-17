@@ -1512,10 +1512,17 @@ function CalibrationDueReport({ data }) {
 
   const expired = data.filter(r => r.calibration_status === 'Expired');
   const dueSoon = data.filter(r => r.calibration_status === 'Due Soon');
+  const failed = data.filter(r => r.calibration_status === 'Failed');
 
   return (
     <div>
       <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        {failed.length > 0 && (
+          <div className="alert alert-error" style={{ margin: 0, padding: '6px 12px', fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <Icons.Warning size={16} />
+            <strong>{failed.length} Failed</strong>
+          </div>
+        )}
         {expired.length > 0 && (
           <div className="alert alert-error" style={{ margin: 0, padding: '6px 12px', fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
             <Icons.Warning size={16} />
@@ -1559,7 +1566,7 @@ function CalibrationDueReport({ data }) {
                 <td style={{ fontSize: '0.8rem' }}>{r.calibration_date ? new Date(r.calibration_date).toLocaleDateString() : '-'}</td>
                 <td style={{ fontSize: '0.8rem' }}>{r.expiry_date ? new Date(r.expiry_date).toLocaleDateString() : '-'}</td>
                 <td>
-                  <span className={`badge ${r.calibration_status === 'Expired' ? 'badge-overdue' : 'badge-checked-out'}`}>
+                  <span className={`badge ${r.calibration_status === 'Failed' ? 'badge-danger' : r.calibration_status === 'Expired' ? 'badge-overdue' : 'badge-checked-out'}`}>
                     {r.calibration_status}
                   </span>
                 </td>

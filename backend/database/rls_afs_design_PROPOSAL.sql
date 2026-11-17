@@ -1,0 +1,412 @@
+-- ============================================================
+-- RLS / AFS enforcement — DESIGN PROPOSAL ONLY. DO NOT APPLY.
+-- ============================================================
+-- Prepared 2026-08-14, CORRECTED 2026-08-17 (token design fixed — see
+-- below). This file is NOT executed by any script and must NOT be run
+-- against Supabase until:
+--   1. staging code below (mfa-verify.js JWT issuance, frontend token
+--      attachment) has been deployed to a non-production environment;
+--   2. every existing frontend workflow (list below) has been tested
+--      against these policies in a non-production project;
+--   3. the user has explicitly approved a cutover plan.
+--
+-- ----------------------------------------------------------------
+-- WHY THIS CAN'T BE A SIMPLE "ADD A POLICY" CHANGE
+-- ----------------------------------------------------------------
+-- Current RLS policies are `USING (true)` because there is no verified
+-- per-request identity: the frontend calls Supabase PostgREST directly
+-- using the shared anon key (frontend/src/services/supabaseClient.js). The
+-- "operator" is just a client-supplied name (x-operator-name header, purely
+-- for the audit trigger) and is fully spoofable. Any RLS policy that tries
+-- to branch on "who is asking" has nothing trustworthy to branch on today.
+--
+-- ----------------------------------------------------------------
+-- TOKEN DESIGN — CORRECTED 2026-08-17, SIGNING APPROACH VERIFIED 2026-08-17
+-- ----------------------------------------------------------------
+-- The original draft of this file proposed embedding mutable authorisation
+-- state (role, division) directly in the JWT claims. That is WRONG: those
+-- values can change while a session is still valid (a promotion, a
+-- division move, a deactivation), and a token is not re-issued mid-session
+-- — so RLS reading stale claims would enforce yesterday's permissions.
+--
+-- Corrected design: the token carries ONLY the stable application identity
+-- plus the standard claim PostgREST needs to pick a Postgres role:
+--   { "personnel_id": 44, "role": "authenticated", "iat": ..., "exp": ... }
+-- `role` here is the Postgres/PostgREST execution role (standard Supabase
+-- claim, always "authenticated" for any logged-in operator) — NOT this
+-- app's Manager/User application role. Do not conflate the two.
+--
+-- SIGNING KEY VERIFICATION (2026-08-17) — answers to the 8 production
+-- signing questions, checked against this project's actual configuration
+-- and current official Supabase docs (not assumed):
+--   1. Legacy JWT secret only? NO — confirmed by querying this project's
+--      own https://<project>.supabase.co/auth/v1/.well-known/jwks.json,
+--      which returned a real ES256 (P-256) public key. Per Supabase docs,
+--      that endpoint returns NO keys at all for legacy-secret-only
+--      projects, so this project has already been migrated (at least
+--      partially) onto the new Signing Keys system.
+--   2. Newer JWT Signing Keys feature available/configured? YES — see
+--      above. (Whether it's the CURRENT signing key vs. standby/previously
+--      -used can only be seen in the dashboard, Settings > JWT — not
+--      determinable from JWKS alone; irrelevant to our use case below since
+--      we import a SEPARATE key of our own regardless.)
+--   3. Can we import our own signing key for the Netlify function to mint
+--      Equipment Store tokens? YES — Supabase supports importing a
+--      self-generated private key as an additional standby key without
+--      touching the project's own Auth-issued tokens: run
+--      `supabase gen signing-key --algorithm ES256` (Supabase CLI), import
+--      the resulting JWK as a new standby key via Settings > JWT in the
+--      dashboard (do NOT rotate — rotating changes what Supabase Auth
+--      itself uses, unrelated to our custom minting), then the private key
+--      half is used only by our own signer. Multiple trusted keys coexist.
+--   4. Recommended algorithm: ES256 (NIST P-256) — Supabase's own guidance
+--      explicitly prefers it over RSA ("faster... shorter signatures") and
+--      over EdDSA ("coming soon", not yet fully supported). Matches what
+--      this project's own Auth already uses.
+--   5. Where the private signing key should live: server-side only, as a
+--      Netlify environment variable (SUPABASE_JWT_SIGNING_KEY, holding the
+--      generated JWK JSON) — never sent to the browser. Same gating
+--      pattern already used for CALIBRATION_REMINDERS_ENABLED: absent by
+--      default, zero behaviour change until deliberately set.
+--   6. Required claims: header `{alg: "ES256", kid: "<imported key id>",
+--      typ: "JWT"}`; payload `{role: "authenticated", exp: <future ts>}` at
+--      minimum (per Supabase's own "mint your own JWT" FAQ) — `sub` is
+--      optional/not needed here since we never use Supabase Auth's
+--      `auth.users` table. Our `personnel_id` custom claim rides alongside.
+--   7. How the browser passes both: the `apikey` header (publishable/anon
+--      key) is sent automatically by whatever key `createClient()` was
+--      constructed with — unchanged, not part of this feature. The
+--      Authorization JWT is supplied via the officially documented
+--      `accessToken` async callback option on `createClient()` (Supabase
+--      docs: "Using custom or third-party JWTs") — NOT a manually-set
+--      header, which Supabase's docs now explicitly say to avoid ("no
+--      longer recommended... causes confusion when combined with a user
+--      session from Supabase Auth").
+--   8. Does the installed @supabase/supabase-js (2.98.0, confirmed via
+--      package-lock.json) support this cleanly? YES — the `accessToken`
+--      client option used below has been part of supabase-js v2 for
+--      third-party/custom JWT support for a long time; 2.98.0 is well
+--      within that range.
+--
+-- Implemented in netlify/functions/mfa-verify.js (2026-08-17, revised same
+-- day after the above verification): after MFA succeeds, signStagingJwt()
+-- prefers SUPABASE_JWT_SIGNING_KEY (ES256, asymmetric — the production-
+-- preferred path per the analysis above; private key never leaves this
+-- function) and falls back to SUPABASE_JWT_SECRET (HS256, legacy shared
+-- secret) ONLY if the ES256 key isn't configured — kept purely for local/
+-- manual testing, explicitly NOT approved for production use (Supabase's
+-- own docs: "not recommended for production applications"). Both env vars
+-- are unset in every environment today, so the response is byte-for-byte
+-- identical to before this feature existed — zero behaviour change until
+-- one is deliberately configured. Both signing paths use Node's built-in
+-- `crypto` only (createHmac for HS256; createPrivateKey+sign with
+-- dsaEncoding:'ieee-p1363' for ES256's raw-format JOSE signature) — no new
+-- npm dependency either way. The ES256 path was sanity-checked end-to-end
+-- (sign with a throwaway keypair, verify with its public half) — correct.
+--
+-- Frontend (services/supabaseClient.js, 2026-08-17, revised same day): a
+-- module-level _authToken, set via setAuthToken()/cleared via
+-- clearAuthToken(), is supplied to the Supabase client via the official
+-- `accessToken: async () => _authToken || undefined` option — NOT a manual
+-- Authorization header on a custom fetch (the original implementation did
+-- this; corrected once the docs research above showed Supabase no longer
+-- recommends it). The existing x-operator-name custom-fetch header
+-- (unrelated, audit-only) is untouched. Set on successful MFA verification
+-- (OperatorModal.js), cleared on logout/inactivity timeout/deselect
+-- (OperatorContext.js). Inert today: no RLS policy reads it yet, and no
+-- token is ever issued because neither signing env var is set.
+--
+-- RLS policies and helper functions below resolve ALL authorisation state
+-- LIVE from the database every request, keyed only off personnel_id:
+--   personnel_id (from JWT)
+--       -> personnel.is_active, personnel.division
+--       -> users.is_active, users.role_id
+--       -> roles.name
+-- Consequences (all correct, by construction, with no cache to invalidate):
+--   - moving someone ARC -> AFS takes effect on their very next request;
+--   - promoting/demoting a manager takes effect on their very next request;
+--   - disabling a user takes effect on their very next request;
+--   - a still-valid JWT for a since-deactivated user resolves to "no
+--     access" because the live lookup fails the is_active checks, even
+--     though the token itself hasn't expired yet.
+--
+-- ----------------------------------------------------------------
+-- CLIENT QUERY MAP (tables touched directly by frontend/src/services/api.js)
+-- ----------------------------------------------------------------
+-- categories, subcategories, locations, personnel, equipment,
+-- equipment_movements, monthly_audit_log, vehicles, cellphone_assignments,
+-- laptop_assignments, calibration_records, customers, reservations,
+-- maintenance_types, maintenance_log, audit_log, notifications, roles,
+-- users, software_assignments, mfa_tokens.
+--
+-- Per the Equipment Store requirements, scope is DELIBERATELY narrowed to
+-- `equipment` and `equipment_movements` only — see the write-path analysis
+-- below for why these two tables are sufficient to cover checkout,
+-- allocation, and serial-number edits without a 20-table migration.
+--
+-- ----------------------------------------------------------------
+-- COMPLETE WRITE PATH (verified 2026-08-17 by reading the actual code —
+-- not assumed) — confirms `equipment` + `equipment_movements` is sufficient
+-- ----------------------------------------------------------------
+-- 1. CHECKOUT / CHECK-IN / TRANSFER: frontend/src/services/api.js
+--    movementsApi.create() calls supabase.rpc('create_movement', {...}).
+--    create_movement() (backend/database/movement_dates.sql) is a plain
+--    SQL function — NOT `SECURITY DEFINER` (confirmed: grepped every .sql
+--    file in backend/database for SECURITY DEFINER; only audit_trigger_fn
+--    and one categories-fix function use it). This means create_movement
+--    runs as SECURITY INVOKER — i.e. with the CALLING role's own RLS
+--    context. An RLS policy on equipment_movements is therefore enforced
+--    even when called through this RPC, not bypassed by it.
+-- 2. Inside create_movement, the actual row-changing statement is a plain
+--    `INSERT INTO equipment_movements (...)`. A trigger,
+--    fn_update_equipment_on_movement (also SECURITY INVOKER by omission —
+--    confirmed via the same grep), then updates equipment.current_holder_id
+--    (and status/available_quantity) in response to that INSERT.
+-- 3. NO other code path writes equipment.current_holder_id directly —
+--    grepped frontend/src/services/api.js for `.from('equipment')` +
+--    `.update(`: the only equipment UPDATE calls found are category/
+--    subcategory reassignment, soft-delete/restore, next_maintenance_date,
+--    and the generic equipmentApi.update(id, data) used by the edit modal
+--    (this is also how serial_number edits actually happen — there is no
+--    separate serial-number-only endpoint). current_holder_id is changed
+--    EXCLUSIVELY via the trigger reacting to an equipment_movements INSERT.
+-- 4. CONSEQUENCE — a real bypass exists TODAY, independent of AFS: because
+--    equipment_movements RLS is currently `USING (true)` for all
+--    operations, anyone with the anon key can INSERT INTO
+--    equipment_movements directly (skipping create_movement's own business
+--    validation — quantity checks, status checks, etc.) and the trigger
+--    will still fire and reassign current_holder_id. This is exactly why
+--    the INSERT policy must live on equipment_movements itself, not only
+--    be relied upon via the RPC's own (currently nonexistent) checks.
+-- 5. create_handover (used for equipment handover between personnel,
+--    frontend movementsApi.handover()) VERIFIED 2026-08-17 — also plain SQL,
+--    NOT SECURITY DEFINER (same grep). It inserts exactly two
+--    equipment_movements rows: one 'IN' (return, no personnel_id) and one
+--    'OUT' (issue to p_new_personnel_id, the actual new holder — NOT
+--    necessarily the caller). This means a non-manager handing equipment
+--    to a DIFFERENT person is correctly denied by the same INSERT policy
+--    below (their personnel_id would not equal auth_personnel_id()) —
+--    exactly the required "may not allocate to another employee" rule.
+--    No policy change needed; this closes the previously-open item.
+-- 6. ADDING EQUIPMENT / SERIAL NUMBERS: equipment creation (INSERT) and
+--    editing (UPDATE, including serial_number) both go through the same
+--    generic equipmentApi.create()/update() calls — plain
+--    `.from('equipment').insert(...)` / `.update(...)`. A column-scoped
+--    BEFORE INSERT OR UPDATE trigger (below) is the only way to gate just
+--    the serial_number column while leaving other equipment fields
+--    editable by non-managers, since RLS USING/WITH CHECK clauses apply to
+--    the whole row, not individual columns.
+-- 7. OPEN DECISION (not a bypass, a scope question): create_movement also
+--    accepts 'ISSUE'/'RESTOCK' actions for consumables (not equipment
+--    allocation in the checkout/holder sense — no current_holder_id change,
+--    per fn_update_equipment_on_movement). The original AFS requirements
+--    only mention "equipment" checkout/allocation, not consumable issuance,
+--    so the INSERT policy below deliberately does NOT restrict 'ISSUE'/
+--    'RESTOCK' — flagged here in case that decision needs revisiting later,
+--    not treated as in-scope for this phase.
+--
+-- Conclusion: protecting `equipment` (serial_number trigger) +
+-- `equipment_movements` (INSERT policy) covers checkout, allocation, and
+-- serial-number edits completely. Both write paths (create_movement,
+-- create_handover) verified SECURITY INVOKER — no bypass via RPC security
+-- context. Write-path verification is now COMPLETE, no open items remain.
+--
+-- ----------------------------------------------------------------
+-- ACCESS MATRIX (target state)
+-- ----------------------------------------------------------------
+-- | Table              | Restricted AFS employee        | ARC/other "user" | manager/admin |
+-- |---------------------|--------------------------------|-------------------|---------------|
+-- | equipment (SELECT)  | rows where current_holder_id = own personnel id | all rows | all rows |
+-- | equipment (INSERT/UPDATE serial_number) | denied | denied | allowed |
+-- | equipment_movements (INSERT action='OUT') | denied | allowed (self as holder only) | allowed (any holder) |
+-- | personnel (SELECT)  | own row only | all rows (existing behaviour, unchanged) | all rows |
+-- | reservations        | own rows only | own rows | all rows |
+--
+-- ----------------------------------------------------------------
+-- Helper functions — LIVE DB resolution, NOT claims-based (NOT CREATED YET)
+-- ----------------------------------------------------------------
+-- CREATE OR REPLACE FUNCTION auth_personnel_id() RETURNS INTEGER AS $$
+--   -- The only thing trusted from the JWT: a stable identity pointer.
+--   SELECT NULLIF(current_setting('request.jwt.claims', true)::json->>'personnel_id', '')::INTEGER
+-- $$ LANGUAGE sql STABLE;
+--
+-- CREATE OR REPLACE FUNCTION auth_current_personnel() RETURNS TABLE (
+--   personnel_id INTEGER, division TEXT, personnel_is_active BOOLEAN,
+--   role_name TEXT, user_is_active BOOLEAN
+-- ) AS $$
+--   -- Single live join, resolved fresh on every call — this is the ONLY
+--   -- source of truth for role/division, never the token.
+--   SELECT p.id, p.division, p.is_active, r.name, u.is_active
+--   FROM personnel p
+--   LEFT JOIN users u ON u.personnel_id = p.id
+--   LEFT JOIN roles r ON r.id = u.role_id
+--   WHERE p.id = auth_personnel_id()
+--   -- If multiple user rows ever exist per personnel_id, prefer an active one.
+--   ORDER BY u.is_active DESC NULLS LAST
+--   LIMIT 1
+-- $$ LANGUAGE sql STABLE;
+--
+-- -- CORRECTED 2026-08-21 (staging audit item 1) — a genuine bug was found
+-- -- in the earlier draft: auth_is_restricted_afs() returns FALSE (via its
+-- -- own fail-closed COALESCE) whenever the identity can't be resolved at
+-- -- all — e.g. no JWT, a raw anon-key request, an expired/tampered token,
+-- -- or a deactivated user. But the equipment SELECT policy below then read
+-- -- "NOT auth_is_restricted_afs()" as its non-manager allow-clause — and
+-- -- NOT FALSE = TRUE, meaning an unauthenticated/raw-anon request would
+-- -- have been treated as "definitely not a restricted AFS employee" and
+-- -- granted full equipment visibility, identical to a real ARC user. That
+-- -- is the opposite of fail-closed. auth_has_identity() is a new,
+-- -- separate helper that must be explicitly ANDed into every non-manager
+-- -- allow-clause — never rely on double-negating a "restricted" predicate
+-- -- to infer "this request has a valid, active identity".
+-- CREATE OR REPLACE FUNCTION auth_has_identity() RETURNS BOOLEAN AS $$
+--   SELECT COALESCE(
+--     (SELECT personnel_is_active AND user_is_active AND role_name IS NOT NULL
+--      FROM auth_current_personnel()),
+--     FALSE -- no row (personnel_id NULL/unmatched), no linked user, or no role => no identity
+--   )
+-- $$ LANGUAGE sql STABLE;
+--
+-- CREATE OR REPLACE FUNCTION auth_is_manager_or_admin() RETURNS BOOLEAN AS $$
+--   SELECT COALESCE(
+--     (SELECT role_name IN ('manager', 'admin') AND personnel_is_active AND user_is_active
+--      FROM auth_current_personnel()),
+--     FALSE -- fail closed: no resolvable identity/role => not a manager
+--   )
+-- $$ LANGUAGE sql STABLE;
+--
+-- CREATE OR REPLACE FUNCTION auth_is_restricted_afs() RETURNS BOOLEAN AS $$
+--   SELECT COALESCE(
+--     (SELECT division = 'AFS' AND NOT (role_name IN ('manager', 'admin') AND user_is_active)
+--      FROM auth_current_personnel()),
+--     FALSE -- fail closed: unresolvable identity is NOT treated as restricted-AFS by this
+--           -- function alone — see fail-closed note below, access still denied elsewhere.
+--   )
+-- $$ LANGUAGE sql STABLE;
+--
+-- FAIL-CLOSED NOTE (revised): a request with no valid personnel_id
+-- (missing/expired/tampered token, or a deactivated personnel/user row)
+-- must see NOTHING and be able to check out NOTHING. Every policy below
+-- therefore gates its non-manager allow-clause on auth_has_identity() AND
+-- NOT auth_is_restricted_afs() — never on NOT auth_is_restricted_afs()
+-- alone — plus the manager clause (which is independently fail-closed
+-- already) and, for equipment SELECT specifically, the own-equipment
+-- clause (current_holder_id = auth_personnel_id() naturally never matches
+-- when auth_personnel_id() is NULL, so that clause was always safe on its
+-- own).
+--
+-- ----------------------------------------------------------------
+-- Corrected policy set — equipment (illustrative, NOT applied)
+-- ----------------------------------------------------------------
+-- The table currently has ONE policy, "Allow all" `FOR ALL USING (true)
+-- WITH CHECK (true)` (supabase_setup.sql), covering SELECT/INSERT/UPDATE/
+-- DELETE together. CORRECTED 2026-08-21 (staging audit item 2): the
+-- earlier draft only replaced it with a single new FOR SELECT policy —
+-- since RLS is already enabled on this table, that would have left
+-- INSERT/UPDATE/DELETE with ZERO matching policies, which Postgres RLS
+-- treats as deny-all for those operations. That would have silently
+-- broken adding new equipment, editing any equipment field (not just
+-- serial_number), and soft-delete/restore for EVERYONE, including
+-- managers/admins — a functional regression, not a security tightening.
+-- The fix is to always replace a FOR ALL policy with one explicit policy
+-- PER OPERATION, so every operation keeps exactly the behaviour intended,
+-- with nothing accidentally left ungoverned:
+--
+-- DROP POLICY IF EXISTS "Allow all" ON equipment;
+--
+-- CREATE POLICY "equipment_select_afs_scoped" ON equipment
+--   FOR SELECT USING (
+--     auth_is_manager_or_admin()
+--     OR (auth_has_identity() AND NOT auth_is_restricted_afs())
+--     OR current_holder_id = auth_personnel_id()
+--   );
+--
+-- -- INSERT/UPDATE/DELETE are NOT restricted by this phase's requirements
+-- -- (only serial_number needs gating, handled by the trigger below) — so
+-- -- these three explicitly restore today's "Allow all" behaviour rather
+-- -- than silently losing it:
+-- CREATE POLICY "equipment_insert_unrestricted" ON equipment
+--   FOR INSERT WITH CHECK (true);
+-- CREATE POLICY "equipment_update_unrestricted" ON equipment
+--   FOR UPDATE USING (true) WITH CHECK (true);
+-- CREATE POLICY "equipment_delete_unrestricted" ON equipment
+--   FOR DELETE USING (true);
+--
+-- ----------------------------------------------------------------
+-- Corrected policy set — equipment_movements (checkout/allocation gate)
+-- ----------------------------------------------------------------
+-- Same "Allow all" FOR ALL situation as equipment. Only INSERT needs the
+-- checkout/allocation gate; SELECT/UPDATE/DELETE explicitly keep today's
+-- unrestricted behaviour (out of scope for this phase, same as before —
+-- just made explicit instead of implicit/accidental):
+--
+-- DROP POLICY IF EXISTS "Allow all" ON equipment_movements;
+--
+-- CREATE POLICY "equipment_movements_insert_checkout_scoped" ON equipment_movements
+--   FOR INSERT WITH CHECK (
+--     action <> 'OUT' -- IN/ISSUE/RESTOCK unaffected by this phase's scope
+--     OR auth_is_manager_or_admin()
+--     OR (auth_has_identity() AND NOT auth_is_restricted_afs() AND personnel_id = auth_personnel_id())
+--   );
+-- CREATE POLICY "equipment_movements_select_unrestricted" ON equipment_movements
+--   FOR SELECT USING (true);
+-- CREATE POLICY "equipment_movements_update_unrestricted" ON equipment_movements
+--   FOR UPDATE USING (true) WITH CHECK (true);
+-- CREATE POLICY "equipment_movements_delete_unrestricted" ON equipment_movements
+--   FOR DELETE USING (true);
+--
+-- ----------------------------------------------------------------
+-- Example policy — equipment serial_number INSERT/UPDATE gate (illustrative)
+-- ----------------------------------------------------------------
+-- Column-level write restriction isn't directly expressible in a single
+-- USING/WITH CHECK clause when other columns on the same row must remain
+-- editable by more people than serial_number. The realistic approach is a
+-- BEFORE INSERT OR UPDATE trigger, not a bare RLS policy — covers both
+-- creating equipment with a serial_number AND editing one later:
+--
+-- CREATE OR REPLACE FUNCTION enforce_serial_number_permission() RETURNS TRIGGER AS $$
+-- BEGIN
+--   IF (TG_OP = 'INSERT' AND NEW.serial_number IS NOT NULL
+--       OR TG_OP = 'UPDATE' AND NEW.serial_number IS DISTINCT FROM OLD.serial_number)
+--      AND NOT auth_is_manager_or_admin() THEN
+--     RAISE EXCEPTION 'Only managers/admins may set or change serial_number';
+--   END IF;
+--   RETURN NEW;
+-- END;
+-- $$ LANGUAGE plpgsql;
+-- -- CREATE TRIGGER trg_enforce_serial_number BEFORE INSERT OR UPDATE ON equipment
+-- --   FOR EACH ROW EXECUTE FUNCTION enforce_serial_number_permission();
+--
+-- ----------------------------------------------------------------
+-- TESTING PLAN BEFORE ANY CUTOVER (not yet executed)
+-- ----------------------------------------------------------------
+-- 1. Generate an ES256 signing key (`supabase gen signing-key --algorithm
+--    ES256`), import it as a standby key via Settings > JWT, put the
+--    private JWK in SUPABASE_JWT_SIGNING_KEY on a Netlify preview/staging
+--    site only, confirm mfa-verify.js starts returning a token and the
+--    frontend attaches it via the accessToken option (code already
+--    implemented, inert until this env var exists).
+-- 2. Apply helper functions + new policies to a separate (non-production)
+--    Supabase project seeded with a copy of current data.
+-- 3. Re-run every frontend workflow (checkout, check-in, transfer/handover,
+--    reservations, calibration entry, reports, exports, personnel/user
+--    admin) against that project and confirm no regression for
+--    admin/manager/ARC users.
+-- 4. Confirm restricted AFS employees can log in and see only their own
+--    equipment, and are blocked from checkout/allocation/serial edits at
+--    the DB level even if they bypass the frontend entirely (call
+--    PostgREST directly with their own JWT and the anon key).
+-- 5. Confirm the fail-closed behaviour: a request with the anon key alone
+--    (no Authorization/JWT at all) sees zero equipment rows and cannot
+--    INSERT an 'OUT' movement.
+-- 6. Only then apply to production, with a rollback script ready — since
+--    each table now has 4 explicit per-operation policies instead of one
+--    FOR ALL policy (corrected 2026-08-21, see above), the rollback must
+--    drop all 4 new policies per table and recreate the single original
+--    "Allow all" FOR ALL policy, e.g.:
+--    DROP POLICY IF EXISTS "equipment_select_afs_scoped" ON equipment;
+--    DROP POLICY IF EXISTS "equipment_insert_unrestricted" ON equipment;
+--    DROP POLICY IF EXISTS "equipment_update_unrestricted" ON equipment;
+--    DROP POLICY IF EXISTS "equipment_delete_unrestricted" ON equipment;
+--    CREATE POLICY "Allow all" ON equipment FOR ALL USING (true) WITH CHECK (true);
+--    (repeat the same 4-drop-then-1-recreate pattern for equipment_movements).

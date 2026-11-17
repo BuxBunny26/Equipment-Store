@@ -1,5 +1,6 @@
 import { supabase, getOperatorName } from './supabaseClient';
 import { filterCalibrationDueRows } from '../utils/calibrationDueReport';
+import { validateDeletionReason } from '../utils/calibrationDelete';
 
 // ============================================
 // Helper: wrap Supabase responses to match axios { data } shape
@@ -146,8 +147,12 @@ export const locationsApi = {
 
 // Personnel
 export const personnelApi = {
-    getAll: (activeOnly = true, search = '') => {
-        let query = supabase.from('personnel').select('*').order('full_name');
+    // `fields` defaults to '*' so every existing caller keeps its current
+    // behaviour unchanged. Pass a narrower column list for screens (like the
+    // pre-login operator picker) that don't need the full PII-bearing row —
+    // see OperatorContext.js for the minimal-field example.
+    getAll: (activeOnly = true, search = '', fields = '*') => {
+        let query = supabase.from('personnel').select(fields).order('full_name');
         if (activeOnly) query = query.eq('is_active', true);
         if (search) query = query.or(`full_name.ilike.%${escapeSearch(search)}%,employee_id.ilike.%${escapeSearch(search)}%,email.ilike.%${escapeSearch(search)}%`);
         return wrap(query);
@@ -178,7 +183,7 @@ export const equipmentApi = {
                 current_holder_id, personnel(full_name, employee_id),
                 current_customer_id, customers(display_name),
                 last_action, last_action_timestamp,
-                notes, created_at, updated_at, manufacturer, model, custom_fields
+                notes, created_at, updated_at, manufacturer, model, custom_fields, requires_calibration
             `)
             .is('deleted_at', null)
             .order('equipment_name');
@@ -862,6 +867,7 @@ export const calibrationApi = {
             .select(`id, serial_number, expiry_date, calibration_status, certificate_number,
                 equipment(equipment_id, equipment_name, manufacturer, categories(name))`)
             .in('calibration_status', ['Expired', 'Due Soon'])
+            .is('deleted_at', null)
             .order('expiry_date', { ascending: true })
     ).then(res => ({
         data: (res.data || []).map(r => ({ ...r,
@@ -877,8 +883,9 @@ export const calibrationApi = {
 
     getHistory: (equipmentId) => wrap(
         supabase.from('calibration_records')
-            .select('id, serial_number, calibration_date, expiry_date, certificate_number, calibration_provider, calibration_status, certificate_file_url, notes, created_at')
+            .select('id, serial_number, calibration_date, expiry_date, certificate_number, calibration_provider, calibration_status, certificate_file_url, notes, failed, created_at')
             .eq('equipment_id', equipmentId)
+            .is('deleted_at', null)
             .order('calibration_date', { ascending: false })
     ).then(res => ({
         data: (res.data || []).map(r => ({
@@ -889,9 +896,76 @@ export const calibrationApi = {
         }))
     })),
 
+    // Distinct calibration_provider spellings currently in use, with usage counts -- feeds
+    // the "existing providers" dropdown/datalist on the Add/Edit Calibration forms (see
+    // utils/calibrationProviders.js) and the admin consolidation UI in Settings.js.
+    // Soft-deleted records are excluded so a provider name used only on deleted rows doesn't
+    // linger as a suggestion.
+    getProviders: () => wrap(
+        supabase.from('calibration_records')
+            .select('calibration_provider')
+            .not('calibration_provider', 'is', null)
+            .is('deleted_at', null)
+    ).then(res => {
+        const counts = new Map();
+        for (const row of res.data || []) {
+            const name = (row.calibration_provider || '').trim();
+            if (!name) continue;
+            counts.set(name, (counts.get(name) || 0) + 1);
+        }
+        return {
+            data: Array.from(counts.entries())
+                .map(([name, count]) => ({ name, count }))
+                .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+        };
+    }),
+
+    // Admin consolidation: renames every calibration_records row currently using any of
+    // `variantNames` (exact spellings, e.g. ["Wearcheck", "WEARCHECK"]) to `canonicalName` in
+    // one pass -- including soft-deleted rows, so reports/exports stay consistent too. Uses
+    // the same direct-table UPDATE path as calibrationApi.update(): calibration_provider is
+    // one of the columns anon/authenticated are granted UPDATE on (see
+    // add_calibration_soft_delete.sql), so no new grant/RPC is needed. Returns the number of
+    // rows updated.
+    mergeProviders: async (variantNames, canonicalName) => {
+        const canonical = (canonicalName || '').trim();
+        if (!canonical) throw new Error('Canonical provider name is required');
+        const variants = (variantNames || []).filter(Boolean);
+        if (variants.length === 0) return 0;
+        const { data, error } = await supabase.from('calibration_records')
+            .update({ calibration_provider: canonical })
+            .in('calibration_provider', variants)
+            .select('id');
+        if (error) throw new Error(error.message);
+        return data?.length || 0;
+    },
+
+    // Admin removal: clears calibration_provider (sets it to NULL) on every calibration_records
+    // row currently using any of `variantNames` -- including soft-deleted rows, for the same
+    // reporting-consistency reason as mergeProviders. Does NOT delete the calibration_records
+    // rows themselves -- only this one field is blanked, so the rest of the record (dates,
+    // certificate, notes, etc.) is preserved. Once cleared, the name no longer appears anywhere
+    // (including every future Add/Edit Calibration dropdown), since getProviders() only ever
+    // returns non-null values. Returns the number of rows cleared.
+    deleteProvider: async (variantNames) => {
+        const variants = (variantNames || []).filter(Boolean);
+        if (variants.length === 0) return 0;
+        const { data, error } = await supabase.from('calibration_records')
+            .update({ calibration_provider: null })
+            .in('calibration_provider', variants)
+            .select('id');
+        if (error) throw new Error(error.message);
+        return data?.length || 0;
+    },
+
     create: (data, certificateFile) => {
         let status = data.calibration_status;
-        if (!status && data.expiry_date) {
+        if (data.failed) {
+            // A failed result always wins over the date-based calculation -- see
+            // add_calibration_failed_result.sql -- so a failed cert never reads as Valid/Due
+            // Soon just because its "next due" date happens to be far in the future.
+            status = 'Failed';
+        } else if (!status && data.expiry_date) {
             const days = Math.ceil((new Date(data.expiry_date) - new Date()) / (1000 * 60 * 60 * 24));
             if (days < 0) status = 'Expired';
             else if (days <= 30) status = 'Due Soon';
@@ -901,7 +975,7 @@ export const calibrationApi = {
             equipment_id: data.equipment_id || null, serial_number: data.serial_number,
             calibration_date: data.calibration_date, expiry_date: data.expiry_date,
             certificate_number: data.certificate_number, calibration_provider: data.calibration_provider,
-            calibration_status: status || 'Valid', notes: data.notes,
+            calibration_status: status || 'Valid', notes: data.notes, failed: !!data.failed,
         };
         const promise = wrap(supabase.from('calibration_records').insert(insertData).select().single());
         if (certificateFile) {
@@ -923,7 +997,8 @@ export const calibrationApi = {
         const promise = wrap(supabase.from('calibration_records').update({
             calibration_date: data.calibration_date, expiry_date: data.expiry_date,
             certificate_number: data.certificate_number, calibration_provider: data.calibration_provider,
-            calibration_status: data.calibration_status, notes: data.notes,
+            calibration_status: data.failed ? 'Failed' : data.calibration_status, notes: data.notes,
+            failed: !!data.failed,
         }).eq('id', id).select().single());
         if (certificateFile) {
             return promise.then(async (result) => {
@@ -940,7 +1015,31 @@ export const calibrationApi = {
         return promise;
     },
 
-    delete: (id) => wrap(supabase.from('calibration_records').delete().eq('id', id)),
+    // Soft delete only -- a calibration_records row is NEVER hard-deleted. This preserves the
+    // row (and its audit_trigger INSERT/UPDATE history, and any certificate file reference) for
+    // auditability/recoverability. Every "current status" query (get_calibration_management,
+    // get_calibration_summary, get_available_report, getHistory above) excludes it via
+    // deleted_at IS NULL, so status recalculates correctly from the remaining active records.
+    //
+    // Goes through the soft_delete_calibration_record RPC, NOT a direct table update -- the
+    // RPC derives the acting personnel_id from the caller's verified JWT (auth_personnel_id(),
+    // see add_auth_personnel_id_helper.sql), re-verifies manager/admin role from live
+    // users/roles/personnel data, and enforces a non-blank reason -- all server-side (see
+    // add_calibration_soft_delete.sql). The browser sends ONLY the record id and reason; there
+    // is no personnel_id/role parameter to spoof. Direct UPDATE/DELETE on calibration_records
+    // is revoked for anon/authenticated, so this RPC is the only way to soft-delete a record.
+    softDelete: (id, { reason } = {}) => {
+        let cleanReason;
+        try {
+            cleanReason = validateDeletionReason(reason);
+        } catch (err) {
+            return Promise.reject(err);
+        }
+        return wrapRpc(supabase.rpc('soft_delete_calibration_record', {
+            p_record_id: id,
+            p_reason: cleanReason,
+        })).then(res => ({ data: Array.isArray(res.data) ? res.data[0] : res.data }));
+    },
 };
 
 // Reservations
@@ -1195,15 +1294,21 @@ export const usersApi = {
             }))
         }));
     },
+    // Explicit column list — never select('*') here. password_hash must not
+    // be transmitted to the browser under any circumstance, even for an
+    // admin-only screen and even though the column is currently unused.
     getById: (id) => wrap(
-        supabase.from('users').select('*, roles(name, permissions), personnel(employee_id, full_name)').eq('id', id).single()
+        supabase.from('users')
+            .select(`id, username, email, full_name, role_id, personnel_id, is_active,
+                last_login, phone, department, created_at, updated_at,
+                roles(name, permissions), personnel(employee_id, full_name)`)
+            .eq('id', id).single()
     ).then(res => {
         const u = res.data;
         const result = { ...u, role_name: u.roles?.name, permissions: u.roles?.permissions,
             employee_id: u.personnel?.employee_id, personnel_name: u.personnel?.full_name,
             roles: undefined, personnel: undefined,
         };
-        delete result.password_hash;
         return { data: result };
     }),
     create: (data) => wrap(supabase.from('users').insert({

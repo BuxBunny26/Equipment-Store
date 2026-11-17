@@ -45,7 +45,8 @@ async function runCalibrationReminders({ supabase, send, sendEmail, fallbackPers
         .from('calibration_records')
         .select('id, equipment_id, expiry_date, equipment(id, equipment_id, equipment_name, current_holder_id)')
         .not('expiry_date', 'is', null)
-        .gte('expiry_date', today);
+        .gte('expiry_date', today)
+        .is('deleted_at', null);
     if (calErr) { result.errors.push(`calibration_records fetch failed: ${calErr.message}`); return result; }
 
     const { data: personnelList, error: perErr } = await supabase

@@ -1,7 +1,9 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { categoriesApi, subcategoriesApi, locationsApi, personnelApi, customersApi } from '../services/api';
+import { categoriesApi, subcategoriesApi, locationsApi, personnelApi, customersApi, calibrationApi } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 import { useOperator } from '../context/OperatorContext';
+import { isAdminOrManager } from '../utils/permissions';
+import { groupProvidersByNormalizedName } from '../utils/calibrationProviders';
 import { normalizeCountry, SA_PROVINCES } from '../utils/provinces';
 
 function Settings() {
@@ -43,6 +45,12 @@ function Settings() {
           Personnel
         </button>
         <button
+          className={`tab ${activeTab === 'calibration-providers' ? 'active' : ''}`}
+          onClick={() => setActiveTab('calibration-providers')}
+        >
+          Calibration Providers
+        </button>
+        <button
           className={`tab ${activeTab === 'assets' ? 'active' : ''}`}
           onClick={() => setActiveTab('assets')}
         >
@@ -62,6 +70,7 @@ function Settings() {
         {activeTab === 'subcategories' && <SubcategoriesSettings />}
         {activeTab === 'locations' && <LocationsSettings />}
         {activeTab === 'personnel' && <PersonnelSettings />}
+        {activeTab === 'calibration-providers' && <CalibrationProvidersSettings />}
         {activeTab === 'assets' && <AssetsSettings />}
         {activeTab === 'appearance' && <AppearanceSettings />}
       </div>
@@ -1461,6 +1470,181 @@ function EditableListSection({ title, items, onUpdate }) {
         <button className="btn btn-primary" onClick={handleAdd} disabled={!newItem.trim()}>
           Add
         </button>
+      </div>
+    </div>
+  );
+}
+
+// Calibration Providers Settings -- lets an admin/manager rename a provider (or consolidate
+// near-duplicate spellings, e.g. "WearCheck" / "Wearcheck" / "WEARCHECK" / "wear check", into
+// one) and/or remove a provider entirely -- both apply to every calibration_records row that
+// used it, across every equipment item, so there's never a discrepancy between what's shown
+// here and what equipment actually have on file. Everyone can see which spellings are on file
+// (useful context even without the edit/delete actions); only admin/manager can act -- same
+// manager-gated-actions pattern as CategoriesSettings' Reassign button above.
+function CalibrationProvidersSettings() {
+  const { operatorRole } = useOperator();
+  const isManager = isAdminOrManager(operatorRole);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+  const [providers, setProviders] = useState([]);
+  // Per-group canonical-name draft the admin is editing, keyed by group.key.
+  const [drafts, setDrafts] = useState({});
+  const [mergingKey, setMergingKey] = useState(null);
+  const [deletingKey, setDeletingKey] = useState(null);
+
+  useEffect(() => {
+    fetchProviders();
+  }, []);
+
+  const fetchProviders = async () => {
+    try {
+      setLoading(true);
+      const response = await calibrationApi.getProviders();
+      setProviders(response.data);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const groups = groupProvidersByNormalizedName(providers);
+
+  const handleConsolidate = async (group) => {
+    const canonical = (drafts[group.key] ?? group.variants[0].name).trim();
+    if (!canonical) return;
+    setMergingKey(group.key);
+    setError(null);
+    try {
+      const moved = await calibrationApi.mergeProviders(group.variants.map((v) => v.name), canonical);
+      setDrafts((prev) => {
+        const next = { ...prev };
+        delete next[group.key];
+        return next;
+      });
+      await fetchProviders();
+      setSuccess(`Updated ${moved} calibration record(s) to use "${canonical}".`);
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setMergingKey(null);
+    }
+  };
+
+  const handleDelete = async (group) => {
+    const names = group.variants.map((v) => v.name);
+    if (!window.confirm(
+      `Remove "${names.join('", "')}" from ${group.totalCount} calibration record(s)?\n\n` +
+      `This clears the Calibration Provider field on those records (the records themselves ` +
+      `are kept) and removes it from every Add/Edit Calibration dropdown. This cannot be undone.`
+    )) return;
+    setDeletingKey(group.key);
+    setError(null);
+    try {
+      const cleared = await calibrationApi.deleteProvider(names);
+      setDrafts((prev) => {
+        const next = { ...prev };
+        delete next[group.key];
+        return next;
+      });
+      await fetchProviders();
+      setSuccess(`Removed provider -- cleared from ${cleared} calibration record(s).`);
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeletingKey(null);
+    }
+  };
+
+  if (loading) {
+    return <div className="loading"><div className="spinner"></div> Loading...</div>;
+  }
+
+  return (
+    <div>
+      <h3>Calibration Providers ({groups.length})</h3>
+      <p style={{ color: 'var(--text-secondary)', marginBottom: '16px' }}>
+        Every distinct spelling currently used in Calibration Provider across all calibration records.
+        {isManager
+          ? ' Groups with more than one spelling are flagged as likely duplicates -- pick (or type) the name you want to keep and Save/Consolidate, or Delete to clear a provider from every equipment record entirely.'
+          : ' Only admins/managers can edit or delete providers.'}
+      </p>
+
+      {error && <div className="alert alert-error">{error}</div>}
+      {success && <div className="alert alert-success">{success}</div>}
+
+      <div className="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Spellings On File</th>
+              <th>Total Records</th>
+              {isManager && <th>Rename / Consolidate To</th>}
+              {isManager && <th>Actions</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((group) => (
+              <tr key={group.key} style={group.hasDuplicates ? { background: 'var(--bg-primary)' } : undefined}>
+                <td>
+                  {group.variants.map((v) => (
+                    <div key={v.name}>
+                      <code>{v.name}</code>{' '}
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>({v.count})</span>
+                    </div>
+                  ))}
+                  {group.hasDuplicates && (
+                    <span className="badge badge-warning" style={{ marginTop: '4px', display: 'inline-block' }}>
+                      {group.variants.length} spellings
+                    </span>
+                  )}
+                </td>
+                <td>{group.totalCount}</td>
+                {isManager && (
+                  <td>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={drafts[group.key] ?? group.variants[0].name}
+                      onChange={(e) => setDrafts((prev) => ({ ...prev, [group.key]: e.target.value }))}
+                    />
+                  </td>
+                )}
+                {isManager && (
+                  <td style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      disabled={mergingKey === group.key || deletingKey === group.key}
+                      onClick={() => handleConsolidate(group)}
+                    >
+                      {mergingKey === group.key ? 'Working...' : group.hasDuplicates ? 'Consolidate' : 'Save'}
+                    </button>
+                    <button
+                      className="btn btn-sm btn-danger"
+                      disabled={mergingKey === group.key || deletingKey === group.key}
+                      onClick={() => handleDelete(group)}
+                    >
+                      {deletingKey === group.key ? 'Working...' : 'Delete'}
+                    </button>
+                  </td>
+                )}
+              </tr>
+            ))}
+            {groups.length === 0 && (
+              <tr>
+                <td colSpan={isManager ? 4 : 2} style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  No calibration providers recorded yet.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

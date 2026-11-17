@@ -10,6 +10,18 @@
   # Publish directory (relative to base)
   publish = "build"
 
+# Without this, `netlify dev` can't detect a dev server to proxy to and falls back to
+# serving the stale prebuilt frontend/build folder instead of live source (CRA on
+# targetPort), so local changes never show up under `netlify dev`.
+[dev]
+  # Explicit --prefix: [dev].command runs from the repo root regardless of [build].base,
+  # so a bare "npm start" fails with "Missing script" (root package.json has no "start").
+  command = "npm --prefix frontend start"
+  targetPort = 3000
+  port = 8888
+  publish = "build"
+  autoLaunch = false
+
 [functions]
   # Relative to base ("frontend/"), so resolves to frontend/netlify/functions
   directory = "netlify/functions"

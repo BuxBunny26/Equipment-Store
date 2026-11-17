@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { calibrationApi, categoriesApi } from '../services/api';
+import { calibrationApi, categoriesApi, equipmentApi } from '../services/api';
 import { exportData, EXPORT_COLUMNS } from '../services/exportUtils';
 import ExportMenu from '../components/ExportMenu';
 import { Icons } from '../components/Icons';
 import { pickCurrentCalibrationRecord } from '../utils/calibrationCurrent';
+import { findSimilarProvider } from '../utils/calibrationProviders';
+import ProviderCombobox from '../components/ProviderCombobox';
+import { useOperator } from '../context/OperatorContext';
+import { isAdminOrManager } from '../utils/permissions';
 
 // Formats free-typed digits into DD/MM/YYYY, auto-inserting "/" -- built
 // from the browser's own post-edit value each time, so native cursor and
@@ -40,6 +44,15 @@ function isoDateToDisplay(isoValue) {
 
 function Calibration() {
   const [searchParams] = useSearchParams();
+  const { operator, operatorRole } = useOperator();
+  // CALIBRATION_DELETE_BACKEND_READY gates the "Delete Calibration Record" action off until
+  // the backend it depends on is actually deployed: soft_delete_calibration_record() and
+  // auth_personnel_id() (add_calibration_soft_delete.sql / add_auth_personnel_id_helper.sql)
+  // have not been applied to production, and that RPC also requires a production JWT signing
+  // key (SUPABASE_JWT_SIGNING_KEY) which isn't configured yet either. Flip this to true once
+  // both the SQL and the signing key are in place on production.
+  const CALIBRATION_DELETE_BACKEND_READY = false;
+  const canDeleteCalibration = isAdminOrManager(operatorRole) && CALIBRATION_DELETE_BACKEND_READY;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -56,6 +69,10 @@ function Calibration() {
   const [selectedEquipment, setSelectedEquipment] = useState(null);
   const [calibrationHistory, setCalibrationHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [updatingRequirementId, setUpdatingRequirementId] = useState(null);
 
   // Form state for adding calibration
   const [calibrationForm, setCalibrationForm] = useState({
@@ -65,10 +82,16 @@ function Calibration() {
     certificate_number: '',
     calibration_provider: '',
     notes: '',
+    failed: false,
   });
   const [certificateFile, setCertificateFile] = useState(null);
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [calibrationFormError, setCalibrationFormError] = useState(null);
+  // Distinct calibration_provider spellings already on file -- feeds the datalist
+  // "dropdown" on the Calibration Provider field and the "Did you mean ...?" duplicate
+  // suggestion below it. See utils/calibrationProviders.js.
+  const [providers, setProviders] = useState([]);
+  const [providerSuggestion, setProviderSuggestion] = useState(null);
 
   const fetchCalibrationStatus = useCallback(async () => {
     try {
@@ -97,6 +120,22 @@ function Calibration() {
     }
   };
 
+  // Toggles this item's own calibration-requirement override. If its category/subcategory is
+  // itself exempt, switching this back to "required" won't un-N/A it -- that baseline exemption
+  // still applies; this only controls the per-equipment override on top of it.
+  const handleToggleCalibrationRequired = async (item) => {
+    const nextRequired = item.calibration_status === 'N/A';
+    setUpdatingRequirementId(item.equipment_id);
+    try {
+      await equipmentApi.update(item.equipment_id, { requires_calibration: nextRequired });
+      await Promise.all([fetchCalibrationStatus(), fetchSummary()]);
+    } catch (err) {
+      setError('Error updating calibration requirement: ' + err.message);
+    } finally {
+      setUpdatingRequirementId(null);
+    }
+  };
+
   const fetchCategories = async () => {
     try {
       const response = await categoriesApi.getAll();
@@ -106,9 +145,19 @@ function Calibration() {
     }
   };
 
+  const fetchProviders = async () => {
+    try {
+      const response = await calibrationApi.getProviders();
+      setProviders(response.data);
+    } catch (err) {
+      console.error('Error fetching calibration providers:', err);
+    }
+  };
+
   useEffect(() => {
     fetchCategories();
     fetchSummary();
+    fetchProviders();
   }, []);
 
   // Route matching on path alone (e.g. Dashboard's status cards) does not
@@ -146,6 +195,48 @@ function Calibration() {
     }
   };
 
+  const handleRequestDelete = (record) => {
+    setDeleteTarget(record);
+    setDeleteReason('');
+  };
+
+  const handleCancelDelete = () => {
+    setDeleteTarget(null);
+    setDeleteReason('');
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      // deletedBy is no longer sent -- the RPC derives the acting personnel_id from the
+      // caller's verified JWT server-side, never from a client-supplied value.
+      await calibrationApi.softDelete(deleteTarget.id, { reason: deleteReason });
+      setDeleteTarget(null);
+      setDeleteReason('');
+      // Refresh history for the currently-open equipment, plus the list/summary cards, so
+      // the "Current" record and every status badge recalculate immediately from the
+      // remaining active records.
+      if (selectedEquipment) {
+        setHistoryLoading(true);
+        try {
+          const response = await calibrationApi.getHistory(selectedEquipment.equipment_id);
+          setCalibrationHistory(response.data);
+        } finally {
+          setHistoryLoading(false);
+        }
+      }
+      await Promise.all([fetchCalibrationStatus(), fetchSummary()]);
+      setSuccess('Calibration record deleted.');
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err) {
+      setError('Error deleting calibration record: ' + err.message);
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const handleAddCalibration = (item) => {
     setCalibrationFormError(null);
     setSelectedEquipment(item);
@@ -156,8 +247,10 @@ function Calibration() {
       certificate_number: '',
       calibration_provider: '',
       notes: '',
+      failed: false,
     });
     setCertificateFile(null);
+    setProviderSuggestion(null);
     setShowHistoryModal(false);
     setShowAddModal(true);
   };
@@ -165,6 +258,21 @@ function Calibration() {
   const handleCloseAddModal = () => {
     setShowAddModal(false);
     setCalibrationFormError(null);
+    setProviderSuggestion(null);
+  };
+
+  // Non-blocking "Did you mean ...?" nudge: fires whenever the typed provider name normalizes
+  // (case/whitespace-insensitive) to an already-used spelling but isn't identical to it -- see
+  // utils/calibrationProviders.js. Never blocks typing or submission.
+  const handleProviderChange = (value) => {
+    setCalibrationForm((prev) => ({ ...prev, calibration_provider: value }));
+    setProviderSuggestion(findSimilarProvider(value, providers.map((p) => p.name)));
+  };
+
+  const applyProviderSuggestion = () => {
+    if (!providerSuggestion) return;
+    setCalibrationForm((prev) => ({ ...prev, calibration_provider: providerSuggestion }));
+    setProviderSuggestion(null);
   };
 
   const handleFormSubmit = async (e) => {
@@ -194,6 +302,7 @@ function Calibration() {
       setCalibrationFormError(null);
       fetchCalibrationStatus();
       fetchSummary();
+      fetchProviders();
       setSuccess('Calibration record added successfully!');
       setTimeout(() => setSuccess(null), 5000);
     } catch (err) {
@@ -240,6 +349,7 @@ function Calibration() {
       'Valid': 'badge-available',
       'Due Soon': 'badge-warning',
       'Expired': 'badge-checked-out',
+      'Failed': 'badge-danger',
       'Not Calibrated': 'badge-low-stock',
       'N/A': 'badge-secondary',
     };
@@ -294,6 +404,12 @@ function Calibration() {
             <div className="stat-label">Not Calibrated</div>
           </div>
         </div>
+        <div className="stat-card" style={{ borderLeft: '4px solid var(--text-secondary)' }}>
+          <div className="stat-content">
+            <div className="stat-value" style={{ color: 'var(--text-secondary)' }}>{getSummaryCount('N/A')}</div>
+            <div className="stat-label">N/A (Not Required)</div>
+          </div>
+        </div>
       </div>
 
       {/* Filters */}
@@ -321,10 +437,12 @@ function Calibration() {
                 onChange={(e) => setFilters({ ...filters, status: e.target.value })}
               >
                 <option value="">All Statuses</option>
+                <option value="Failed">Failed</option>
                 <option value="Expired">Expired</option>
                 <option value="Due Soon">Due Soon</option>
                 <option value="Valid">Valid</option>
                 <option value="Not Calibrated">Not Calibrated</option>
+                <option value="N/A">N/A (Not Required)</option>
               </select>
             </div>
 
@@ -436,6 +554,20 @@ function Calibration() {
                           >
                             History
                           </button>
+                          {canDeleteCalibration && (
+                            <button
+                              className="btn btn-small btn-secondary"
+                              onClick={() => handleToggleCalibrationRequired(item)}
+                              disabled={updatingRequirementId === item.equipment_id}
+                              title={item.calibration_status === 'N/A'
+                                ? 'Mark this item as requiring calibration again'
+                                : "Mark this item as not needing calibration (shows as N/A, won't appear as Not Calibrated)"}
+                            >
+                              {updatingRequirementId === item.equipment_id
+                                ? 'Saving...'
+                                : item.calibration_status === 'N/A' ? 'Requires Calibration' : 'Mark N/A'}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -510,13 +642,20 @@ function Calibration() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Calibration Provider</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="Company/Lab name"
+                    <ProviderCombobox
                       value={calibrationForm.calibration_provider}
-                      onChange={(e) => setCalibrationForm({ ...calibrationForm, calibration_provider: e.target.value })}
+                      onChange={handleProviderChange}
+                      suggestions={providers}
+                      placeholder="Company/Lab name"
                     />
+                    {providerSuggestion && (
+                      <small style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', color: 'var(--warning-color)' }}>
+                        Did you mean <strong>{providerSuggestion}</strong>, already on file?
+                        <button type="button" className="btn btn-sm btn-secondary" onClick={applyProviderSuggestion}>
+                          Use this
+                        </button>
+                      </small>
+                    )}
                   </div>
                 </div>
 
@@ -529,6 +668,22 @@ function Calibration() {
                     onChange={(e) => setCertificateFile(e.target.files[0])}
                   />
                   <small style={{ color: 'var(--text-secondary)' }}>Max 10MB. Accepted: PDF, JPEG, PNG, TIFF, DOC, DOCX</small>
+                </div>
+
+                <div className="form-group">
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={calibrationForm.failed}
+                      onChange={(e) => setCalibrationForm({ ...calibrationForm, failed: e.target.checked })}
+                    />
+                    This calibration failed
+                  </label>
+                  {calibrationForm.failed && (
+                    <small style={{ color: 'var(--error-color)' }}>
+                      This equipment's calibration status will show as "Failed" until a new record is added. Attach the certificate above as evidence and use Notes to record the reason.
+                    </small>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -590,10 +745,12 @@ function Calibration() {
                         <th>Calibration Date</th>
                         <th>Expiry Date</th>
                         <th>Validity (Days)</th>
+                        <th>Result</th>
                         <th>Certificate #</th>
                         <th>Provider</th>
                         <th>Notes</th>
                         <th>Certificate</th>
+                        {canDeleteCalibration && <th>Actions</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -607,6 +764,9 @@ function Calibration() {
                           <td>{formatDate(record.calibration_date)}</td>
                           <td>{formatDate(record.expiry_date)}</td>
                           <td>{record.validity_days}</td>
+                          <td>{record.failed
+                            ? <span className="badge badge-danger">Failed</span>
+                            : <span className="badge badge-available">Pass</span>}</td>
                           <td><code>{record.certificate_number || '-'}</code></td>
                           <td>{record.calibration_provider || '-'}</td>
                           <td>{record.notes || '-'}</td>
@@ -632,6 +792,17 @@ function Calibration() {
                               <span style={{ color: 'var(--text-secondary)' }}>-</span>
                             )}
                           </td>
+                          {canDeleteCalibration && (
+                            <td>
+                              <button
+                                className="btn btn-small btn-danger"
+                                onClick={() => handleRequestDelete(record)}
+                                title="Delete this calibration record"
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          )}
                         </tr>
                           );
                         });
@@ -647,6 +818,55 @@ function Calibration() {
               </button>
               <button className="btn btn-secondary" onClick={() => setShowHistoryModal(false)}>
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Calibration Confirmation Modal */}
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={handleCancelDelete}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Delete Calibration Record</h2>
+              <button className="modal-close" onClick={handleCancelDelete}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="equipment-info" style={{ marginBottom: '1rem', padding: '1rem', background: 'var(--bg-primary)', borderRadius: '4px' }}>
+                <strong>{selectedEquipment?.equipment_name}</strong>
+                <br />
+                <span style={{ color: 'var(--text-secondary)' }}>
+                  Calibration Date: {formatDate(deleteTarget.calibration_date)} | Expiry: {formatDate(deleteTarget.expiry_date)}
+                  {deleteTarget.certificate_number ? ` | Certificate: ${deleteTarget.certificate_number}` : ''}
+                </span>
+              </div>
+              <div className="alert alert-error" style={{ marginBottom: '1rem' }}>
+                This will remove the record from the calibration history and status calculations.
+                It is not permanently erased — it stays recoverable in the audit trail — but this
+                action cannot be undone from this screen. Only use this to correct a mistaken entry.
+              </div>
+              <div className="form-group">
+                <label className="form-label">Reason for deletion *</label>
+                <textarea
+                  className="form-input"
+                  rows="3"
+                  placeholder="e.g., Entered against the wrong equipment / duplicate entry"
+                  value={deleteReason}
+                  onChange={(e) => setDeleteReason(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={handleCancelDelete} disabled={deleting}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={handleConfirmDelete}
+                disabled={deleting || !deleteReason.trim()}
+              >
+                {deleting ? 'Deleting...' : 'Delete Calibration'}
               </button>
             </div>
           </div>

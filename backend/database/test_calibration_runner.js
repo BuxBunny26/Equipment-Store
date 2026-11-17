@@ -1,7 +1,7 @@
 /**
  * Integration-style tests for calibration_reminder_runner.js's write
  * boundary — uses an in-memory fake Supabase client (tailored to the exact
- * .from()/.select()/.insert()/.update()/.eq()/.lt()/.gte()/.not()/.single()
+ * .from()/.select()/.insert()/.update()/.eq()/.lt()/.gte()/.not()/.is()/.single()
  * calls the runner actually makes) so writes/reads can be counted and
  * asserted without touching a real database.
  *
@@ -45,6 +45,11 @@ function createFakeSupabase(seed, opts = {}) {
         const b = {
             select() { return b; },
             not(col) { filtered = filtered.filter((r) => r[col] !== null && r[col] !== undefined); return b; },
+            is(col, val) {
+                if (val === null) filtered = filtered.filter((r) => r[col] === null || r[col] === undefined);
+                else filtered = filtered.filter((r) => r[col] === val);
+                return b;
+            },
             gte(col, val) { filtered = filtered.filter((r) => r[col] >= val); return b; },
             eq(col, val) { filtered = filtered.filter((r) => r[col] === val); return b; },
             lt(col, val) { filtered = filtered.filter((r) => r[col] < val); return b; },
@@ -180,6 +185,16 @@ function inBandCalRecord() {
         assert.strictEqual(supabase._calls.insert.length, 0);
         assert.strictEqual(supabase._calls.update.length, 0);
         assert.strictEqual(spy.calls, 0);
+    });
+
+    await test('Problem 7: a soft-deleted (deleted_at set) calibration record is never surfaced as due, even if in-band', async () => {
+        const records = inBandCalRecord();
+        records[0].deleted_at = new Date().toISOString();
+        const supabase = createFakeSupabase({ calibration_records: records, personnel: PERSONNEL, calibration_reminder_log: [] });
+        const spy = makeSpySendEmail();
+        const result = await runCalibrationReminders({ supabase, send: false, sendEmail: spy.fn, fallbackPersonnelIds: [] });
+        assert.strictEqual(result.attempted, 0);
+        assert.strictEqual(result.due.length, 0);
     });
 
     console.log(`\n${passed} test(s) passed.\n`);

@@ -5,6 +5,8 @@ import EquipmentImageGallery from '../components/EquipmentImageGallery';
 import { getCustomFieldRule, getCustomFieldValue } from '../utils/customFields';
 import { useOperator } from '../context/OperatorContext';
 import { pickCurrentCalibrationRecord } from '../utils/calibrationCurrent';
+import { findSimilarProvider } from '../utils/calibrationProviders';
+import ProviderCombobox from '../components/ProviderCombobox';
 
 // Formats free-typed digits into DD/MM/YYYY, auto-inserting "/" -- built
 // from the browser's own post-edit value each time, so native cursor and
@@ -45,6 +47,13 @@ function EquipmentDetail() {
   const navigate = useNavigate();
   const { operator, operatorRole } = useOperator();
   const isAdmin = operatorRole && ['admin', 'manager'].includes(operatorRole.toLowerCase());
+  // Separate from isAdmin: gates only the "Delete Calibration Record" action off until its
+  // backend dependency is deployed -- soft_delete_calibration_record() / auth_personnel_id()
+  // (add_calibration_soft_delete.sql / add_auth_personnel_id_helper.sql) haven't been applied
+  // to production, and that RPC also needs a production JWT signing key
+  // (SUPABASE_JWT_SIGNING_KEY) that isn't configured yet either. Flip to `isAdmin` once both
+  // the SQL and the signing key are in place on production.
+  const canDeleteCalibrationRecord = isAdmin && false;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [equipment, setEquipment] = useState(null);
@@ -60,6 +69,9 @@ function EquipmentDetail() {
   const [savingCategory, setSavingCategory] = useState(false);
   const [availableCats, setAvailableCats] = useState([]);
   const [availableSubs, setAvailableSubs] = useState([]);
+  const [editingCalRequired, setEditingCalRequired] = useState(false);
+  const [calRequiredValue, setCalRequiredValue] = useState(true);
+  const [savingCalRequired, setSavingCalRequired] = useState(false);
   const [editingHolder, setEditingHolder] = useState(false);
   const [holderEditPersonnelId, setHolderEditPersonnelId] = useState('');
   const [savingHolder, setSavingHolder] = useState(false);
@@ -82,16 +94,23 @@ function EquipmentDetail() {
     certificate_number: '',
     calibration_provider: '',
     notes: '',
+    failed: false,
   });
   const [calibrationFile, setCalibrationFile] = useState(null);
   const [calibrationSubmitting, setCalibrationSubmitting] = useState(false);
   const [calibrationAddError, setCalibrationAddError] = useState(null);
   const [calibrationAddSuccess, setCalibrationAddSuccess] = useState(null);
+  // Distinct calibration_provider spellings already on file -- feeds the datalist
+  // "dropdown" on the Calibration Provider field and the "Did you mean ...?" duplicate
+  // suggestion below it. See utils/calibrationProviders.js.
+  const [providers, setProviders] = useState([]);
+  const [providerSuggestion, setProviderSuggestion] = useState(null);
 
   useEffect(() => {
     fetchEquipment();
     fetchHistory();
     fetchCalibrationHistory();
+    fetchProviders();
   }, [id]);
 
   const fetchEquipment = async () => {
@@ -162,6 +181,24 @@ function EquipmentDetail() {
       console.error('Failed to save category:', err);
     } finally {
       setSavingCategory(false);
+    }
+  };
+
+  const openCalRequiredEdit = () => {
+    setCalRequiredValue(equipment.requires_calibration ?? true);
+    setEditingCalRequired(true);
+  };
+
+  const handleSaveCalRequired = async () => {
+    setSavingCalRequired(true);
+    try {
+      await equipmentApi.update(equipment.id, { requires_calibration: calRequiredValue });
+      setEquipment(prev => ({ ...prev, requires_calibration: calRequiredValue }));
+      setEditingCalRequired(false);
+    } catch (err) {
+      console.error('Failed to save calibration requirement:', err);
+    } finally {
+      setSavingCalRequired(false);
     }
   };
 
@@ -278,6 +315,15 @@ function EquipmentDetail() {
     }
   };
 
+  const fetchProviders = async () => {
+    try {
+      const response = await calibrationApi.getProviders();
+      setProviders(response.data);
+    } catch (err) {
+      console.error('Error fetching calibration providers:', err);
+    }
+  };
+
   const openAddCalibration = () => {
     setCalibrationForm({
       equipment_id: equipment.id,
@@ -286,15 +332,32 @@ function EquipmentDetail() {
       certificate_number: '',
       calibration_provider: '',
       notes: '',
+      failed: false,
     });
     setCalibrationFile(null);
     setCalibrationAddError(null);
+    setProviderSuggestion(null);
     setShowAddCalibrationModal(true);
   };
 
   const handleCloseAddCalibrationModal = () => {
     setShowAddCalibrationModal(false);
     setCalibrationAddError(null);
+    setProviderSuggestion(null);
+  };
+
+  // Non-blocking "Did you mean ...?" nudge: fires whenever the typed provider name normalizes
+  // (case/whitespace-insensitive) to an already-used spelling but isn't identical to it -- see
+  // utils/calibrationProviders.js. Never blocks typing or submission.
+  const handleProviderChange = (value) => {
+    setCalibrationForm((prev) => ({ ...prev, calibration_provider: value }));
+    setProviderSuggestion(findSimilarProvider(value, providers.map((p) => p.name)));
+  };
+
+  const applyProviderSuggestion = () => {
+    if (!providerSuggestion) return;
+    setCalibrationForm((prev) => ({ ...prev, calibration_provider: providerSuggestion }));
+    setProviderSuggestion(null);
   };
 
   const handleAddCalibrationSubmit = async (e) => {
@@ -326,6 +389,7 @@ function EquipmentDetail() {
       setShowAddCalibrationModal(false);
       setCalibrationAddError(null);
       await fetchCalibrationHistory();
+      fetchProviders();
       setCalibrationAddSuccess('Calibration record added successfully!');
       setTimeout(() => setCalibrationAddSuccess(null), 5000);
     } catch (err) {
@@ -383,7 +447,15 @@ function EquipmentDetail() {
     });
   };
 
-  const getCalibrationStatusBadge = (expiryDate) => {
+  const getCalibrationStatusBadge = (record) => {
+    if (record?.failed) {
+      // No badge-danger class here -- it sets color: var(--error-color) (dark red text),
+      // which is invisible against this same solid red background. The other statuses below
+      // use plain "badge" (no class-level color), so their default/inherited text already
+      // contrasts fine against their solid backgrounds.
+      return <span className="badge" style={{ background: 'var(--error-color)', color: '#fff' }}>Failed</span>;
+    }
+    const expiryDate = record?.expiry_date;
     if (!expiryDate) return <span className="badge" style={{ background: 'var(--text-secondary)' }}>Not Calibrated</span>;
     const expiry = new Date(expiryDate);
     if (isNaN(expiry.getTime())) return <span className="badge" style={{ background: 'var(--text-secondary)' }}>Not Calibrated</span>;
@@ -781,6 +853,64 @@ function EquipmentDetail() {
             </div>
 
             <div>
+              <h3 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '16px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                Calibration Requirement
+                {isAdmin && !editingCalRequired && (
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    onClick={openCalRequiredEdit}
+                    style={{ fontSize: '0.75rem', padding: '2px 8px' }}
+                    title="Change whether this item needs calibration tracking"
+                  >
+                    Change
+                  </button>
+                )}
+              </h3>
+              {editingCalRequired ? (
+                <div style={{ display: 'grid', gap: '10px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={calRequiredValue}
+                      onChange={(e) => setCalRequiredValue(e.target.checked)}
+                    />
+                    Requires calibration tracking
+                  </label>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>
+                    Uncheck this for a one-off item that doesn't need calibration even though its
+                    category/subcategory normally does -- it will show as N/A and be excluded
+                    from the Calibration page.
+                  </p>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={handleSaveCalRequired}
+                      disabled={savingCalRequired}
+                      style={{ fontSize: '0.78rem' }}
+                    >
+                      {savingCalRequired ? 'Saving...' : 'Save'}
+                    </button>
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      onClick={() => setEditingCalRequired(false)}
+                      disabled={savingCalRequired}
+                      style={{ fontSize: '0.78rem' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <dl style={{ display: 'grid', gap: '12px' }}>
+                  <div>
+                    <dt style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Requires Calibration</dt>
+                    <dd>{(equipment.requires_calibration ?? true) ? 'Yes' : 'No (N/A)'}</dd>
+                  </div>
+                </dl>
+              )}
+            </div>
+
+            <div>
               <h3 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '16px', color: 'var(--text-secondary)' }}>
                 Identification
               </h3>
@@ -921,7 +1051,7 @@ function EquipmentDetail() {
                     <th>Status</th>
                     <th>Certificate #</th>
                     <th>Certificate</th>
-                    {isAdmin && <th>Actions</th>}
+                    {canDeleteCalibrationRecord && <th>Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -932,7 +1062,7 @@ function EquipmentDetail() {
                         <td>{record.id === currentRecordId && <span className="badge badge-valid" style={{ background: 'var(--success-color)' }}>Current</span>}</td>
                         <td>{formatDateOnly(record.calibration_date)}</td>
                         <td>{formatDateOnly(record.expiry_date)}</td>
-                        <td>{getCalibrationStatusBadge(record.expiry_date)}</td>
+                        <td>{getCalibrationStatusBadge(record)}</td>
                         <td style={{ fontWeight: 500 }}>{record.certificate_number || '-'}</td>
                         <td>
                           {record.certificate_file_url ? (
@@ -947,7 +1077,7 @@ function EquipmentDetail() {
                             <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>No file</span>
                           )}
                         </td>
-                        {isAdmin && (
+                        {canDeleteCalibrationRecord && (
                           <td>
                             <button
                               className="btn btn-sm btn-danger"
@@ -1105,13 +1235,20 @@ function EquipmentDetail() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Calibration Provider</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="Company/Lab name"
+                    <ProviderCombobox
                       value={calibrationForm.calibration_provider}
-                      onChange={(e) => setCalibrationForm({ ...calibrationForm, calibration_provider: e.target.value })}
+                      onChange={handleProviderChange}
+                      suggestions={providers}
+                      placeholder="Company/Lab name"
                     />
+                    {providerSuggestion && (
+                      <small style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', color: 'var(--warning-color)' }}>
+                        Did you mean <strong>{providerSuggestion}</strong>, already on file?
+                        <button type="button" className="btn btn-sm btn-secondary" onClick={applyProviderSuggestion}>
+                          Use this
+                        </button>
+                      </small>
+                    )}
                   </div>
                 </div>
 
@@ -1124,6 +1261,22 @@ function EquipmentDetail() {
                     onChange={(e) => setCalibrationFile(e.target.files[0])}
                   />
                   <small style={{ color: 'var(--text-secondary)' }}>Max 10MB. Accepted: PDF, JPEG, PNG, TIFF, DOC, DOCX</small>
+                </div>
+
+                <div className="form-group">
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={calibrationForm.failed}
+                      onChange={(e) => setCalibrationForm({ ...calibrationForm, failed: e.target.checked })}
+                    />
+                    This calibration failed
+                  </label>
+                  {calibrationForm.failed && (
+                    <small style={{ color: 'var(--error-color)' }}>
+                      This equipment's calibration status will show as "Failed" until a new record is added. Attach the certificate above as evidence and use Notes to record the reason.
+                    </small>
+                  )}
                 </div>
 
                 <div className="form-group">

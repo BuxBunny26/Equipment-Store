@@ -14,7 +14,7 @@ export const DEFAULT_EQUIPMENT_FILTERS = {
 };
 
 const VALID_STATUS = ['Available', 'Checked Out'];
-const VALID_CALIBRATION_STATUS = ['Calibrated', 'Due Soon', 'Expired', 'Not Calibrated'];
+const VALID_CALIBRATION_STATUS = ['Calibrated', 'Due Soon', 'Expired', 'Not Calibrated', 'N/A'];
 const VALID_CHANNELS = ['1 Channel', '2 Channel', '4 Channel'];
 
 // Only meaningful (non-default) values are written, so a fully-cleared

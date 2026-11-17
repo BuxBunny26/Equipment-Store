@@ -60,4 +60,14 @@ describe('filterCalibrationDueRows', () => {
     const result = filterCalibrationDueRows(rows);
     expect(result.map(r => r.id).sort()).toEqual([20, 30]);
   });
+
+  test('current failed: appears once, alongside Expired/Due Soon', () => {
+    const rows = [
+      { equipment_id: 6, equipment_code: 'EQ-6', calibration_record_id: 60, calibration_status: 'Failed',
+        last_calibration_date: '2026-06-01', calibration_expiry_date: '2027-06-01' },
+    ];
+    const result = filterCalibrationDueRows(rows);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ id: 60, calibration_status: 'Failed' });
+  });
 });

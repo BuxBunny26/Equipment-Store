@@ -10,6 +10,7 @@ import { Icons } from '../components/Icons';
 import { uniqueProvinces, uniqueCountries, customerMatchesProvince, customerMatchesCountry, regionLabel } from '../utils/provinces';
 import { getCustomFieldRule, getCustomFieldValue } from '../utils/customFields';
 import { supabase } from '../services/supabaseClient';
+import { getEffectivePermissions } from '../utils/permissions';
 
 function CheckOut() {
     const [showConfirm, setShowConfirm] = useState(false);
@@ -18,8 +19,9 @@ function CheckOut() {
     const [showAddEquipment, setShowAddEquipment] = useState(false);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { operator, isOperatorSelected } = useOperator();
+  const { operator, operatorRole, isOperatorSelected } = useOperator();
   const preselectedEquipmentId = searchParams.get('equipment');
+  const permissions = getEffectivePermissions(operator, operatorRole);
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -493,6 +495,26 @@ function CheckOut() {
       <div className="loading">
         <div className="spinner"></div>
         Loading...
+      </div>
+    );
+  }
+
+  if (isOperatorSelected && !permissions.canCheckout) {
+    return (
+      <div>
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">Check Out Equipment</h1>
+          </div>
+          <button className="btn btn-secondary" onClick={() => navigate(-1)}>
+            &larr; Back
+          </button>
+        </div>
+        <div className="alert alert-error">
+          Your account does not have permission to check out equipment. AFS employees can view
+          equipment currently allocated to them, but checkout must be performed by an authorised
+          supervisor/manager.
+        </div>
       </div>
     );
   }

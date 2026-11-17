@@ -25,6 +25,7 @@ function Dashboard() {
     valid: 0,
     due_soon: 0,
     expired: 0,
+    failed: 0,
     not_calibrated: 0,
     total: 0,
   });
@@ -107,6 +108,7 @@ function Dashboard() {
         valid: 0,
         due_soon: 0,
         expired: 0,
+        failed: 0,
         not_calibrated: 0,
         total: total || 0,
       };
@@ -115,6 +117,7 @@ function Dashboard() {
         if (item.calibration_status === 'Valid') counts.valid = parseInt(item.count);
         else if (item.calibration_status === 'Due Soon') counts.due_soon = parseInt(item.count);
         else if (item.calibration_status === 'Expired') counts.expired = parseInt(item.count);
+        else if (item.calibration_status === 'Failed') counts.failed = parseInt(item.count);
         else if (item.calibration_status === 'Not Calibrated') counts.not_calibrated = parseInt(item.count);
       });
       
@@ -333,6 +336,16 @@ function Dashboard() {
               <div className="stat-content">
                 <h3>{calibrationSummary.expired}</h3>
                 <p>Expired</p>
+              </div>
+            </div>
+          </Link>
+
+          <Link to="/calibration?status=Failed" style={{ textDecoration: 'none' }}>
+            <div className="stat-card" style={{ cursor: 'pointer' }}>
+              <div className="stat-icon red"><Icons.Warning size={24} /></div>
+              <div className="stat-content">
+                <h3>{calibrationSummary.failed}</h3>
+                <p>Failed</p>
               </div>
             </div>
           </Link>

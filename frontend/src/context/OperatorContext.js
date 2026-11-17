@@ -87,7 +87,12 @@ export function OperatorProvider({ children }) {
 
   const loadPersonnel = async () => {
     try {
-      const response = await personnelApi.getAll(true);
+      // Minimal field set: this loads for EVERY visitor, even pre-login, to
+      // populate the name-search picker. Do not add fields back (e.g.
+      // drivers_license_number, phone, supervisor, site, job_title) without
+      // re-checking who actually needs them — see OperatorModal.js and
+      // OperatorSelector.js for what's actually read from this list.
+      const response = await personnelApi.getAll(true, '', 'id, employee_id, full_name, email, division, department, is_active');
       setPersonnel(response.data);
       // Refresh cached operator with latest data from Supabase
       const savedOperator = localStorage.getItem(STORAGE_KEY);
